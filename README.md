@@ -58,12 +58,17 @@ El funcionamiento de backend <> frontend funciona con simples llamadas desde `ap
 
 Si estás en modo "developer" y necesitas probar o depurar el comportamiento del agente paso a paso, utiliza el notebook `planning_pattern.ipynb` ubicado en `backend/src`.
 
-1. Navega a la carpeta del backend:
+1. Instala las dependencias:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Navega a la carpeta del backend:
    ```bash
    cd backend/src
    ```
 
-2. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
+3. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
    - Inicialización de herramientas.
    - Procesamiento de consultas.
    - Ejecución de herramientas y generación de respuestas.
