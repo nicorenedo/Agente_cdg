@@ -35,12 +35,17 @@ Este repositorio contiene los componentes principales para la inicialización de
 El funcionamiento de backend <> frontend funciona con simples llamadas desde `app.py` a las funciones del backend del agente. Por eso, para la **versión final**, solo hace falta ejecutar el frontend.
 
 ### 2.1 Iniciar el frontend (versión final)
-1. Navega a la carpeta del frontend:
+1. Instala las dependencias:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Navega a la carpeta del frontend:
    ```bash
    cd frontend/src
    ```
 
-2. Inicia el frontend:
+3. Inicia el frontend:
    ```bash
    streamlit run app.py
    ```
@@ -58,7 +63,7 @@ Si estás en modo "developer" y necesitas probar o depurar el comportamiento del
    cd backend/src
    ```
 
-2. Sigue las celdas del notebook para ejecutar y probar cada paso del agente:
+2. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
    - Inicialización de herramientas.
    - Procesamiento de consultas.
    - Ejecución de herramientas y generación de respuestas.
