@@ -1,11 +1,13 @@
 🚀 Guía sencilla: Primeros pasos en un nuevo repositorio Git
 ============================================================
 
-### Índice
+## Índice
 1. Descripción del repositorio
+
 2. Ejecución del proyecto
    1. Iniciar el frontend (versión final)
    2. Modo desarrollo (usando el notebook)
+
 3. Clonar el repositorio base
    1. Seleccionar la carpeta local
    2. Copiar y clonar el repositorio base
@@ -13,13 +15,14 @@
    4. Conectar tu propio repositorio
    5. Sincronizar con el repositorio remoto
    6. Subir tu versión al repositorio
+
 4. Uso de archivo `.env` para gestionar la API Key de Azure
 
 ---
 
 ## 1. Descripción del repositorio
 
-Este repositorio contiene los componentes principales del proyecto Template POC:
+Este repositorio contiene los componentes principales para la inicialización de una POC:
 
 - **Backend**: Implementa el agente `ReactAgent` que utiliza el planning pattern para procesar consultas de usuarios y archivos opcionales.
 - **Frontend**: Proporciona una interfaz de usuario basada en Streamlit para interactuar con el agente, permitiendo enviar consultas y visualizar las respuestas.
