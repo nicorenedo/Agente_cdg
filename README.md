@@ -2,18 +2,18 @@
 ============================================================
 
 ### Índice
-1. [Descripción del repositorio](#1-descripción-del-repositorio)
-2. [Ejecución del proyecto](#2-ejecución-del-proyecto)
-   1. [Iniciar el frontend (versión final)](#21-iniciar-el-frontend-versión-final)
-   2. [Modo "developer" (usando el notebook)](#22-modo-developer-usando-el-notebook)
-3. [Clonar el repositorio base](#3-clonar-el-repositorio-base)
-   1. [Seleccionar la carpeta local](#31-seleccionar-la-carpeta-local)
-   2. [Copiar y clonar el repositorio base](#32-copiar-y-clonar-el-repositorio-base)
-   3. [Desvincular el repositorio original](#33-desvincular-el-repositorio-original)
-   4. [Conectar tu propio repositorio](#34-conectar-tu-propio-repositorio)
-   5. [Sincronizar con el repositorio remoto](#35-sincronizar-con-el-repositorio-remoto)
-   6. [Subir tu versión al repositorio](#36-subir-tu-versión-al-repositorio)
-4. [Uso de archivo `.env` para gestionar la API Key de Azure](#4-uso-de-archivo-env-para-gestionar-la-api-key-de-azure)
+1. Descripción del repositorio
+2. Ejecución del proyecto
+   1. Iniciar el frontend (versión final)
+   2. Modo desarrollo (usando el notebook)
+3. Clonar el repositorio base
+   1. Seleccionar la carpeta local
+   2. Copiar y clonar el repositorio base
+   3. Desvincular el repositorio original
+   4. Conectar tu propio repositorio
+   5. Sincronizar con el repositorio remoto
+   6. Subir tu versión al repositorio
+4. Uso de archivo `.env` para gestionar la API Key de Azure
 
 ---
 
