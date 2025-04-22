@@ -15,8 +15,20 @@ from defined_tools import sum_two_elements, multiply_two_elements, compute_log
 agent = ReactAgent(tools=[sum_two_elements, multiply_two_elements, compute_log])
 
 # Streamlit UI
-st.title("Agent Interaction")
-st.write("Enter your query below to interact with the agent.")
+st.title("🤖 Agent Interaction Platform")
+st.markdown("""
+Welcome to the **Agent Interaction Platform**!  
+This tool allows you to interact with an intelligent agent to perform various operations.  
+""")
+
+st.info("""
+**Note:** This is a BETA version intended for testing purposes only.  
+Currently, the agent only works with this query, and no files are needed:  
+        
+*I want to calculate the sum of 1234 and 5678 and multiply the result by 5. Then, I want to take the logarithm of this result.*
+""")
+
+st.divider()
 
 # Input box for user query
 user_query = st.text_input("User Query:", "")
