@@ -65,20 +65,12 @@ backend/
 - Python 3.8 o superior
 
 ### Pasos
-1. Navega al directorio del backend:
-   ```bash
-   cd template_POC/backend
-   ```
-
-2. Instala las dependencias:
+1. Instalar las dependencias que estan en la raíz del proyecto:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Asegúrate de que el backend esté correctamente referenciado en el frontend:
-   - El directorio del backend debe añadirse a la ruta de Python en el archivo `app.py` del frontend.
-
-4. Para realizar pruebas, ejecuta el notebook `planning_pattern.ipynb` y sigue los pasos que se indican en él. Este notebook contiene ejemplos prácticos y guías para validar el funcionamiento del agente y sus herramientas.
+2. Para realizar pruebas, ejecuta el notebook `planning_pattern.ipynb` y sigue los pasos que se indican en él. Este notebook contiene ejemplos prácticos y guías para validar el funcionamiento del agente y sus herramientas.
 
 ---
 

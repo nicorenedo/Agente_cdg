@@ -1,142 +1,142 @@
-# Frontend for Template POC
+# Frontend para Template POC
 
-This is the frontend component of the Template POC project. It is built using [Streamlit](https://streamlit.io/) to provide a user interface for interacting with an AI agent (`ReactAgent`). Below is a detailed guide to help new developers understand and work with this project.
-
----
-
-## Table of Contents
-1. [Project Overview](#project-overview)
-2. [File Structure](#file-structure)
-3. [How It Works](#how-it-works)
-4. [Setup Instructions](#setup-instructions)
-5. [Key Components](#key-components)
-6. [Customization Guide](#customization-guide)
-7. [Troubleshooting](#troubleshooting)
+Este es el componente frontend del proyecto Template POC. Está construido utilizando [Streamlit](https://streamlit.io/) para proporcionar una interfaz de usuario que interactúe con un agente de IA (`ReactAgent`). A continuación, se ofrece una guía detallada para ayudar a nuevos desarrolladores a entender y trabajar con este proyecto.
 
 ---
 
-## Project Overview
-
-The frontend allows users to:
-- Enter a query to interact with the AI agent.
-- Optionally upload a file (e.g., `.txt`, `.csv`, `.json`) for additional processing.
-- View the agent's response directly in the UI.
-
-The backend logic is handled by the `ReactAgent`, which uses predefined tools to process user inputs.
+## Tabla de Contenidos
+1. [Descripción General del Proyecto](#descripción-general-del-proyecto)
+2. [Estructura de Archivos](#estructura-de-archivos)
+3. [Cómo Funciona](#cómo-funciona)
+4. [Instrucciones de Configuración](#instrucciones-de-configuración)
+5. [Componentes Clave](#componentes-clave)
+6. [Guía de Personalización](#guía-de-personalización)
+7. [Resolución de Problemas](#resolución-de-problemas)
 
 ---
 
-## File Structure
+## Descripción General del Proyecto
+
+El frontend permite a los usuarios:
+- Introducir una consulta para interactuar con el agente de IA.
+- Opcionalmente, subir un archivo (por ejemplo, `.txt`, `.csv`, `.json`) para procesamiento adicional.
+- Ver la respuesta del agente directamente en la interfaz de usuario.
+
+La lógica del backend es manejada por el `ReactAgent`, que utiliza herramientas predefinidas para procesar las entradas del usuario.
+
+---
+
+## Estructura de Archivos
 
 ```
 frontend/
 ├── src/
-│   ├── app.py          # Main Streamlit application
-│   └── ...             # Other frontend-related files
-└── README.md           # Documentation for the frontend
+│   ├── app.py          # Aplicación principal de Streamlit
+│   └── ...             # Otros archivos relacionados con el frontend
+└── README.md           # Documentación del frontend
 ```
 
 ---
 
-## How It Works
+## Cómo Funciona
 
-1. **User Input**:
-   - Users can enter a query in the text input box.
-   - Optionally, users can upload a file for processing.
+1. **Entrada del Usuario**:
+   - Los usuarios pueden introducir una consulta en el cuadro de texto.
+   - Opcionalmente, los usuarios pueden subir un archivo para su procesamiento.
 
-2. **Agent Interaction**:
-   - The `ReactAgent` processes the query and/or file content using predefined tools (`sum_two_elements`, `multiply_two_elements`, `compute_log`).
+2. **Interacción con el Agente**:
+   - El `ReactAgent` procesa la consulta y/o el contenido del archivo utilizando herramientas predefinidas (`sum_two_elements`, `multiply_two_elements`, `compute_log`).
 
-3. **Response Display**:
-   - The agent's response is displayed in the Streamlit UI.
+3. **Visualización de Respuestas**:
+   - La respuesta del agente se muestra en la interfaz de Streamlit.
 
-4. **Error Handling**:
-   - Errors during processing are caught and displayed as error messages.
+4. **Gestión de Errores**:
+   - Los errores durante el procesamiento se capturan y se muestran como mensajes de error.
 
 ---
 
-## Setup Instructions
+## Instrucciones de Configuración
 
-### Prerequisites
-- Python 3.8 or higher
-- Streamlit installed (`pip install streamlit`)
+### Requisitos Previos
+- Python 3.8 o superior
+- Streamlit instalado (`pip install streamlit`)
 
-### Steps
-1. Install dependencies:
+### Pasos
+1. Instalar las dependencias que estan en la raíz del proyecto:
    ```bash
    pip install -r requirements.txt
    ```
 
-2. Run the application:
+2. Ejecutar la aplicación desde frontend/src:
    ```bash
-   streamlit run src/app.py
+   streamlit run app.py
    ```
 
-3. Open the application in your browser at `http://localhost:8501`.
+3. Abrir la aplicación en el navegador en `http://localhost:8501`.
 
 ---
 
-## Key Components
+## Componentes Clave
 
 ### `app.py`
-- **Purpose**: Main entry point for the Streamlit application.
-- **Key Features**:
-  - User query input
-  - File upload functionality
-  - Interaction with the `ReactAgent`
+- **Propósito**: Punto de entrada principal para la aplicación de Streamlit.
+- **Características Clave**:
+  - Entrada de consulta del usuario
+  - Funcionalidad de subida de archivos
+  - Interacción con el `ReactAgent`
 
 ### `ReactAgent`
-- **Purpose**: Processes user inputs using predefined tools.
-- **Tools**:
-  - `sum_two_elements`: Adds two numbers.
-  - `multiply_two_elements`: Multiplies two numbers.
-  - `compute_log`: Computes the logarithm of a number.
+- **Propósito**: Procesa las entradas del usuario utilizando herramientas predefinidas.
+- **Herramientas**:
+  - `sum_two_elements`: Suma dos números.
+  - `multiply_two_elements`: Multiplica dos números.
+  - `compute_log`: Calcula el logaritmo de un número.
 
 ---
 
-## Customization Guide
+## Guía de Personalización
 
-### Adding New Tools
-1. Define the new tool in the `defined_tools` module.
-2. Import the tool in `app.py`.
-3. Add the tool to the `ReactAgent` initialization:
+### Añadir Nuevas Herramientas
+1. Define la nueva herramienta en el módulo `defined_tools`.
+2. Importa la herramienta en `app.py`.
+3. Añade la herramienta a la inicialización de `ReactAgent`:
    ```python
    agent = ReactAgent(tools=[existing_tool, new_tool])
    ```
 
-### Modifying the UI
-- Update the Streamlit UI elements in `app.py`:
-  - Change titles, descriptions, or input fields as needed.
+### Modificar la Interfaz de Usuario
+- Actualiza los elementos de la interfaz de Streamlit en `app.py`:
+  - Cambia títulos, descripciones o campos de entrada según sea necesario.
 
-### Supporting Additional File Types
-- Update the `type` parameter in the `st.file_uploader` function:
+### Soportar Tipos de Archivo Adicionales
+- Actualiza el parámetro `type` en la función `st.file_uploader`:
   ```python
-  uploaded_file = st.file_uploader("Upload a file:", type=["txt", "csv", "json", "xml"])
+  uploaded_file = st.file_uploader("Sube un archivo:", type=["txt", "csv", "json", "xml"])
   ```
 
 ---
 
-## Troubleshooting
+## Resolución de Problemas
 
-### Common Issues
-1. **Module Not Found**:
-   - Ensure the backend directory is correctly added to the Python path in `app.py`.
+### Problemas Comunes
+1. **Módulo No Encontrado**:
+   - Asegúrate de que el directorio del backend esté correctamente añadido al path de Python en `app.py`.
 
-2. **File Upload Errors**:
-   - Verify that the uploaded file is in a supported format.
+2. **Errores al Subir Archivos**:
+   - Verifica que el archivo subido esté en un formato soportado.
 
-3. **Agent Errors**:
-   - Check the implementation of the `ReactAgent` and its tools.
+3. **Errores del Agente**:
+   - Revisa la implementación del `ReactAgent` y sus herramientas.
 
-### Debugging Tips
-- Use `st.write` or `print` statements to debug issues in `app.py`.
-- Check the Streamlit logs in the terminal for error details.
+### Consejos para Depuración
+- Usa `st.write` o declaraciones `print` para depurar problemas en `app.py`.
+- Revisa los logs de Streamlit en la terminal para obtener detalles de los errores.
 
 ---
 
-## Additional Resources
-- [Streamlit Documentation](https://docs.streamlit.io/)
-- [Python Pathlib Documentation](https://docs.python.org/3/library/pathlib.html)
-- [Project Backend Documentation](../backend/README.md) (if available)
+## Recursos Adicionales
+- [Documentación de Streamlit](https://docs.streamlit.io/)
+- [Documentación de Pathlib de Python](https://docs.python.org/3/library/pathlib.html)
+- [Documentación del Backend del Proyecto](../backend/README.md) (si está disponible)
 
 ---

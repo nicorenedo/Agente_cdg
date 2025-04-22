@@ -37,17 +37,12 @@ El funcionamiento de backend <> frontend funciona con simples llamadas desde `ap
 ### 2.1 Iniciar el frontend (versión final)
 1. Navega a la carpeta del frontend:
    ```bash
-   cd frontend
+   cd frontend/src
    ```
 
-2. Instala las dependencias:
+2. Inicia el frontend:
    ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Inicia el frontend:
-   ```bash
-   streamlit run src/app.py
+   streamlit run app.py
    ```
 
    Abre tu navegador en `http://localhost:8501` para interactuar con la aplicación.
