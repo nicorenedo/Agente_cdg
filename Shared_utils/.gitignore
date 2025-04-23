@@ -1,0 +1,27 @@
+# Archivos temporales de Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Archivos generados por notebooks o editores
+.ipynb_checkpoints/
+*.log
+
+# Archivos del entorno virtual (si alguien hace pruebas locales)
+.env
+.venv/
+venv/
+ENV/
+env/
+
+# Archivos de salida comunes
+*.json
+*.csv
+*.pdf
+outputs/
+*.sqlite3
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
