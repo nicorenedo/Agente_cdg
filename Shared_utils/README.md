@@ -1,12 +1,12 @@
-# 📦 Shared_Utils
+# 📦 Utils
 
-Este repositorio actúa como una **plantilla de utilidades compartidas** para proyectos de inteligencia artificial generativa (GEN AI) desarrollados dentro de nuestra organización.  
+Esta carpeta actúa como una **plantilla de utilidades compartidas** para proyectos de inteligencia artificial generativa (GEN AI) desarrollados dentro de nuestra organización.  
 
 Su objetivo es centralizar funciones comunes y reutilizables que resuelvan problemas repetitivos en diferentes proyectos y equipos.
 
 ---
 
-## 🚫 ¿Qué NO es este repositorio?
+## 🚫 ¿Qué NO es esta carpeta?
 
 - No es un espacio de desarrollo ni de pruebas.
 - No contiene lógica de negocio específica de ningún caso de uso.
@@ -25,13 +25,12 @@ Su objetivo es centralizar funciones comunes y reutilizables que resuelvan probl
 
 ---
 
-## 📁 Estructura del repositorio
+## 📁 Estructura de la carpeta 
 
 ```
-Shared_Utils/
+Utils/
 │
 ├── README.md               ← Este archivo
-├── .gitignore
 └── formulas/               ← Funciones reutilizables
     ├── README.md           ← Documentación de cada función
     ├── detectar_ruta.py    ← Manejo de rutas relativas al proyecto
@@ -53,7 +52,7 @@ Shared_Utils/
 
 ## 🧼 Buenas prácticas
 
-- ✅ Usar este repositorio como fuente de funciones modelo.
+- ✅ Usar esta carpeta como fuente de funciones modelo.
 - ✅ Copiar código a tus proyectos locales.
 - ❌ No desarrollar ni probar código dentro de esta plantilla.
 
