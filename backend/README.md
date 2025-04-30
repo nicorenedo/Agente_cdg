@@ -50,11 +50,19 @@ backend/
 │   │   ├── planning_pattern/
 │   │   │   └── react_agent.py   # Implementación del ReactAgent
 │   │   └── ...                  # Otros módulos de patrones agentic
+│   ├── utils/                   # Funciones reutilizables para todos los casos de uso
+│   │   ├── formulas/
+│   │   │   ├── azureopenai_client.py
+│   │   │   ├── leer_pdf.py
+│   │   │   ├── path_utils.py
+│   │   │   └── README.md
+│   │   └── README.md
 │   ├── defined_tools.py         # Herramientas utilizadas por el ReactAgent
 │   ├── planning_pattern.ipynb   # Notebook para personalizar el agente
 │   ├── .env                     # Archivo donde introducir tu AZURE_OPENAI_API_KEY
 │   └── ...                      # Otros archivos relacionados con el backend
 └── README.md                    # Documentación del backend
+
 ```
 
 ---
@@ -88,6 +96,14 @@ backend/
   - `sum_two_elements`: Suma dos números.
   - `multiply_two_elements`: Multiplica dos números.
   - `compute_log`: Calcula el logaritmo de un número.
+  
+### `utils/`: utilidades compartidas
+Contiene funciones reutilizables que pueden ser utilizadas en múltiples casos de uso. Estas funciones están preparadas para ser copiadas y adaptadas dentro de los proyectos si es necesario.
+
+Funciones incluidas:
+- `detectar_ruta`: para construir rutas relativas a partir del nombre del proyecto.
+- `crear_cliente_azureopenai`: para inicializar un cliente Azure OpenAI usando un archivo `.env`.
+- `leer_pdf`: para leer documentos PDF y extraer información estructurada mediante Azure OpenAI y prompts configurables.
 
 ---
 
