@@ -40,7 +40,7 @@ Con esto se pueden construir rutas relativas y garantizar que el código funcion
 ### 🧪 Ejemplo de uso
 
 ```python
-from detectar_ruta import detectar_ruta
+from document_utils import detectar_ruta
 
 nombre_proyecto = "BancaMarch_Agente_Contabilizador"
 ROOT_DIR = detectar_ruta(nombre_proyecto)
@@ -71,7 +71,7 @@ Estas variables deben estar definidas en un archivo `.env` en tu proyecto, o en 
 ### 🧪 Ejemplo de uso
 
 ```python
-from crear_cliente_azureopenai import crear_cliente_azureopenai
+from azure_utils import crear_cliente_azureopenai
 
 client = crear_cliente_azureopenai()
 response = client.chat.completions.create(
@@ -109,7 +109,7 @@ system_prompt = (
 ### 🧪 Ejemplo de uso
 
 ```python
-from leer_pdf import leer_pdf
+from document_utils import leer_pdf
 
 leer_pdf(
     ruta_pdf="data/raw/Contrato_Bono.pdf",
