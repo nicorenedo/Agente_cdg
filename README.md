@@ -173,10 +173,25 @@ Para mantener la seguridad y evitar exponer credenciales sensibles en el código
 
     AZURE_API_KEY='valor_de_la_api_key'
 
-Es importante **no incluir este archivo en el control de versiones**. Para ello, se debe agregar `.env` al archivo `.gitignore`:
+Para facilitar este proceso, se proporciona un archivo de plantilla llamado `.env.copy` ubicado en la carpeta `backend/src`. Debes seguir estos pasos:
+
+1. Copia el archivo `.env.copy` y renómbralo a `.env`:
+   ```bash
+   cd backend/src
+   cp .env.copy .env
+   ```
+
+2. Edita el archivo `.env` recién creado y reemplaza "your-azure-api-key" con tu API key real:
+   ```
+   AZURE_OPENAI_APIKEY = "tu-clave-real-de-api"
+   ```
+
+Es importante **no incluir este archivo en el control de versiones**. Por esta razón, `.env` ya está incluido en el archivo `.gitignore` del proyecto:
 
     # Archivo .gitignore
     .env
+
+Esto garantiza que tus credenciales permanezcan seguras y no se suban accidentalmente al repositorio.
 
 ---
 

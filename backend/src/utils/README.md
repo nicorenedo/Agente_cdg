@@ -33,9 +33,9 @@ Utils/
 ├── README.md               ← Este archivo
 └── formulas/               ← Funciones reutilizables
     ├── README.md           ← Documentación de cada función
-    ├── detectar_ruta.py    ← Manejo de rutas relativas al proyecto
-    ├── crear_cliente_azureopenai.py  ← Inicialización de cliente Azure OpenAI
-    └── leer_pdf.py         ← Lectura de PDFs y extracción vía LLM
+    ├── path_utils.py       ← Manejo de rutas relativas al proyecto
+    ├── azure_utils.py      ← Inicialización de cliente Azure OpenAI
+    └── document_utils.py   ← Lectura de PDFs y extracción vía LLM
 ```
 
 ---
