@@ -5,21 +5,20 @@ import os
 # Load environment variables from the .env file
 load_dotenv()
 
-# Now access the variable
+# Now access the variables
 AZURE_OPENAI_APIKEY = os.getenv("AZURE_OPENAI_APIKEY")
+AZURE_MODEL_NAME = os.getenv("AZURE_MODEL_NAME")
+AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
-'''def load_config(file_path="config.yaml"):
-    with open(file_path, "r") as file:
-        config = yaml.safe_load(file)
-    return config["azure"]["api_key"]'''
 
 def conect_azure():
-  client = AzureOpenAI(
-    azure_endpoint = "https://TU_RECURSO.openai.azure.com/", 
-    api_key = AZURE_OPENAI_APIKEY,  
-    api_version="2024-02-15-preview"
+    client = AzureOpenAI(
+        azure_endpoint = AZURE_OPENAI_ENDPOINT, 
+        api_key = AZURE_OPENAI_APIKEY,  
+        api_version=AZURE_API_VERSION
     )
-  return(client)
+    return(client)
 
 def completions_create(client, messages: list, model: str) -> str:
     """
@@ -34,7 +33,7 @@ def completions_create(client, messages: list, model: str) -> str:
         str: The content of the model's response.
     """
     response = client.chat.completions.create(
-        model=model, # model = "deployment_name"
+        model=model,
         messages = messages,
         temperature=70/100,
         max_tokens=4000,

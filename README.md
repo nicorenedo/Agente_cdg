@@ -2,21 +2,23 @@
 ============================================================
 
 ## Índice
-1. Descripción del repositorio
+1. [Descripción del repositorio](#1-descripción-del-repositorio)
 
-2. Clonar el repositorio base
-   1. Seleccionar la carpeta local
-   2. Copiar y clonar el repositorio base
-   3. Desvincular el repositorio original
-   4. Conectar tu propio repositorio
-   5. Sincronizar con el repositorio remoto
-   6. Subir tu versión al repositorio
+2. [Clonar el repositorio base](#2-clonar-el-repositorio-base)
+   1. [Seleccionar la carpeta local](#21-seleccionar-la-carpeta-local)
+   2. [Copiar y clonar el repositorio base](#22-copiar-y-clonar-el-repositorio-base)
+   3. [Desvincular el repositorio original](#23-desvincular-el-repositorio-original)
+   4. [Conectar tu propio repositorio](#24-conectar-tu-propio-repositorio)
+   5. [Sincronizar con el repositorio remoto](#25-sincronizar-con-el-repositorio-remoto)
+   6. [Subir tu versión al repositorio](#26-subir-tu-versión-al-repositorio)
 
-3. Ejecución del proyecto
-   1. Iniciar el frontend (versión final)
-   2. Modo desarrollo (usando el notebook)
+3. [Ejecución del proyecto](#3-ejecución-del-proyecto)
+   1. [Iniciar la app (versión final)](#31-iniciar-la-app-versión-final)
+   2. [Modo desarrollo (usando el notebook)](#32-modo-desarrollo-usando-el-notebook)
 
-4. Uso de archivo `.env` para gestionar la API Key de Azure
+4. [Uso de archivo `.env` para gestionar la API Key de Azure](#4-uso-de-archivo-env-para-gestionar-la-api-key-de-azure)
+
+5. [Gestión de dependencias con Poetry](#5-gestión-de-dependencias-con-poetry)
 
 ---
 
@@ -123,18 +125,23 @@ Por si hay algo en el repositorio remoto (aunque esté vacío, mejor prevenir):
 
 El funcionamiento de backend <> frontend funciona con simples llamadas desde `app.py` a las funciones del backend del agente. Por eso, para la **versión final**, solo hace falta ejecutar el frontend.
 
-### 3.1 Iniciar el frontend (versión final)
-1. Instala las dependencias:
+### 3.1 Iniciar la app (versión final)
+1. Instala las dependencias con Poetry:
    ```bash
-   pip install -r requirements.txt
+   poetry install
    ```
 
-2. Navega a la carpeta del frontend:
+2. Activa el entorno virtual:
+   ```bash
+   poetry shell
+   ```
+
+3. Navega a la carpeta del frontend:
    ```bash
    cd frontend/src
    ```
 
-3. Inicia el frontend:
+4. Inicia el frontend:
    ```bash
    streamlit run app.py
    ```
@@ -147,17 +154,22 @@ El funcionamiento de backend <> frontend funciona con simples llamadas desde `ap
 
 Si estás en modo "developer" y necesitas probar o depurar el comportamiento del agente paso a paso, utiliza el notebook `planning_pattern.ipynb` ubicado en `backend/src`.
 
-1. Instala las dependencias:
+1. Instala las dependencias con Poetry:
    ```bash
-   pip install -r requirements.txt
+   poetry install
    ```
 
-2. Navega a la carpeta del backend:
+2. Activa el entorno virtual:
+   ```bash
+   poetry shell
+   ```
+
+3. Navega a la carpeta del backend:
    ```bash
    cd backend/src
    ```
 
-3. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
+4. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
    - Inicialización de herramientas.
    - Procesamiento de consultas.
    - Ejecución de herramientas y generación de respuestas.
@@ -227,3 +239,48 @@ Para acceder a la API Key en el código, utilizaremos la biblioteca `dotenv`, qu
 - **Escalabilidad**: Facilita la gestión de credenciales en distintos entornos (desarrollo, pruebas y producción).
 
 Con este método, la conexión con Azure será segura y flexible, evitando riesgos de seguridad innecesarios.
+
+---
+
+## 5. Gestión de dependencias con Poetry
+
+### 5.1 ¿Qué es Poetry?
+
+Poetry es una herramienta para la gestión de dependencias y empaquetado en Python que facilita la declaración de librerías y sus versiones, resolviendo automáticamente las dependencias.
+
+### 5.2 Añadir nuevas librerías al proyecto
+
+Para añadir nuevas librerías al proyecto, utiliza el comando `poetry add` seguido del nombre de la librería:
+
+```bash
+# Añadir una librería básica
+poetry add pandas
+
+# Añadir una librería con una versión específica
+poetry add numpy==1.22.0
+
+# Añadir una librería como dependencia de desarrollo
+poetry add pytest --group dev
+```
+
+### 5.3 Actualizar dependencias
+
+Para actualizar todas las dependencias a sus últimas versiones compatibles:
+
+```bash
+poetry update
+```
+
+Para actualizar una dependencia específica:
+
+```bash
+poetry update nombre_libreria
+```
+
+### 5.4 Exportar dependencias a requirements.txt (si es necesario)
+
+Si necesitas generar un archivo `requirements.txt` tradicional:
+
+```bash
+poetry export -f requirements.txt --output requirements.txt
+```

@@ -59,20 +59,36 @@ frontend/
 
 ### Requisitos Previos
 - Python 3.8 o superior
-- Streamlit instalado (`pip install streamlit`)
+- Poetry instalado (sigue las [instrucciones de instalación de Poetry](https://python-poetry.org/docs/#installation))
 
 ### Pasos
-1. Instalar las dependencias que estan en la raíz del proyecto:
+1. Instalar las dependencias con Poetry desde la raíz del proyecto:
    ```bash
-   pip install -r requirements.txt
+   poetry install
    ```
 
-2. Ejecutar la aplicación desde frontend/src:
+2. Activar el entorno virtual:
    ```bash
+   poetry shell
+   ```
+
+3. Ejecutar la aplicación desde frontend/src:
+   ```bash
+   cd frontend/src
    streamlit run app.py
    ```
 
-3. Abrir la aplicación en el navegador en `http://localhost:8501`.
+4. Abrir la aplicación en el navegador en `http://localhost:8501`.
+
+### Añadir Nuevas Dependencias
+Si necesitas añadir nuevas bibliotecas al proyecto:
+```bash
+# Añadir una librería básica
+poetry add pandas
+
+# Añadir una librería con una versión específica 
+poetry add numpy==1.22.0
+```
 
 ---
 
