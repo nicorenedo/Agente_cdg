@@ -76,7 +76,7 @@ backend/
 ### Pasos
 1. Instalar las dependencias usando Poetry:
    ```bash
-   
+
    # Instalar dependencias
    poetry install
    
@@ -140,7 +140,7 @@ Funciones incluidas:
 
 ### Problemas Comunes
 1. **Herramienta No Encontrada**:
-   - Asegúrate de que la herramienta esté correctamente definida e importada en `react_agent.py`.
+   - Asegúrate que la herramienta esté correctamente definida e importada en `defined_tools.py`.
 
 2. **Errores del Agente**:
    - Revisa el método `run` en busca de errores lógicos o herramientas no implementadas.
@@ -148,15 +148,11 @@ Funciones incluidas:
 3. **Problemas con el Procesamiento de Archivos**:
    - Verifica que el contenido del archivo se lea correctamente y se pase al agente.
 
-### Consejos para Depuración
-- Añade declaraciones de registro en `react_agent.py` para rastrear el flujo de ejecución del agente.
-- Usa pruebas unitarias para validar el comportamiento de herramientas individuales y del agente.
 
 ---
 
 ## Recursos Adicionales
 - [Documentación de Logging en Python](https://docs.python.org/3/library/logging.html)
 - [Documentación de Streamlit](https://docs.streamlit.io/)
-- [Documentación del Frontend del Proyecto](../frontend/README.md)
 
 ---
