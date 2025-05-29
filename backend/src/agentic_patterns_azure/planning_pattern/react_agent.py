@@ -1,6 +1,8 @@
 import json
 import re
+import os
 
+from dotenv import load_dotenv
 from colorama import Fore
 from openai import AzureOpenAI
 
@@ -13,8 +15,14 @@ from agentic_patterns_azure.utils.completions import update_chat_history
 from agentic_patterns_azure.utils.completions import conect_azure
 from agentic_patterns_azure.utils.extraction import extract_tag_content
 
-BASE_SYSTEM_PROMPT = ""
+# Load environment variables from the .env file
+load_dotenv()
 
+# Now access the variables
+AZURE_OPENAI_APIKEY = os.getenv("AZURE_OPENAI_APIKEY")
+AZURE_MODEL_NAME = os.getenv("AZURE_MODEL_NAME")
+AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
 REACT_SYSTEM_PROMPT = """
 You operate by running a loop with the following steps: Thought, Action, Observation.
@@ -70,8 +78,8 @@ class ReactAgent:
     def __init__(
         self,
         tools: Tool | list[Tool],
-        model: str = "gpt-4-turbo",
-        system_prompt: str = BASE_SYSTEM_PROMPT,
+        model: str = AZURE_MODEL_NAME,
+        system_prompt: str = REACT_SYSTEM_PROMPT,
     ) -> None:
         self.client = conect_azure()
         self.model = model
@@ -120,11 +128,7 @@ class ReactAgent:
 
         return observations
 
-    def run(
-        self,
-        user_msg: str,
-        max_rounds: int = 10,
-    ) -> str:
+    def run(self, user_msg: str, max_rounds: int = 10) -> str:
         """
         Executes a user interaction session, where the agent processes user input, generates responses,
         handles tool calls, and updates chat history until a final response is ready or the maximum
