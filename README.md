@@ -2,23 +2,23 @@
 ============================================================
 
 ## Índice
-1. [Descripción del repositorio](#1-descripción-del-repositorio)
+1. [Descripción del repositorio](#descripción-del-repositorio)
 
-2. [Clonar el repositorio base](#2-clonar-el-repositorio-base)
-   1. [Seleccionar la carpeta local](#21-seleccionar-la-carpeta-local)
-   2. [Copiar y clonar el repositorio base](#22-copiar-y-clonar-el-repositorio-base)
-   3. [Desvincular el repositorio original](#23-desvincular-el-repositorio-original)
-   4. [Conectar tu propio repositorio](#24-conectar-tu-propio-repositorio)
-   5. [Sincronizar con el repositorio remoto](#25-sincronizar-con-el-repositorio-remoto)
-   6. [Subir tu versión al repositorio](#26-subir-tu-versión-al-repositorio)
+2. [Clonar el repositorio base](#clonar-el-repositorio-base)
+   1. [Seleccionar la carpeta local](#seleccionar-la-carpeta-local)
+   2. [Copiar y clonar el repositorio base](#copiar-y-clonar-el-repositorio-base)
+   3. [Desvincular el repositorio original](#desvincular-el-repositorio-original)
+   4. [Conectar tu propio repositorio](#conectar-tu-propio-repositorio)
+   5. [Sincronizar con el repositorio remoto](#sincronizar-con-el-repositorio-remoto)
+   6. [Subir tu versión al repositorio](#subir-tu-versión-al-repositorio)
 
-3. [Ejecución del proyecto](#3-ejecución-del-proyecto)
-   1. [Iniciar la app (versión final)](#31-iniciar-la-app-versión-final)
-   2. [Modo desarrollo (usando el notebook)](#32-modo-desarrollo-usando-el-notebook)
+3. [Ejecución del proyecto](#ejecución-del-proyecto)
+   1. [Iniciar la app (versión final)](#iniciar-la-app-versión-final)
+   2. [Modo desarrollo (usando el notebook)](#modo-desarrollo-usando-el-notebook)
 
-4. [Uso de archivo `.env` para gestionar la API Key de Azure](#4-uso-de-archivo-env-para-gestionar-la-api-key-de-azure)
+4. [Uso de archivo `.env` para gestionar la API Key de Azure](#uso-de-archivo-env-para-gestionar-la-api-key-de-azure)
 
-5. [Gestión de dependencias con Poetry](#5-gestión-de-dependencias-con-poetry)
+5. [Gestión de dependencias con Poetry](#gestión-de-dependencias-con-poetry)
 
 ---
 
