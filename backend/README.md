@@ -71,11 +71,17 @@ backend/
 
 ### Requisitos Previos
 - Python 3.8 o superior
+- Poetry (gestor de dependencias para Python)
 
 ### Pasos
-1. Instalar las dependencias que estan en la raíz del proyecto:
+1. Instalar las dependencias usando Poetry:
    ```bash
-   pip install -r requirements.txt
+   
+   # Instalar dependencias
+   poetry install
+   
+   # Activar el entorno virtual
+   poetry shell
    ```
 
 2. Para realizar pruebas, ejecuta el notebook `planning_pattern.ipynb` y sigue los pasos que se indican en él. Este notebook contiene ejemplos prácticos y guías para validar el funcionamiento del agente y sus herramientas.
