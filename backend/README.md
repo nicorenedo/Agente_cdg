@@ -1,4 +1,4 @@
-# Backend para la POC de Plantilla
+# Backend para Template POC
 
 Este es el componente backend del template POC. Contiene la implementación del `ReactAgent`, que sigue un patrón de planificación para procesar consultas de usuario y, opcionalmente, archivos subidos. A continuación, se ofrece una guía detallada para ayudar a los nuevos desarrolladores a entender y trabajar con este proyecto.
 
@@ -76,7 +76,6 @@ backend/
 ### Pasos
 1. Instalar las dependencias usando Poetry:
    ```bash
-
    # Instalar dependencias
    poetry install
    
