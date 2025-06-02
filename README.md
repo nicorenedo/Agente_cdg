@@ -309,7 +309,7 @@ Para obtener tu API KEY de Azure OpenAI, sigue estos pasos:
    - Si no aparece, pulsa en "Add your client IP address"
    - Confirma la configuración pulsando "Save" en la parte superior
 
-![Networking page](assets/images/image-1.png)
+   ![Networking page](assets/images/image-1.png)
 
 ### 6.4 Obtención de las claves de API
 
