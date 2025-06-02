@@ -20,6 +20,7 @@
 
 5. [Gestión de dependencias con Poetry](#gestión-de-dependencias-con-poetry)
 
+6. [¿Cómo obtener mi API KEY?](#cómo-obtener-mi-api-key)
 ---
 
 ## 1. Descripción del repositorio
@@ -284,3 +285,37 @@ Si necesitas generar un archivo `requirements.txt` tradicional:
 ```bash
 poetry export -f requirements.txt --output requirements.txt
 ```
+
+---
+
+## 6. ¿Cómo obtener mi API KEY?
+
+### 6.1 Acceso al portal de Azure
+
+Para obtener tu API KEY de Azure OpenAI, sigue estos pasos:
+
+1. Accede al portal de Azure visitando: https://portal.azure.com/#home
+2. En el dashboard principal, busca y selecciona "Azure OpenAI"
+
+### 6.2 Selección del recurso correcto
+
+3. Entre los recursos disponibles, selecciona la red `llmcoeiberia-gpt4`:
+   ![Azure OpenAI](assets/images/image.png)
+
+### 6.3 Configuración de acceso por IP
+
+4. En el panel lateral izquierdo, selecciona "Networking"
+5. Verifica si tu dirección IP está en la lista de IPs permitidas
+   - Si no aparece, pulsa en "Add your client IP address"
+   - Confirma la configuración pulsando "Save" en la parte superior
+
+![Networking page](assets/images/image-1.png)
+
+### 6.4 Obtención de las claves de API
+
+6. Vuelve al panel lateral izquierdo y selecciona "Keys and Endpoint"
+7. En esta sección encontrarás dos claves disponibles:
+   - Key 1
+   - Key 2
+8. Puedes utilizar cualquiera de las dos claves copiando su valor con el botón correspondiente
+9. Guarda esta clave en tu archivo `.env` como se explicó en la sección 4
