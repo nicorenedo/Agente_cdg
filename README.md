@@ -129,7 +129,7 @@ El funcionamiento de backend <> frontend funciona con simples llamadas desde `ap
 ### 3.1 Iniciar la app (versión final)
 1. Instala las dependencias con Poetry:
    ```bash
-   poetry install
+   poetry install --no-root
    ```
 
 2. Activa el entorno virtual:
@@ -157,7 +157,7 @@ Si estás en modo "developer" y necesitas probar o depurar el comportamiento del
 
 1. Instala las dependencias con Poetry:
    ```bash
-   poetry install
+   poetry install --no-root
    ```
 
 2. Activa el entorno virtual:
@@ -285,32 +285,11 @@ Este comando:
 - Cambia tu prompt para indicar que estás en el entorno virtual
 - Permite ejecutar comandos Python con las dependencias del proyecto
 
-#### **Instalación y configuración de Poetry Shell**
-
-Si es la primera vez que usas Poetry en el proyecto, sigue estos pasos:
-
-1. **Instalar dependencias del proyecto**:
-   ```bash
-   poetry install
-   ```
-
-2. **Activar el entorno virtual**:
-   ```bash
-   poetry shell
-   ```
-
-3. **Verificar que el entorno está activo**:
+**Verificar que el entorno está activo**:
    Tu prompt debería cambiar para mostrar el nombre del entorno virtual entre paréntesis:
    ```bash
    (template-poc-py3.x) C:\tu\ruta\del\proyecto>
    ```
-
-#### **Gestión del entorno virtual**
-
-**Para activar el entorno virtual:**
-```bash
-poetry shell
-```
 
 **Para desactivar el entorno virtual:**
 ```bash
