@@ -249,7 +249,92 @@ Con este método, la conexión con Azure será segura y flexible, evitando riesg
 
 Poetry es una herramienta para la gestión de dependencias y empaquetado en Python que facilita la declaración de librerías y sus versiones, resolviendo automáticamente las dependencias.
 
-### 5.2 Añadir nuevas librerías al proyecto
+### 5.2 Instalación de Poetry
+
+Si aún no tienes Poetry instalado en tu sistema, puedes instalarlo siguiendo estos pasos:
+
+#### **Windows (PowerShell)**
+```powershell
+(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
+```
+
+#### **Linux/macOS (Terminal)**
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+#### **Verificar la instalación**
+Después de la instalación, reinicia tu terminal y verifica que Poetry se instaló correctamente:
+
+```bash
+poetry --version
+```
+
+Si aparece un error de "comando no encontrado", es posible que necesites añadir Poetry a tu PATH. Consulta la [documentación oficial de Poetry](https://python-poetry.org/docs/#installation) para más detalles.
+
+### 5.3 Activar el entorno virtual con Poetry Shell
+
+Poetry crea automáticamente un entorno virtual para tu proyecto. Para activarlo, utiliza:
+
+```bash
+poetry shell
+```
+
+Este comando:
+- Activa el entorno virtual del proyecto
+- Cambia tu prompt para indicar que estás en el entorno virtual
+- Permite ejecutar comandos Python con las dependencias del proyecto
+
+#### **Instalación y configuración de Poetry Shell**
+
+Si es la primera vez que usas Poetry en el proyecto, sigue estos pasos:
+
+1. **Instalar dependencias del proyecto**:
+   ```bash
+   poetry install
+   ```
+
+2. **Activar el entorno virtual**:
+   ```bash
+   poetry shell
+   ```
+
+3. **Verificar que el entorno está activo**:
+   Tu prompt debería cambiar para mostrar el nombre del entorno virtual entre paréntesis:
+   ```bash
+   (template-poc-py3.x) C:\tu\ruta\del\proyecto>
+   ```
+
+#### **Gestión del entorno virtual**
+
+**Para activar el entorno virtual:**
+```bash
+poetry shell
+```
+
+**Para desactivar el entorno virtual:**
+```bash
+exit
+```
+
+**Para ejecutar comandos sin activar el shell permanentemente:**
+```bash
+# Ejecutar un comando específico en el entorno virtual
+poetry run python archivo.py
+poetry run streamlit run app.py
+```
+
+**Para ver información del entorno virtual:**
+```bash
+# Mostrar la ruta del entorno virtual
+poetry env info
+
+# Listar entornos virtuales disponibles
+poetry env list
+```
+
+
+### 5.4 Añadir nuevas librerías al proyecto
 
 Para añadir nuevas librerías al proyecto, utiliza el comando `poetry add` seguido del nombre de la librería:
 
@@ -264,7 +349,7 @@ poetry add numpy==1.22.0
 poetry add pytest --group dev
 ```
 
-### 5.3 Actualizar dependencias
+### 5.5 Actualizar dependencias
 
 Para actualizar todas las dependencias a sus últimas versiones compatibles:
 
@@ -278,7 +363,7 @@ Para actualizar una dependencia específica:
 poetry update nombre_libreria
 ```
 
-### 5.4 Exportar dependencias a requirements.txt (si es necesario)
+### 5.6 Exportar dependencias a requirements.txt (si es necesario)
 
 Si necesitas generar un archivo `requirements.txt` tradicional:
 
@@ -297,12 +382,45 @@ Para obtener tu API KEY de Azure OpenAI, sigue estos pasos:
 1. Accede al portal de Azure visitando: https://portal.azure.com/#home
 2. En el dashboard principal, busca y selecciona "Azure OpenAI"
 
-### 6.2 Selección del recurso correcto
+### 6.2 ¿Qué modelo de Azure OpenAI elegir?
 
-3. Entre los recursos disponibles, selecciona la red `llmcoeiberia-gpt4`:
+Antes de seleccionar el recurso, es importante entender las diferencias entre los modelos disponibles para elegir el más adecuado según tus necesidades:
+
+#### 🚀 **llmcoeiberia-ada**
+- **Modelo Ada**: Es uno de los modelos más ligeros y rápidos de OpenAI
+- **Casos de uso ideales**:
+  - Clasificación básica de texto
+  - Análisis de sentimientos
+  - Consultas rápidas y tareas que no requieren análisis profundo
+- **Recomendación**: Elige Ada si necesitas rapidez y eficiencia en tareas menos complejas
+
+#### 🔧 **llmcoeiberia-openai**
+- **Uso general**: Modelo base de OpenAI para tareas estándar de procesamiento de lenguaje natural (NLP)
+- **Casos de uso ideales**:
+  - Generación de texto general
+  - Clasificación de documentos
+  - Traducción básica
+- **Recomendación**: Úsalo si no necesitas capacidades muy avanzadas y buscas algo estándar para comenzar
+
+#### 🧠 **llmcoeiberia-gpt4**
+- **Modelo GPT-4**: El modelo más avanzado, conocido por su capacidad de comprensión profunda y generación de texto altamente coherente
+- **Casos de uso ideales**:
+  - Generación de contenido extenso y creativo
+  - Resolución de problemas complejos
+  - Asistencia en tareas técnicas o científicas
+  - Conversaciones más naturales y detalladas
+- **Recomendación**: Usa GPT-4 para tareas avanzadas que requieren comprensión compleja o alta calidad en las respuestas
+
+#### ⚖️ **Consideraciones adicionales**
+- **Costo**: Los modelos más avanzados, como GPT-4, suelen ser más costosos. Si tu tarea puede resolverse con Ada, podrías reducir costos
+- **Velocidad vs. Complejidad**: Ada es más rápido pero menos capaz que GPT-4. Elige según tu prioridad entre rapidez y calidad
+
+### 6.3 Selección del recurso correcto
+
+3. Entre los recursos disponibles, selecciona la red que mejor se adapte a tus necesidades (consulta la sección anterior):
    ![Azure OpenAI](assets/images/image.png)
 
-### 6.3 Configuración de acceso por IP
+### 6.4 Configuración de acceso por IP
 
 4. En el panel lateral izquierdo, selecciona "Networking"
 5. Verifica si tu dirección IP está en la lista de IPs permitidas
@@ -311,7 +429,7 @@ Para obtener tu API KEY de Azure OpenAI, sigue estos pasos:
 
    ![Networking page](assets/images/image-1.png)
 
-### 6.4 Obtención de las claves de API
+### 6.5 Obtención de las claves de API
 
 6. Vuelve al panel lateral izquierdo y selecciona "Keys and Endpoint"
 7. En esta sección encontrarás dos claves disponibles:
