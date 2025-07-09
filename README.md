@@ -127,22 +127,39 @@ Por si hay algo en el repositorio remoto (aunque esté vacío, mejor prevenir):
 El funcionamiento de backend <> frontend funciona con simples llamadas desde `app.py` a las funciones del backend del agente. Por eso, para la **versión final**, solo hace falta ejecutar el frontend.
 
 ### 3.1 Iniciar la app (versión final)
-1. Instala las dependencias con Poetry:
+1. Instala Poetry (si no lo tienes):
    ```bash
-   poetry install --no-root
+   curl -sSL https://install.python-poetry.org | python3 -
    ```
 
-2. Activa el entorno virtual:
+2. Comprueba la versión instalada:
+   ```bash
+   poetry --version
+   ```
+
+3. Activa la gestión de entornos virtuales de Poetry:
+   ```bash
+   poetry config virtualenvs.in-project true
+   ```
+
+4. Ve al directorio del proyecto (donde ya existe pyproject.toml)
+
+5. Inicia el entorno virtual (lo crea automáticamente):
    ```bash
    poetry shell
    ```
 
-3. Navega a la carpeta del frontend:
+6. Instala las dependencias sin instalar el paquete raíz:
+   ```bash
+   poetry install --no-root
+   ```
+
+7. Navega a la carpeta del frontend:
    ```bash
    cd frontend/src
    ```
 
-4. Inicia el frontend:
+8. Inicia el frontend:
    ```bash
    streamlit run app.py
    ```
@@ -155,22 +172,39 @@ El funcionamiento de backend <> frontend funciona con simples llamadas desde `ap
 
 Si estás en modo "developer" y necesitas probar o depurar el comportamiento del agente paso a paso, utiliza el notebook `planning_pattern.ipynb` ubicado en `backend/src`.
 
-1. Instala las dependencias con Poetry:
+1. Instala Poetry (si no lo tienes):
    ```bash
-   poetry install --no-root
+   curl -sSL https://install.python-poetry.org | python3 -
    ```
 
-2. Activa el entorno virtual:
+2. Comprueba la versión instalada:
+   ```bash
+   poetry --version
+   ```
+
+3. Activa la gestión de entornos virtuales de Poetry (opcional):
+   ```bash
+   poetry config virtualenvs.in-project true
+   ```
+
+4. Ve al directorio del proyecto (donde ya existe pyproject.toml)
+
+5. Inicia el entorno virtual (lo crea automáticamente):
    ```bash
    poetry shell
    ```
 
-3. Navega a la carpeta del backend:
+6. Instala las dependencias sin instalar el paquete raíz:
+   ```bash
+   poetry install --no-root
+   ```
+
+7. Navega a la carpeta del backend:
    ```bash
    cd backend/src
    ```
 
-4. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
+8. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
    - Inicialización de herramientas.
    - Procesamiento de consultas.
    - Ejecución de herramientas y generación de respuestas.
@@ -249,21 +283,22 @@ Con este método, la conexión con Azure será segura y flexible, evitando riesg
 
 Poetry es una herramienta para la gestión de dependencias y empaquetado en Python que facilita la declaración de librerías y sus versiones, resolviendo automáticamente las dependencias.
 
-### 5.2 Instalación de Poetry
+### 5.2 Configuración inicial de Poetry
 
-Si aún no tienes Poetry instalado en tu sistema, puedes instalarlo siguiendo estos pasos:
+#### ✅ 1. Instalar Poetry
 
-#### **Windows (PowerShell)**
-```powershell
-(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
-```
-
-#### **Linux/macOS (Terminal)**
+**Linux/macOS (Terminal)**
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-#### **Verificar la instalación**
+**Windows (PowerShell)**
+```powershell
+(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
+```
+
+#### ✅ 2. Comprobar versión instalada
+
 Después de la instalación, reinicia tu terminal y verifica que Poetry se instaló correctamente:
 
 ```bash
@@ -272,24 +307,44 @@ poetry --version
 
 Si aparece un error de "comando no encontrado", es posible que necesites añadir Poetry a tu PATH. Consulta la [documentación oficial de Poetry](https://python-poetry.org/docs/#installation) para más detalles.
 
-### 5.3 Activar el entorno virtual con Poetry Shell
+#### ✅ 3. Activar la gestión de entornos virtuales de Poetry (opcional)
 
-Poetry crea automáticamente un entorno virtual para tu proyecto. Para activarlo, utiliza:
+Esta configuración hace que Poetry cree el entorno virtual dentro de la carpeta del proyecto:
+
+```bash
+poetry config virtualenvs.in-project true
+```
+
+#### ✅ 4. Ir al proyecto (donde ya existe pyproject.toml)
+
+Navega hasta la carpeta raíz del proyecto donde se encuentra el archivo `pyproject.toml`.
+
+#### ✅ 5. Iniciar el entorno virtual (lo crea automáticamente)
 
 ```bash
 poetry shell
 ```
 
 Este comando:
+- Crea automáticamente un entorno virtual para tu proyecto (si no existe)
 - Activa el entorno virtual del proyecto
 - Cambia tu prompt para indicar que estás en el entorno virtual
-- Permite ejecutar comandos Python con las dependencias del proyecto
 
 **Verificar que el entorno está activo**:
-   Tu prompt debería cambiar para mostrar el nombre del entorno virtual entre paréntesis:
-   ```bash
-   (template-poc-py3.x) C:\tu\ruta\del\proyecto>
-   ```
+Tu prompt debería cambiar para mostrar el nombre del entorno virtual entre paréntesis:
+```bash
+(template-poc-py3.x) C:\tu\ruta\del\proyecto>
+```
+
+#### ✅ 6. Instalar dependencias sin instalar el paquete raíz
+
+```bash
+poetry install --no-root
+```
+
+Esta opción es ideal para testing o desarrollo, ya que instala todas las dependencias definidas en `pyproject.toml` sin instalar el paquete principal del proyecto.
+
+### 5.3 Comandos adicionales útiles
 
 **Para desactivar el entorno virtual:**
 ```bash
@@ -311,7 +366,6 @@ poetry env info
 # Listar entornos virtuales disponibles
 poetry env list
 ```
-
 
 ### 5.4 Añadir nuevas librerías al proyecto
 
