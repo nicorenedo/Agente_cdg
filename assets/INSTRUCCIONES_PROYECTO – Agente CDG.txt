@@ -1,0 +1,202 @@
+# INSTRUCCIONES\_PROYECTO – Agente Control de Gestión
+
+## 1. Objetivo del Proyecto
+
+Implementar un agente LLM centrado en control de gestión que:
+
+1. Analiza resultados financieros por gestor (rentabilidad, solvencia, liquidez).
+2. Genera análisis cualitativo y paneles interactivos (dashboard, texto y conversación).
+3. Detecta causas de desviaciones (clientes, contratos, anomalías).
+4. Evalúa impacto de métricas en incentivos mediante filtros y escenarios.
+5. Prepara soporte personalizado para Business Review y aprende con feedback continuo.
+
+## 2. Tecnología Frontend
+
+Para asegurar un dashboard profesional e interactivo, utilizaremos:
+• **React** (biblioteca de UI): bajo licencia MIT, libre para uso comercial.
+• **Ant Design** (framework de componentes UI): licencia MIT, ideal para interfaces empresariales.
+• **Recharts** (biblioteca de gráficos React basada en D3): licencia MIT y sin coste.
+• **D3.js** (si se requiere personalización avanzada): licencia BSD, gratuita para todos los usos.
+
+Todas estas herramientas son **gratuitas**, sin suscripciones ni restricciones para proyectos comerciales.
+
+
+
+---
+
+Este archivo sirve como guía de estructura, configuración y desarrollo para el proyecto de agente de control de gestión en entorno profesional.
+
+
+
+MANUAL DE INSTRUCCIONES – Agente de Control de Gestión
+
+Objetivo General
+
+Este documento describe las funcionalidades clave y la organización del proyecto que da soporte al desarrollo de un agente de control de gestión basado en LLMs (Modelos de Lenguaje de Gran Escala), con el fin de asistir a gestores y analistas financieros en el análisis de resultados, interpretación de desviaciones y preparación de Business Reviews.
+
+Funcionalidades Principales del Agente
+
+1. Análisis de Resultados Financieros
+
+El agente es capaz de consultar una base de datos estructurada (simulando tablas propias de un departamento de control de gestión) para generar informes comparativos del rendimiento del gestor. La información se estructura en base a KPIs de rentabilidad, solvencia y liquidez, y permite realizar comparaciones:
+
+Entre períodos (actual vs anteriores).
+
+Frente a presupuestos definidos.
+
+Contra un grupo comparable de referencia.
+
+Para ello se utilizará una combinación de SQL queries, herramientas auxiliares y capacidades del LLM.
+
+2. Generación de Análisis para el Gestor o Analista Financiero
+
+A partir de un input proporcionado desde el frontend, el agente genera un informe completo en forma de dashboard financiero. Este incluirá:
+
+Indicadores clave (KPIs).
+
+Gráficas y tablas dinámicas.
+
+Interpretación textual.
+
+Capacidad de conversación interactiva con el agente.
+
+El dashboard será flexible y permitirá cambios en tiempo real, como modificar el tipo de visualización (por ejemplo, cambiar un gráfico de barras a un pie chart). Esta funcionalidad supone un reto importante en el diseño del frontend, que deberá ser potente, intuitivo y completamente interactivo.
+
+3. Análisis de Causas Inmediatas de las Desviaciones
+
+El agente tendrá la capacidad de identificar desviaciones, anomalías y eventos críticos a nivel de contrato, cliente o gestor. Esta funcionalidad se apoya en:
+
+Datos transaccionales recogidos en la base de datos.
+
+Inteligencia contextual del LLM.
+
+Inputs opcionales por parte del usuario desde el frontend.
+
+El objetivo es proporcionar explicaciones razonadas y accionables sobre las causas de las desviaciones en el rendimiento financiero.
+
+4. Impacto de los Resultados en el Esquema de Incentivos
+
+Esta funcionalidad permite al agente relacionar los resultados financieros con el sistema de incentivos de cada gestor, en base a objetivos predefinidos. Dichos objetivos pueden ser introducidos manualmente por el usuario o estar ya presentes en el sistema. El agente deberá:
+
+Evaluar el cumplimiento de objetivos.
+
+Interpretar resultados por centro o segmento mediante filtros.
+
+Ofrecer una argumentación estructurada sobre el rendimiento y su impacto en los incentivos.
+
+5. Soporte Interactivo para Business Reviews
+
+El agente actuará como asistente en tiempo real durante la preparación del Business Review. Está entrenado con criterios y lógica de control de gestión, por lo que podrá:
+
+Resolver dudas conceptuales o metodológicas.
+
+Preparar resúmenes ejecutivos.
+
+Adaptarse progresivamente al lenguaje y contexto de cada gestor, mediante aprendizaje continuo (feedback conversacional).
+
+Estructura del Proyecto:
+
+## Estructura de Carpetas
+
+```
+/
+├── backend/
+│   ├── src/
+│   │   ├── database/
+│   │   │   └── BM_CONTABILIDAD_CDG.db****
+│   │   ├── queries/
+│   │   ├── tools/
+│   │   ├── agents/
+│   │   └── main.py
+│   ├── scripts/
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── components/
+│   │   └── styles/
+│   ├── app.py
+│   ├── debug_api.py
+│   ├── run_app.py
+│   ├── config.toml
+│   └── requirements.txt
+├── .env
+└── .gitignore
+```
+
+El proyecto se organizará en dos grandes bloques:
+
+Backend
+
+Contendrá toda la lógica funcional del agente:
+
+Conexión y consultas a la base de datos.
+
+Lógica de negocio y análisis.
+
+Integración con la API de Azure OpenAI mediante el archivo initial_agent.py.
+
+Preparación de respuestas del agente y generación de informes.
+
+Se incluirá también una carpeta data/ que contendrá la base de datos contable y archivos simulados.
+
+Frontend
+
+Estará diseñado para ser profesional, modular e interactivo. Se emplearán las siguientes tecnologías:
+
+React: para la construcción de interfaces interactivas.
+
+Ant Design (AntD): para diseño empresarial con componentes UI predefinidos.
+
+Recharts / D3.js: para representación de KPIs en formato gráfico.
+
+
+****BM_CONTABILIDAD_CDG.db
+
+La base de datos BM_CONTABILIDAD_CDG.db tiene el contenido de los datos de contabilidad, maestros y catálogos de datos, datos de Control de Gestión y operaciones contables. Esta compuesta de las siguientes tablas:
+
+MAESTRO_PRODUCTOS: Con los campos PRODUCTO_ID (PK), DESC_PRODUCTO, IND_FABRICA, FABRICA, BANCO, EMPRESA_ID (FK)
+El campo PRODUCTO_ID es el identificador del producto y actua como pk. El campo Indicador de fábrica, indica si el producto es un producto de fábrica (fondo de inversión, etc), en el caso de que ese campo sea 1 ("SI"), se le asigna un porcentaje a fábrica y un porcentaje a Banco.
+
+Se deben crear los siguientes productos, (Préstamo Hipotecario con PRODUCTO_ID = 100100100100, Depósito a Plazo Fijo en Euros con PRODUCTO_ID = 400200100100, Fondo Banca March con PRODUCTO_ID = 600100300300),(Reparto 0,85 y 0,15). De estos, el único con IND_FABRICA = 1 es Fondos Banca March. 
+
+MAESTRO GESTORES: Con los campos GESTOR_ID (PK), DESC_GESTOR, CENTRO (FK), SEGMENTO_ID (FK). Es el catalogo de gestores. La lógica detrás de gestor, segmento y centro es la siguiente: Un gestor está siempre asignado a un único centro, un gestor está asignado siempre a un único segmento. Un gestor no puede estar asignado a dos centros, ni a dos segmentos. 
+
+Debemos crear una muestra de unos 30 gestores. Todos ellos con nombres españoles. Todos ellos repartidos entres los 5 segmentos que vamos a crear. Y todos ellos repartidos entre los 10 centros. 
+
+MAESTRO CENTROS: Con los campos CENTRO_ID (PK), DESC_CENTRO, IND_CENTRO_FINALISTA, EMPRESA_ID (FK). Es el catálogo de centros. Los centros a su vez tendrán gestores asignados. Tenemos un total de 8 centros. De estos centros vamos a tener 5 centros finalistas (oficinas del banco) y 3 centros de servicios centrales del banco.
+
+Los centros finalistas son MADRID-OFICINA PRINCIPAL, PALMA-SANT MIQUEL, BARCELONA-BALMES y MALAGA-PARQUE LITORAL y BILBAO-MARQUÉS DEL PUERTO. Estos centros son los centros que reciben clientes y contratos, tienen gestores asignados. Sin embargo, los 3 centros de servicios centrales que son RRHH, DIRECCIÓN FINANCIERA y TECNOLOGÍA no tienen contratos asignados, ni clientes, ni gestores.
+
+Por ello en el MAESTRO_CENTRO debemos añadir un campo que sea IND_CENTRO_FINALISTA. Si es centro finalista se le asigna "1". Si no lo es, se le asigna un "0".
+
+
+MAESTRO_SEGMENTOS: Con los campos SEGMENTO_ID(PK), DESC_SEGMENTO, EMPRESA_ID (FK). Es el catálogo de segmentos. Aquí debemos saber la relación entre segmentos, centros y gestores. Los gestores están asignados a un centro y a un segmento. Sin embargo no todos los gestores de un centro están asignados a un mismo segmento. Por ello en un mismo centro (Imaginemos el 1), puede haber dos gestores (gestores 2 y 5) asignados a dos segmentos diferentes (Segmentos 2 y 4). Por ello los datos que creemos deben de estar dentro de esa lógica. 
+
+Debemos crear los siguientes segmentos:
+
+N10101; Banca Minorista;1
+N10102; Banca Privada; 1
+N10103; Banca de Empresas; 1
+N10104; Banca Personal; 1
+N20301; Fondos; 1
+
+MAESTRO_CLIENTES: Con los campos (CLIENTE_ID (PK), NOMBRE_CLIENTE, GESTOR_ID(FK) EMPRESA_ID (FK). Es el catálogo de clientes del banco. Cada uno de las operaciones estarán asociadas a un cliente. Debemos crear una muestra de 70 clientes. La relación cliente y gestor es 1<==>1. 
+
+---------------------------------------------
+PENDIENTES de CREAR:
+
+MAESTRO_CUENTAS: Con los campos (CUENTA_ID (PK), DESC_CUENTA, EMPRESA_ID (FK)). Es el catálogo de cuentas contables. PDTE DEFINIR
+
+GASTOS_CENTRO; Con los campos EMPRESA, CENTRO_CONTABLE, CONCEPTO_COSTE, IMPORTE: 
+En esta tabla establecemos lo siguiente. El importe de coste por cada centro contable. Esto quiere decir lo siguiente. Por ejemplo, el centro de MADRID-OFICINA PRINCIPAL tendrá un coste por gastos de Tecnología, un gasto por gastos de personal, un coste por suministros, un gasto por papelería. Vamos a tener esos 4 conceptos de coste para cada centro. Aquí el tema es que los centros finalistas dividirán este gasto entre el total de contratos del centro finalista para luego poder calcular el coste por producto haciendo la suma de todos los gastos en la tabla PRECIO_POR_PRODUCTO. Sin embargo, en el caso de los gastos de los centros no finalistas, no se dividirán entre el numero de contratos del centro puesto que los centros de servicios centrales (no finalistas) no tienen contratos asignados. Para asignar los gastos de los centros de servicios centrales sumaremos los gastos de, por ejemplo, tecnología de los centros de RRHH, Tecnología y Dirección financiera y los dividiremos entre el numero total de contratos de la entidad, para luego asignárselo a los centros en función del numero de contratos del centro. Por ello, debemos crear esta tabla con los costes por centro contable finalista y no finalista. Tenemos que asignar un coste razonable para una muestra de 70 clientes, 30 gestores y los gestores que hay en cada centro. Tenemos que tener en cuenta la localización de las oficinas, y asignar costes lógicos teniendo en cuenta que la muestra es reducida. 
+
+PRECIO_POR_PRODUCTO: Con los campos (SEGMENTO _ID (FK), PRODUCTO _ID (FK), PRECIO MANTENIMIENTO): Esta tabla establece una relación entre el segmento, el producto y el coste del producto para el banco. Este coste viene establecido por unos drivers que debemos definir para establecer un coste estándar por producto y segmento. Esto quiere decir que a los diferentes gestores se les debe asignar un coste por contrato o cualquier otro factor que incurra en un coste para el banco. Por ejemplo, un gestor que concede préstamos, no solo genera ingresos a pesar de que el hecho de dar un préstamo generalmente genere ingresos, también tiene unos costes asociados a su actividad. Por ejemplo los gastos de limpieza, gastos de tecnología, gastos de administración, gastos de consultoría, gastos de cualquier otra naturaleza. Estos costes pueden generalmente se incurren por contrato, por ejemplo, es posible que un criterio de asignación de costes en el caso de gastos de limpieza o los gastos de tecnología, sea por el número de contratos asignados al gestor. La forma de asignar un coste por producto seria la siguiente. En la tabla PRECIO_POR_PRODUCTO establecemos un coste por producto para cada segmento, en base a unos criterios que se rigen en el banco. Imaginemos que para el Segmento Banca Personal el coste del producto de préstamos hipotecarios es de (-140). Bien pues por cada contrato de cada gestor asignado al Segmento Banca Personal y conceda un préstamo hipotecario, se le asignará un coste por producto de(-140) que se vera como un gasto para el banco. Sin embargo puede pasar que para el Segmento Banca Patrimonial el coste del producto de préstamos hipotecarios sea de (-800) puesto que aqui incurren más gastos (Por ejemplo gastos de trato al cliente, mejor tecnología o lo que sea). Por ello debemos encontrar la lógica para establecer estos drivers de costes por producto. 
+
+
+
+El objetivo es ofrecer un dashboard que permita al gestor visualizar resultados, modificar la forma de visualizarlos y conversar directamente con el agente.
+
+Este manual se actualizará a medida que avance el desarrollo y se definan los archivos y flujos específicos. La presente versión tiene como objetivo documentar el propósito y estructura general del proyecto para su correcta comprensión y despliegue inicial.
+
+

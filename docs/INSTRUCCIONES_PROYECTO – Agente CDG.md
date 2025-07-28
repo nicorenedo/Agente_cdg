@@ -1,0 +1,1792 @@
+\# INSTRUCCIONES\\\_PROYECTO – Agente Control de Gestión
+
+
+
+\## 1. Objetivo del Proyecto
+
+
+
+Implementar un agente LLM centrado en control de gestión que:
+
+
+
+1\. Analiza resultados financieros por gestor (rentabilidad, solvencia, liquidez).
+
+2\. Genera análisis cualitativo y paneles interactivos (dashboard, texto y conversación).
+
+3\. Detecta causas de desviaciones (clientes, contratos, anomalías).
+
+4\. Evalúa impacto de métricas en incentivos mediante filtros y escenarios.
+
+5\. Prepara soporte personalizado para Business Review y aprende con feedback continuo.
+
+
+
+\## 2. Tecnología Frontend
+
+
+
+Para asegurar un dashboard profesional e interactivo, utilizaremos:
+
+• \*\*React\*\* (biblioteca de UI): bajo licencia MIT, libre para uso comercial.
+
+• \*\*Ant Design\*\* (framework de componentes UI): licencia MIT, ideal para interfaces empresariales.
+
+• \*\*Recharts\*\* (biblioteca de gráficos React basada en D3): licencia MIT y sin coste.
+
+• \*\*D3.js\*\* (si se requiere personalización avanzada): licencia BSD, gratuita para todos los usos.
+
+
+
+Todas estas herramientas son \*\*gratuitas\*\*, sin suscripciones ni restricciones para proyectos comerciales.
+
+
+
+
+
+
+
+---
+
+
+
+Este archivo sirve como guía de estructura, configuración y desarrollo para el proyecto de agente de control de gestión en entorno profesional.
+
+
+
+
+
+
+
+MANUAL DE INSTRUCCIONES – Agente de Control de Gestión
+
+
+
+Objetivo General
+
+
+
+Este documento describe las funcionalidades clave y la organización del proyecto que da soporte al desarrollo de un agente de control de gestión basado en LLMs (Modelos de Lenguaje de Gran Escala), con el fin de asistir a gestores y analistas financieros en el análisis de resultados, interpretación de desviaciones y preparación de Business Reviews.
+
+
+
+Funcionalidades Principales del Agente
+
+
+
+1\. Análisis de Resultados Financieros
+
+
+
+El agente es capaz de consultar una base de datos estructurada (simulando tablas propias de un departamento de control de gestión) para generar informes comparativos del rendimiento del gestor. La información se estructura en base a KPIs de rentabilidad, solvencia y liquidez, y permite realizar comparaciones:
+
+
+
+Entre períodos (actual vs anteriores).
+
+
+
+Frente a presupuestos definidos.
+
+
+
+Contra un grupo comparable de referencia.
+
+
+
+Para ello se utilizará una combinación de SQL queries, herramientas auxiliares y capacidades del LLM.
+
+
+
+2\. Generación de Análisis para el Gestor o Analista Financiero
+
+
+
+A partir de un input proporcionado desde el frontend, el agente genera un informe completo en forma de dashboard financiero. Este incluirá:
+
+
+
+Indicadores clave (KPIs).
+
+
+
+Gráficas y tablas dinámicas.
+
+
+
+Interpretación textual.
+
+
+
+Capacidad de conversación interactiva con el agente.
+
+
+
+El dashboard será flexible y permitirá cambios en tiempo real, como modificar el tipo de visualización (por ejemplo, cambiar un gráfico de barras a un pie chart). Esta funcionalidad supone un reto importante en el diseño del frontend, que deberá ser potente, intuitivo y completamente interactivo.
+
+
+
+3\. Análisis de Causas Inmediatas de las Desviaciones
+
+
+
+El agente tendrá la capacidad de identificar desviaciones, anomalías y eventos críticos a nivel de contrato, cliente o gestor. Esta funcionalidad se apoya en:
+
+
+
+Datos transaccionales recogidos en la base de datos.
+
+
+
+Inteligencia contextual del LLM.
+
+
+
+Inputs opcionales por parte del usuario desde el frontend.
+
+
+
+El objetivo es proporcionar explicaciones razonadas y accionables sobre las causas de las desviaciones en el rendimiento financiero.
+
+
+
+4\. Impacto de los Resultados en el Esquema de Incentivos
+
+
+
+Esta funcionalidad permite al agente relacionar los resultados financieros con el sistema de incentivos de cada gestor, en base a objetivos predefinidos. Dichos objetivos pueden ser introducidos manualmente por el usuario o estar ya presentes en el sistema. El agente deberá:
+
+
+
+Evaluar el cumplimiento de objetivos.
+
+
+
+Interpretar resultados por centro o segmento mediante filtros.
+
+
+
+Ofrecer una argumentación estructurada sobre el rendimiento y su impacto en los incentivos.
+
+
+
+5\. Soporte Interactivo para Business Reviews
+
+
+
+El agente actuará como asistente en tiempo real durante la preparación del Business Review. Está entrenado con criterios y lógica de control de gestión, por lo que podrá:
+
+
+
+Resolver dudas conceptuales o metodológicas.
+
+
+
+Preparar resúmenes ejecutivos.
+
+
+
+Adaptarse progresivamente al lenguaje y contexto de cada gestor, mediante aprendizaje continuo (feedback conversacional).
+
+
+
+Estructura del Proyecto:
+
+
+
+\## Estructura de Carpetas
+
+
+
+```
+
+/
+
+├── backend/
+
+│   ├── src/
+
+│   │   ├── database/
+
+│   │   │   └── BM\_CONTABILIDAD\_CDG.db\*\*\*\*
+
+│   │   ├── queries/
+
+│   │   ├── tools/
+
+│   │   ├── agents/
+
+│   │   └── main.py
+
+│   ├── scripts/
+
+│   └── requirements.txt
+
+├── frontend/
+
+│   ├── src/
+
+│   │   ├── assets/
+
+│   │   ├── components/
+
+│   │   └── styles/
+
+│   ├── app.py
+
+│   ├── debug\_api.py
+
+│   ├── run\_app.py
+
+│   ├── config.toml
+
+│   └── requirements.txt
+
+├── .env
+
+└── .gitignore
+
+```
+
+
+
+El proyecto se organizará en dos grandes bloques:
+
+
+
+Backend
+
+
+
+Contendrá toda la lógica funcional del agente:
+
+
+
+Conexión y consultas a la base de datos.
+
+
+
+Lógica de negocio y análisis.
+
+
+
+Integración con la API de Azure OpenAI mediante el archivo initial\_agent.py.
+
+
+
+Preparación de respuestas del agente y generación de informes.
+
+
+
+Se incluirá también una carpeta data/ que contendrá la base de datos contable y archivos simulados.
+
+
+
+Quiero que implemente utilidades que como un diccionario de tools, diccionario de queries, un reflection\_pattern (Que el agente pueda aprender de los diferentes inputs)
+
+
+
+Frontend
+
+
+
+Estará diseñado para ser profesional, modular e interactivo. Se emplearán las siguientes tecnologías:
+
+
+
+React: para la construcción de interfaces interactivas.
+
+
+
+Ant Design (AntD): para diseño empresarial con componentes UI predefinidos.
+
+
+
+Recharts / D3.js: para representación de KPIs en formato gráfico.
+
+
+
+
+
+**\*\*\*\*BM\_CONTABILIDAD\_CDG.db**
+
+
+
+La arquitectura del sistema se fundamenta en la base de datos contable BM\_CONTABILIDAD\_CDG.db que replica fielmente la estructura operativa de una entidad financiera, con 13 tablas interrelacionadas que capturan desde la estructura organizativa hasta los movimientos financieros y métricas de control.
+
+La base de datos BM\_CONTABILIDAD\_CDG.db tiene el contenido de los datos de contabilidad, maestros y catálogos de datos, datos de Control de Gestión y operaciones contables. Esta compuesta de las siguientes tablas:
+
+
+
+**1. MAESTRO\_CENTRO**
+
+Propósito: Define la estructura organizativa de centros operativos y de soporte de la entidad financiera.
+
+
+
+Estructura y Lógica:
+
+
+
+CENTRO\_ID: Identificador único del centro (1-8)
+
+
+
+DESC\_CENTRO: Descripción funcional del centro
+
+
+
+IND\_CENTRO\_FINALISTA: Indicador binario que clasifica los centros:
+
+
+
+1: Centros finalistas (1-5) con actividad comercial directa y contratos
+
+
+
+0: Centros de soporte (6-8) que proporcionan servicios centrales
+
+
+
+EMPRESA\_ID: Vinculación con la entidad legal (siempre 1 en esta implementación)
+
+
+
+Centros Finalistas (1-5):
+
+
+
+MADRID-OFICINA PRINCIPAL: Centro principal con mayor volumen de contratos
+
+
+
+PALMA-SANT MIQUEL: Oficina regional Baleares
+
+
+
+BARCELONA-BALMES: Oficina regional Cataluña
+
+
+
+MALAGA-PARQUE LITORAL: Oficina regional Andalucía
+
+
+
+BILBAO-MARQUÉS DEL PUERTO: Oficina regional País Vasco
+
+
+
+Centros de Soporte (6-8):
+
+6\. RRHH: Gestión de recursos humanos y gastos de personal
+
+7\. DIRECCIÓN FINANCIERA: Planificación, control y reporting corporativo
+
+8\. TECNOLOGÍA: Sistemas informáticos, infraestructura IT y desarrollo
+
+
+
+Uso en el Sistema: Los gastos de centros 6-8 se redistribuyen proporcionalmente entre centros 1-5 según el volumen de contratos para el cálculo de precios reales por producto.
+
+
+
+**2. MAESTRO\_CLIENTES**
+
+Propósito: Base de datos de clientes activos con asignación comercial específica.
+
+
+
+Estructura y Lógica:
+
+
+
+CLIENTE\_ID: Identificador único del cliente (1-85)
+
+
+
+NOMBRE\_CLIENTE: Nombre completo del cliente
+
+
+
+GESTOR\_ID: Gestor comercial asignado (relación directa con MAESTRO\_GESTORES)
+
+
+
+EMPRESA\_ID: Entidad legal (siempre 1)
+
+
+
+Distribución Geográfica: Los nombres reflejan la distribución regional:
+
+
+
+Madrid: Nombres castellanos tradicionales (García, López, Martínez)
+
+
+
+Baleares: Nombres catalanes/mallorquines (Garau, Crespí, Mesquida)
+
+
+
+Cataluña: Nombres catalanes (Pujol, Vila, Oliveras)
+
+
+
+Andalucía: Nombres andaluces (Jiménez, Moreno, González)
+
+
+
+País Vasco: Nombres euskeras (Goikoetxea, Etxebarria, Azkarate)
+
+
+
+Uso en el Sistema: Base para análisis de customer lifetime value, segmentación comportamental y trazabilidad completa desde contrato hasta cliente final.
+
+
+
+**3. MAESTRO\_CONTRATOS**
+
+Propósito: Registro central de todos los contratos activos que constituye el núcleo del sistema de costes.
+
+
+
+Estructura y Lógica:
+
+
+
+CONTRATO\_ID: Identificador único (formato 1001-1075, 2001-2069, 3001-3072)
+
+
+
+FECHA\_ALTA: Fecha de formalización del contrato
+
+
+
+CLIENTE\_ID: Cliente titular del contrato
+
+
+
+GESTOR\_ID: Gestor comercial responsable
+
+
+
+PRODUCTO\_ID: Producto financiero contratado
+
+
+
+CENTRO\_CONTABLE: Centro que absorbe los gastos (siempre 1-5)
+
+
+
+EMPRESA\_ID: Entidad legal (siempre 1)
+
+
+
+Distribución Temporal:
+
+
+
+Base enero-mayo 2025: 187 contratos
+
+
+
+Nuevos octubre 2025: 29 contratos adicionales
+
+
+
+Total activo: 216 contratos
+
+
+
+Familias de Contratos por Producto:
+
+
+
+Serie 1000: Préstamos Hipotecarios (100100100100)
+
+
+
+Serie 2000: Depósitos a Plazo Fijo (400200100100)
+
+
+
+Serie 3000: Fondos Banca March (600100300300)
+
+
+
+Uso Crítico: Esta tabla es el núcleo del sistema de costes. La distribución de los 216 contratos por centro determina cómo se reparten los gastos totales de €291,600 mensuales para calcular el precio real por producto.
+
+
+
+**4. MAESTRO\_CUENTAS**
+
+Propósito: Plan contable específico para productos financieros y estructura de costes.
+
+
+
+Estructura y Lógica:
+
+
+
+CUENTA\_ID: Código contable único (formato 6-7 dígitos)
+
+
+
+DESC\_CUENTA: Descripción detallada de la cuenta
+
+
+
+LINEA\_CDR: Vinculación con líneas del Cuadro de Resultados
+
+
+
+EMPRESA\_ID: Entidad legal (siempre 1)
+
+
+
+Clasificación por Familias:
+
+
+
+76xxxx: Ingresos por productos (intereses, comisiones)
+
+
+
+64xxxx: Gastos financieros (intereses pagados)
+
+
+
+62xxxx: Gastos operativos (personal, administración)
+
+
+
+68xxxx: Amortizaciones (software, equipos)
+
+
+
+69xxxx: Otros gastos (impuestos, fondos de garantía)
+
+
+
+Uso en el Sistema: Referencia para contabilización automática de gastos e ingresos, trazabilidad contable y cumplimiento normativo.
+
+
+
+**5. MAESTRO\_GESTORES**
+
+Propósito: Catálogo del equipo comercial con especialización por segmento y ubicación geográfica.
+
+
+
+Estructura y Lógica:
+
+
+
+GESTOR\_ID: Identificador único (1-30)
+
+
+
+DESC\_GESTOR: Nombre completo del gestor
+
+
+
+CENTRO: Centro de trabajo (1-5)
+
+
+
+SEGMENTO\_ID: Especialización comercial exclusiva
+
+
+
+Distribución por Centro:
+
+
+
+Centro 1 (Madrid): 8 gestores (ID 1-8)
+
+
+
+Centro 2 (Palma): 8 gestores (ID 9-16)
+
+
+
+Centro 3 (Barcelona): 5 gestores (ID 17-21)
+
+
+
+Centro 4 (Málaga): 5 gestores (ID 22-26)
+
+
+
+Centro 5 (Bilbao): 4 gestores (ID 27-30)
+
+
+
+Especialización por Segmento: Cada gestor se dedica exclusivamente a un segmento, permitiendo expertise específica y cálculo de KPIs individuales.
+
+
+
+Uso en el Sistema: Base para análisis de productividad comercial, cálculo de incentivos, evaluación de performance y asignación de objetivos comerciales.
+
+
+
+**6. MAESTRO\_LINEA\_CDR**
+
+Propósito: Estructura del Cuadro de Resultados (P\&L) para reporting ejecutivo automático.
+
+
+
+Estructura y Lógica:
+
+
+
+COD\_LINEA\_CDR: Código único de línea (formato CRxxxx)
+
+
+
+DES\_LINEA\_CDR: Descripción de la partida contable
+
+
+
+Jerarquía del P\&L:
+
+
+
+CR0001: Ingresos financieros
+
+
+
+CR0003: Gastos Financieros
+
+
+
+CR0007: MARGEN FINANCIERO
+
+
+
+CR0008: Comisiones Netas
+
+
+
+CR0012: MARGEN BRUTO
+
+
+
+CR0014: Gastos de Personal
+
+
+
+CR0016: Gastos de Administración
+
+
+
+CR0017: Amortizaciones
+
+
+
+CR0018: MARGEN DE EXPLOTACIÓN
+
+
+
+CR0029: Coste de capital
+
+
+
+CR0030: MARGEN APORTADO
+
+
+
+Uso en el Sistema: Generación automática de Business Reviews, drill-down desde visión consolidada hasta detalle por gestor/producto.
+
+
+
+**7. MAESTRO\_PRODUCTOS**
+
+Propósito: Catálogo de productos financieros con configuración de modelos de negocio.
+
+
+
+Estructura y Lógica:
+
+
+
+PRODUCTO\_ID: Código único de 12 dígitos
+
+
+
+DESC\_PRODUCTO: Denominación comercial
+
+
+
+IND\_FABRICA: Indicador de modelo de distribución (0/1)
+
+
+
+FABRICA: Porcentaje de comisión para la gestora (0.0-0.85)
+
+
+
+BANCO: Porcentaje de comisión para el banco (0.15-1.0)
+
+
+
+EMPRESA\_ID: Entidad legal (siempre 1)
+
+
+
+Productos Disponibles:
+
+
+
+100100100100: Préstamo Hipotecario (100% banco)
+
+
+
+400200100100: Depósito a Plazo Fijo en Euros (100% banco)
+
+
+
+600100300300: Fondo Banca March (85% gestora, 15% banco)
+
+
+
+Uso en el Sistema: Base para cálculo de precios estándar y reales, análisis de contribución marginal y optimización de mix de productos.
+
+
+
+**8. MAESTRO\_SEGMENTOS**
+
+Propósito: Clasificación estratégica de la cartera por tipología de cliente.
+
+
+
+Estructura y Lógica:
+
+
+
+SEGMENTO\_ID: Código único (formato Nxxxxx)
+
+
+
+DESC\_SEGMENTO: Descripción del perfil de cliente
+
+
+
+EMPRESA\_ID: Entidad legal (siempre 1)
+
+
+
+Segmentos Definidos:
+
+
+
+N10101: Banca Minorista (particulares, renta media-baja)
+
+
+
+N10102: Banca Privada (patrimonios elevados, +€1M)
+
+
+
+N10103: Banca de Empresas (pymes, corporaciones)
+
+
+
+N10104: Banca Personal (profesionales, renta media-alta)
+
+
+
+N20301: Fondos (gestión colectiva de inversiones)
+
+
+
+Uso en el Sistema: Segmentación para pricing diferencial, análisis de rentabilidad y estrategias comerciales específicas por tipología.
+
+
+
+🔗 Relaciones Clave entre Tablas Maestras
+
+MAESTRO\_CONTRATOS es la tabla central que conecta:
+
+
+
+Cliente (MAESTRO\_CLIENTES)
+
+
+
+Gestor (MAESTRO\_GESTORES)
+
+
+
+Producto (MAESTRO\_PRODUCTOS)
+
+
+
+Centro (MAESTRO\_CENTRO)
+
+
+
+MAESTRO\_GESTORES vincula segmentos con centros:
+
+
+
+Cada gestor pertenece a un centro específico
+
+
+
+Cada gestor se especializa en un segmento único
+
+
+
+MAESTRO\_CENTRO clasifica la estructura organizativa:
+
+
+
+Centros finalistas (1-5) con contratos directos
+
+
+
+Centros de soporte (6-8) con redistribución de gastos
+
+
+
+Esta arquitectura permite trazabilidad completa desde cualquier gasto hasta el cliente final, pasando por gestor, producto y segmento, proporcionando la base para el análisis de rentabilidad integral del Agente CDG.
+
+
+
+**9. GASTOS\_CENTRO**
+
+Propósito: Registro mensual de gastos directos por centro de coste, columna vertebral del sistema de cálculo de precios reales.
+
+
+
+Estructura y Lógica según BM\_CONTABILIDAD\_CDG.db:
+
+
+
+EMPRESA: Entidad legal (siempre 1)
+
+
+
+CENTRO\_CONTABLE: Centro que registra el gasto (1-8)
+
+
+
+CONCEPTO\_COSTE: Naturaleza del gasto
+
+
+
+FECHA: Período de imputación mensual
+
+
+
+IMPORTE: Valor monetario del gasto en euros
+
+
+
+Conceptos de Gasto y su Representación Funcional:
+
+
+
+Personal (40-60% del total): Incluye salarios base, seguridad social, incentivos comerciales, formación. Representa el mayor componente de coste operativo
+
+
+
+Tecnología (25-35%): Sistemas core banking, software especializado, infraestructura IT, licencias. Refleja la digitalización bancaria
+
+
+
+Suministros (8-15%): Telecomunicaciones, energía, material de oficina, servicios básicos de operación
+
+
+
+Papelería (2-5%): Documentación legal, impresión, material administrativo específico bancario
+
+
+
+Distribución Real por Período:
+
+
+
+Septiembre 2025: €455,000 distribuidos en centros 1-8
+
+
+
+Octubre 2025: €222,718 (post-redistribución automática de centrales)
+
+
+
+Lógica de Redistribución Automática: El sistema redistribuye automáticamente los gastos de centros de soporte (6-8) hacia centros finalistas (1-5) usando la fórmula:
+
+
+
+Gasto\_Redistribuido\_Centro\_i = Gasto\_Central\_Total × (Contratos\_Centro\_i / Total\_Contratos\_Finalistas)
+
+
+
+**10. MOVIMIENTOS\_CONTRATOS**
+
+📋 Contexto y Propósito Organizacional
+
+La tabla MOVIMIENTOS\_CONTRATOS constituye el motor transaccional de Banca March, registrando en tiempo real cada operación financiera que genera valor económico en la entidad. Desde la perspectiva organizacional, esta tabla funciona como el libro mayor digital que captura toda la actividad comercial y operativa, proporcionando trazabilidad completa desde cada euro hasta el contrato específico que lo origina.
+
+
+
+Banca March utiliza esta tabla para mantener un control exhaustivo de la rentabilidad real de cada línea de negocio, permitiendo que tanto la Dirección Financiera como los gestores comerciales puedan evaluar en tiempo real el rendimiento de sus carteras de clientes.
+
+
+
+🎯 Funcionalidad Operativa en la Organización
+
+Usuarios Principales:
+
+
+
+Área Financiera: Utiliza estos datos para generar automáticamente el Cuadro de Resultados mensual y el reporting consolidado al Consejo de Administración.
+
+
+
+Gestores Comerciales: Consultan diariamente la rentabilidad generada por sus contratos específicos, permitiendo optimizar su estrategia de cross-selling y priorizar clientes más rentables.
+
+
+
+Control de Gestión: Analiza mensualmente estos movimientos para calcular el PRECIO\_POR\_PRODUCTO\_REAL, identificando desviaciones respecto a los estándares presupuestarios.
+
+
+
+Auditoría Interna: Realiza trazabilidad completa de ingresos y gastos desde el consolidado hasta la transacción individual.
+
+
+
+📊 Estructura de Datos y Arquitectura Transaccional
+
+Campos de la Tabla:
+
+
+
+MOVIMIENTO\_ID: Identificador único secuencial de cada transacción
+
+
+
+EMPRESA\_ID: Entidad legal (siempre 1 para Banca March)
+
+
+
+FECHA: Fecha valor de la operación (registro diario en tiempo real)
+
+
+
+CONTRATO\_ID: Contrato origen del movimiento (NULL para gastos centrales)
+
+
+
+CENTRO\_CONTABLE: Centro que registra la operación (1-8)
+
+
+
+CUENTA\_ID: Cuenta contable específica según plan de cuentas
+
+
+
+DIVISA: Moneda de la operación (EUR para todas las transacciones)
+
+
+
+IMPORTE: Valor monetario (positivo=ingreso, negativo=gasto)
+
+
+
+LINEA\_CUENTA\_RESULTADOS: Clasificación automática en el P\&L
+
+
+
+CONCEPTO\_GESTION: Descripción operativa para análisis de gestión
+
+
+
+🏦 Tipología de Movimientos desde la Perspectiva de Banca March
+
+A. INGRESOS POR PRODUCTOS FINANCIEROS (IMPORTE > 0)
+
+Préstamos Hipotecarios:
+
+
+
+760001: Intereses cobrados préstamos hipotecarios
+
+
+
+Lógica: Base del margen financiero de Banca March
+
+
+
+Frecuencia: Mensual por cada contrato activo
+
+
+
+Impacto P\&L: Línea CR0001 (Ingresos financieros)
+
+
+
+Depósitos a Plazo Fijo:
+
+
+
+760008: Comisiones por cancelación anticipada
+
+
+
+760012: Comisiones de gestión y mantenimiento
+
+
+
+Lógica: Ingresos por servicios bancarios tradicionales
+
+
+
+Frecuencia: Variable según comportamiento del cliente
+
+
+
+Impacto P\&L: Línea CR0008 (Comisiones Netas)
+
+
+
+Fondos Banca March:
+
+
+
+760022: Comisiones de suscripción (entrada al fondo)
+
+
+
+760023: Comisiones de reembolso (salida del fondo)
+
+
+
+Lógica: Fee income por gestión de activos
+
+
+
+Frecuencia: Según decisiones de inversión del cliente
+
+
+
+Impacto P\&L: Línea CR0008 (Comisiones Netas)
+
+
+
+Repartos Internegocio:
+
+
+
+760024: Reparto internegocio banco (15%)
+
+
+
+760025: Reparto internegocio gestora (85%)
+
+
+
+Lógica: Banca March opera con modelo "fábrica" donde la gestora externa recibe el 85% de las comisiones y el banco retiene el 15%
+
+
+
+Frecuencia: Mensual por cada fondo comercializado
+
+
+
+Impacto P\&L: Línea CR001104 (Repartos internegocio)
+
+
+
+B. GASTOS FINANCIEROS (IMPORTE < 0)
+
+Coste de Captación:
+
+
+
+640001: Intereses pagados en depósitos a plazo fijo
+
+
+
+Lógica: Coste directo de captación de pasivo
+
+
+
+Frecuencia: Mensual según condiciones pactadas
+
+
+
+Impacto P\&L: Línea CR0003 (Gastos Financieros)
+
+
+
+Cargas Fiscales y Regulatorias:
+
+
+
+691001: Impuesto sobre depósitos bancarios
+
+
+
+Lógica: Carga fiscal específica del sector bancario español
+
+
+
+Frecuencia: Mensual sobre saldos de depósitos
+
+
+
+Impacto P\&L: Línea CR001302 (Impuestos específicos)
+
+
+
+691002: Fondo de garantía de depósitos
+
+
+
+Lógica: Contribución obligatoria al sistema de garantía
+
+
+
+Frecuencia: Mensual sobre volumen de depósitos garantizados
+
+
+
+Impacto P\&L: Línea CR001301 (Fondos de garantía)
+
+
+
+C. GASTOS OPERATIVOS SIN CONTRATO (CONTRATO\_ID = NULL)
+
+Gastos de Centros Centrales:
+
+Representan costes de centros de soporte (6-8: RRHH, Dirección Financiera, Tecnología) que posteriormente se redistribuyen proporcionalmente entre centros finalistas durante el cálculo mensual de precios reales.
+
+
+
+Cuentas Principales:
+
+
+
+620001: Gastos de personal (salarios, seguridad social)
+
+
+
+621001-621003: Gastos de administración (suministros, comunicaciones)
+
+
+
+682001: Amortizaciones (equipos informáticos, software)
+
+
+
+690001: Otros gastos operativos
+
+
+
+📈 Volumetría y Patrones de Actividad
+
+Datos Actuales Post-Corrección:
+
+
+
+Septiembre 2025: 1,000 movimientos registrados
+
+
+
+Octubre 2025: 1,168 movimientos (+16.8%)
+
+
+
+Crecimiento coherente: Alineado con incremento del 15.5% en contratos activos
+
+
+
+Distribución por Tipo de Movimiento (Octubre 2025):
+
+
+
+Repartos internegocio (760024/760025): 374 movimientos (32%)
+
+
+
+Intereses y comisiones productos (760001-760026): 361 movimientos (31%)
+
+
+
+Gastos financieros (640001/691001/691002): 125 movimientos (11%)
+
+
+
+Gastos operativos (620001-690001): 308 movimientos (26%)
+
+
+
+🔄 Ciclo de Vida y Frecuencia de Registro
+
+Registro en Tiempo Real:
+
+
+
+Operaciones comerciales: Automático al momento de la transacción
+
+
+
+Movimientos periódicos: Batch nocturno para intereses mensuales
+
+
+
+Gastos operativos: Cierre contable mensual
+
+
+
+Procesamiento por Control de Gestión:
+
+
+
+Día 1-3: Consolidación y validación de movimientos del mes
+
+
+
+Día 4: Análisis de ingresos netos por contrato y gestor
+
+
+
+Día 5: Integración en cálculo de PRECIO\_POR\_PRODUCTO\_REAL
+
+
+
+🎯 Aplicaciones Estratégicas en Banca March
+
+Análisis de Rentabilidad por Gestor:
+
+Los movimientos permiten calcular automáticamente la contribución marginal de cada gestor comercial, considerando tanto ingresos generados como gastos operativos asignados.
+
+
+
+Optimización de Mix de Productos:
+
+El análisis de frecuencia y volumen de movimientos por tipo de producto orienta las estrategias comerciales hacia aquellas líneas de mayor rentabilidad unitaria.
+
+
+
+Control Presupuestario Dinámico:
+
+La comparación mensual de movimientos vs presupuesto permite detectar desviaciones tempranas y aplicar medidas correctivas antes del cierre trimestral.
+
+
+
+📱 Integración con el Dashboard del Agente CDG
+
+Vista de Gestores: Cada gestor puede consultar en tiempo real los movimientos generados por su cartera, con drill-down hasta el detalle transaccional por cliente.
+
+
+
+Vista Directiva: Agregaciones automáticas por línea de negocio, centro y período, con análisis de tendencias y alertas de desviaciones significativas.
+
+
+
+Análisis Predictivo: El Agente CDG utiliza los patrones históricos de movimientos para generar proyecciones de rentabilidad y recomendaciones de acción comercial.
+
+
+
+🔍 Valor Estratégico para la Organización
+
+Esta tabla convierte a Banca March en una organización con transparencia financiera total, donde cada decisión comercial se puede evaluar en términos de impacto económico real y trazable. La capacidad de vincular cada euro de resultado con el gestor, cliente y producto específico que lo genera proporciona una ventaja competitiva decisiva en la optimización de la rentabilidad por línea de negocio.
+
+
+
+El sistema permite el paso de un modelo de gestión basado en intuición a uno basado en datos en tiempo real, donde las decisiones estratégicas se fundamentan en evidencia cuantitativa y completamente auditable.
+
+
+
+Preguntas relacionadas
+
+Cuáles son los tipos de movimientos que engloba la tabla MOVIMIENTOS\_CONTRATOS desde la banca
+
+Cómo refleja la tabla MOVIMIENTOS\_CONTRATOS la operativa específica de Banca March
+
+Qué funciones cumple la tabla MOVIMIENTOS\_CONTRATOS en el control de contratos bancarios
+
+Qué impacto tienen los distintos movimientos en la rentabilidad y gestión de Banca March
+
+De qué manera facilita la vista de movimientos en MOVIMIENTOS\_CONTRATOS la toma de decisiones en la banca
+
+
+
+**11. PRECIO\_POR\_PRODUCTO\_STD**
+
+📋 Contexto y Propósito Estratégico
+
+La tabla PRECIO\_POR\_PRODUCTO\_STD constituye el corazón del sistema de pricing presupuestario de Banca March, diseñada específicamente para proporcionar a los gestores comerciales una referencia clara y objetiva del coste que representa cada producto financiero para la entidad. Esta tabla es el resultado directo del proceso anual de presupuestación que lleva a cabo la Dirección Financiera en colaboración con las áreas de Control de Gestión, Riesgos y Planificación Estratégica.
+
+
+
+🎯 Funcionalidad Operativa para Gestores
+
+Cada gestor comercial de Banca March accede a esta información a través del dashboard del Agente CDG, donde puede consultar en tiempo real cuál es el precio estándar presupuestario de cada combinación segmento-producto que gestiona. Esta información es fundamental para:
+
+
+
+Orientar la actividad comercial: El gestor conoce exactamente qué le "cuesta" al banco cada producto que comercializa
+
+
+
+Priorizar cross-selling: Identificar qué productos son más eficientes para su segmento específico
+
+
+
+Establecer objetivos: Comprender las expectativas de eficiencia que la entidad tiene para su cartera
+
+
+
+Negociar condiciones: Tener una referencia interna para la toma de decisiones comerciales
+
+
+
+📊 Estructura de Datos y Metodología
+
+Campos de la Tabla:
+
+
+
+SEGMENTO\_ID: Tipología de cliente especializada del gestor (N10101, N10102, N10103, N10104, N20301)
+
+
+
+PRODUCTO\_ID: Código único del producto financiero (100100100100, 400200100100, 600100300300)
+
+
+
+PRECIO\_MANTENIMIENTO: Coste estándar unitario por contrato expresado en valores negativos (representa coste para el banco)
+
+
+
+ANNO: Ejercicio presupuestario de vigencia (2025)
+
+
+
+FECHA\_ACTUALIZACION: Fecha de la última actualización presupuestaria (2025-01-01)
+
+
+
+🏦 Proceso de Construcción de Estándares en Banca March
+
+La Dirección Financiera de Banca March construye estos estándares siguiendo una metodología rigurosa que se desarrolla durante el último trimestre del año anterior (octubre-diciembre 2024 para el ejercicio 2025):
+
+
+
+Fase 1: Análisis Histórico
+
+
+
+Revisión de costes reales de los últimos 24 meses por segmento-producto
+
+
+
+Identificación de tendencias y patrones estacionales
+
+
+
+Benchmark con competencia directa del sector bancario español
+
+
+
+Fase 2: Proyección de Volúmenes
+
+
+
+Estimación de crecimiento de cartera por segmento para 2025
+
+
+
+Análisis de mix de productos esperado
+
+
+
+Evaluación de impacto de nuevas regulaciones o cambios normativos
+
+
+
+Fase 3: Cálculo de Costes Unitarios
+
+
+
+Activity Based Costing (ABC): Asignación precisa de costes directos e indirectos
+
+
+
+Economías de escala: Ajuste por volumen esperado de cada segmento
+
+
+
+Nivel de servicio: Diferenciación según complejidad operativa requerida
+
+
+
+Fase 4: Validación y Aprobación
+
+
+
+Revisión por Comité de Dirección
+
+
+
+Validación con responsables comerciales de cada segmento
+
+
+
+Aprobación final del Consejo de Administración
+
+
+
+🎯 Interpretación Comercial para Gestores
+
+Segmento Fondos (N20301): Los gestores especializados en este segmento trabajan con los estándares más eficientes (€-1,160 a €-1,180), reflejando que es el core business de Banca March con la mayor especialización y volumen.
+
+
+
+Banca Personal (N10104): Presenta estándares muy competitivos (€-1,190 a €-1,220), indicando que los profesionales de alta renta son un segmento objetivo prioritario con alta eficiencia esperada.
+
+
+
+Banca Privada (N10102): Los estándares más altos (€-1,290 a €-1,320) reflejan el mayor nivel de servicio personalizado y la complejidad operativa asociada a patrimonios elevados.
+
+
+
+📱 Visualización en el Dashboard del Gestor
+
+Cuando un gestor accede al Agente CDG, la información de esta tabla se presenta de forma intuitiva:
+
+
+
+Tarjetas por producto: Cada producto muestra su precio estándar con código de colores (verde=más eficiente, amarillo=medio, rojo=menos eficiente)
+
+
+
+Comparación con cartera propia: El gestor ve cómo sus precios reales se comparan con estos estándares
+
+
+
+Objetivos de convergencia: Metas trimestrales para acercarse a los estándares
+
+
+
+Alertas inteligentes: Notificaciones cuando las desviaciones superan el ±15%
+
+
+
+🔄 Ciclo de Vida y Actualizaciones
+
+Esta tabla es estática durante todo el ejercicio 2025, proporcionando estabilidad y previsibilidad a los gestores. Solo se actualiza en caso de:
+
+
+
+Cambios regulatorios significativos que afecten costes estructurales
+
+
+
+Modificaciones estratégicas aprobadas por Consejo de Administración
+
+
+
+Ajustes por fusiones/adquisiciones o cambios en el perímetro de negocio
+
+
+
+La próxima actualización completa será en enero 2026, cuando se publiquen los nuevos estándares presupuestarios para ese ejercicio, basados en la experiencia real de 2025 y las proyecciones estratégicas a medio plazo.
+
+
+
+🎯 Valor Estratégico para Banca March
+
+Esta tabla permite a Banca March mantener un control de gestión proactivo, donde cada gestor comercial tiene claridad absoluta sobre las expectativas de eficiencia de su actividad, facilitando la alineación entre objetivos estratégicos corporativos y ejecución comercial en el día a día.
+
+
+
+**12. PRECIO\_POR\_PRODUCTO\_REAL**
+
+📋 Contexto y Propósito Estratégico
+
+La tabla PRECIO\_POR\_PRODUCTO\_REAL representa el núcleo del sistema de control de gestión de Banca March, proporcionando a la Dirección Financiera y al departamento de Control de Gestión una radiografía mensual precisa y actualizada del coste real que representa cada producto financiero para la entidad. A diferencia de los precios estándar que permanecen fijos durante todo el ejercicio, esta tabla se recalcula mensualmente reflejando la realidad operativa efectiva de la organización.
+
+
+
+🎯 Funcionalidad Operativa para Control de Gestión
+
+El departamento de Control de Gestión utiliza esta información como herramienta fundamental para:
+
+
+
+Monitoreo de eficiencia: Seguimiento mensual de la evolución de costes reales vs objetivos presupuestarios
+
+
+
+Análisis de desviaciones: Identificación inmediata de productos o segmentos que se alejan de los estándares establecidos
+
+
+
+Toma de decisiones estratégicas: Base cuantitativa para ajustar políticas comerciales, pricing o asignación de recursos
+
+
+
+Reporting ejecutivo: Generación automática de informes para el Comité de Dirección y Consejo de Administración
+
+
+
+Control presupuestario: Seguimiento del grado de cumplimiento de objetivos de eficiencia por línea de negocio
+
+
+
+📊 Estructura de Datos y Metodología de Cálculo
+
+Campos de la Tabla:
+
+
+
+SEGMENTO\_ID: Clasificación de cliente (N10101, N10102, N10103, N10104, N20301)
+
+
+
+PRODUCTO\_ID: Código único del producto financiero (100100100100, 400200100100, 600100300300)
+
+
+
+PRECIO\_MANTENIMIENTO\_REAL: Coste real calculado por contrato (valores negativos = coste para el banco)
+
+
+
+FECHA\_CALCULO: Período mensual de referencia (2025-09-01, 2025-10-01, etc.)
+
+
+
+NUM\_CONTRATOS\_BASE: Número de contratos activos utilizados como denominador del cálculo
+
+
+
+GASTOS\_TOTALES\_ASIGNADOS: Importe total de gastos asignados al producto-segmento
+
+
+
+COSTE\_UNITARIO\_CALCULADO: Valor absoluto del precio para facilitar análisis comparativos
+
+
+
+🏦 Proceso Mensual de Cálculo en Banca March
+
+La Dirección Financiera y Control de Gestión de Banca March ejecutan un proceso mensual riguroso y automatizado que garantiza la precisión y trazabilidad de los cálculos:
+
+
+
+Fase 1: Consolidación de Datos Base (Días 1-3 del mes)
+
+
+
+Cierre contable mensual de la tabla GASTOS\_CENTRO con todos los gastos por centro de coste
+
+
+
+Consolidación de MOVIMIENTOS\_CONTRATOS con toda la actividad transaccional del período
+
+
+
+Validación de la tabla MAESTRO\_CONTRATOS con el censo actualizado de contratos activos
+
+
+
+Fase 2: Redistribución de Gastos Centrales (Días 4-5)
+
+Los gastos de los centros de soporte (6-8: RRHH, Dirección Financiera, Tecnología) se redistribuyen automáticamente entre los centros finalistas (1-5) aplicando la fórmula:
+
+
+
+
+
+Gasto\_Redistribuido\_Centro\_i = Gastos\_Centrales\_Total × (Contratos\_Centro\_i / Total\_Contratos\_Finalistas)
+
+
+
+Fase 3: Cálculo de Coste Unitario por Centro (Día 6)
+
+Para cada centro finalista se calcula:
+
+Coste\_Unitario\_Centro\_i = (Gastos\_Directos\_i + Gastos\_Redistribuidos\_i) / Contratos\_Centro\_i
+
+
+
+Fase 4: Asignación por Producto-Segmento (Días 7-8)
+
+Cada combinación segmento-producto recibe una asignación de gasto basada en la distribución real de contratos:
+
+
+
+Gasto\_Producto = Σ(Coste\_Unitario\_Centro\_i × Contratos\_Producto\_Centro\_i)
+
+
+
+Fase 5: Cálculo del Precio Real Definitivo (Día 9)
+
+El precio final se obtiene dividiendo el gasto total asignado entre el número de contratos:
+
+
+
+PRECIO\_MANTENIMIENTO\_REAL = -(Gasto\_Producto / Total\_Contratos\_Producto)
+
+
+
+Fase 6: Validación y Controles de Calidad (Día 10)
+
+
+
+Verificación de cuadres: Σ Gastos distribuidos = Gastos totales del período
+
+
+
+Control de contratos: Σ Contratos procesados = Total contratos activos
+
+
+
+Tolerancia de redondeo: Diferencia absoluta < €1.00
+
+
+
+Análisis de coherencia: Variaciones mes-mes dentro de banda esperada \[-20%, +10%]
+
+
+
+🔄 Evolución Temporal y Análisis de Tendencias
+
+La naturaleza mensual de esta tabla permite a Control de Gestión realizar análisis evolutivos sofisticados:
+
+
+
+Seguimiento de Convergencia: Los precios reales deben mostrar una tendencia gradual de convergencia hacia los estándares presupuestarios, reflejando las mejoras de eficiencia esperadas a medida que crece la cartera de contratos y se optimizan los procesos operativos.
+
+
+
+Análisis Estacional: Identificación de patrones recurrentes relacionados con campañas comerciales, cierres trimestrales o eventos externos que impactan la estructura de costes.
+
+
+
+Alertas Automáticas: El sistema genera alertas automáticas cuando:
+
+
+
+Una desviación supera el ±15% respecto al estándar durante dos meses consecutivos
+
+
+
+Se produce una variación mensual superior al ±10% sin justificación operativa
+
+
+
+Un segmento-producto muestra tendencia divergente respecto al estándar durante tres meses
+
+
+
+🎯 Impacto en la Gestión Estratégica
+
+Ajustes de Política Comercial: Cuando los precios reales de un producto se alejan significativamente del estándar, Control de Gestión puede recomendar:
+
+
+
+Modificación de condiciones comerciales
+
+
+
+Reasignación de recursos entre centros
+
+
+
+Ajustes en la estrategia de cross-selling
+
+
+
+Revisión de procesos operativos específicos
+
+
+
+Optimización de Mix de Productos: La información mensual permite identificar qué combinaciones segmento-producto son más eficientes, orientando la estrategia comercial hacia aquellas líneas que mejor contribuyen a los objetivos de rentabilidad.
+
+
+
+Gestión Presupuestaria Dinámica: A diferencia del enfoque tradicional anual, esta tabla permite un control presupuestario dinámico donde las desviaciones se detectan y corrigen en tiempo real, evitando sorpresas al cierre del ejercicio.
+
+
+
+📱 Integración con el Dashboard del Agente CDG
+
+La información de esta tabla alimenta directamente el dashboard del Agente CDG que utilizan tanto Control de Gestión como la Dirección Financiera:
+
+
+
+Vista comparativa: Precios reales vs estándares con indicadores visuales de performance
+
+
+
+Análisis de tendencias: Gráficos evolutivos que muestran la convergencia mensual
+
+
+
+Drill-down interactivo: Capacidad de navegar desde el consolidado hasta el detalle por centro/gestor
+
+
+
+Simulación de escenarios: Herramientas para evaluar el impacto de cambios en volumen o mix de productos
+
+
+
+🔍 Trazabilidad y Auditoría
+
+Cada registro de esta tabla mantiene trazabilidad completa hasta la transacción individual que lo origina, permitiendo:
+
+
+
+Auditoría detallada: Verificación línea por línea de cómo se construye cada precio
+
+
+
+Análisis de sensibilidad: Evaluación del impacto de cambios específicos en gastos o contratos
+
+
+
+Justificación de variaciones: Explicación precisa de las causas de desviaciones mensuales
+
+
+
+Cumplimiento normativo: Documentación exhaustiva para requerimientos regulatorios
+
+
+
+🎯 Valor Estratégico para Banca March
+
+Esta tabla convierte a Banca March en una organización con control de gestión predictivo y proactivo, donde las decisiones estratégicas se basan en información real, actualizada y completamente trazable. La capacidad de detectar desviaciones en tiempo real y actuar sobre ellas proporciona una ventaja competitiva decisiva en un sector donde los márgenes operativos son cada vez más estrechos.
+
+
+
+El sistema permite pasar de un modelo de control reactivo (detectar problemas al final del ejercicio) a un modelo predictivo (anticipar y corregir desviaciones antes de que impacten los resultados), representando un salto cualitativo en la sofisticación del control de gestión bancario.
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------
+
+
+
+El objetivo es ofrecer un dashboard que permita al gestor visualizar resultados, modificar la forma de visualizarlos y conversar directamente con el agente.
+
+
+
+Este manual se actualizará a medida que avance el desarrollo y se definan los archivos y flujos específicos. La presente versión tiene como objetivo documentar el propósito y estructura general del proyecto para su correcta comprensión y despliegue inicial.
+
+
+
+
+
+
+
+
+

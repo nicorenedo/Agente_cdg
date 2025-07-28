@@ -1,0 +1,11 @@
+AGENTE CDG - Generación Movimientos Contratos
+============================================
+Fecha ejecución: 2025-07-25 20:08:42.012568
+Base de datos: C:\Users\nicolas.renedo\Documents\GEN AI\BancaMarch_AgenteCDG\backend\src\database\BM_CONTABILIDAD_CDG.db
+Fecha movimientos: 2025-09-01
+
+RESULTADOS:
+- Total movimientos: 1000
+- Comerciales: 800
+- Gastos: 200
+- Contratos únicos: 180

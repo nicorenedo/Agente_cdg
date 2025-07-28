@@ -1,0 +1,26 @@
+CUENTA_ID,DESC_CUENTA,LINEA_CDR,EMPRESA_ID
+760001,Intereses cobrados - Préstamos Hipotecarios,CR0001,1
+760002,Comisiones apertura - Préstamos Hipotecarios,CR0008,1
+760003,Comisiones cancelación - Préstamos Hipotecarios,CR0008,1
+760004,Comisiones estudio - Préstamos Hipotecarios,CR0008,1
+640001,Intereses pagados - Depósitos Plazo Fijo,CR0003,1
+760011,Comisiones gestión - Depósitos Plazo Fijo,CR0008,1
+760012,Comisiones cancelación anticipada - Depósitos,CR0008,1
+691001,Impuesto Depósitos - Plazo Fijo,CR001302,1
+691002,Fondo Garantía Depósitos - Plazo Fijo,CR001301,1
+760021,Comisiones gestión - Fondos Banca March,CR0008,1
+760022,Comisiones suscripción - Fondos Banca March,CR0008,1
+760023,Comisiones reembolso - Fondos Banca March,CR0008,1
+760024,Reparto Internegocio Banco - Fondos March,CR001104,1
+760025,Reparto Internegocio Fábrica - Fondos March,CR001104,1
+760026,Comisiones distribución - Fondos March,CR0008,1
+620001,Gastos Personal - Asignación Directa,CR0014,1
+620002,Gastos Personal - Reparto Centros,CR0014,1
+621001,Gastos Administración - Tecnología,CR0016,1
+621002,Gastos Administración - Suministros,CR0016,1
+621003,Gastos Administración - Papelería,CR0016,1
+682001,Amortización Software Bancario,CR0017,1
+682002,Amortización Equipos Informáticos,CR0017,1
+769001,Otros ingresos de explotación,CR0013,1
+669001,Otros gastos de explotación,CR0013,1
+690001,Coste de capital asignado,CR0029,1
