@@ -54,12 +54,7 @@ Este archivo sirve como guía de estructura, configuración y desarrollo para el
 
 
 
-
-
-
-
-MANUAL DE INSTRUCCIONES – Agente de Control de Gestión
-
+** MANUAL DE INSTRUCCIONES – Agente de Control de Gestión**
 
 
 Objetivo General
@@ -70,240 +65,345 @@ Este documento describe las funcionalidades clave y la organización del proyect
 
 
 
-Funcionalidades Principales del Agente
+FUNCIONALIDADES PRINCIPALES DEL AGENTE CDG
+1. Análisis de Resultados Financieros por Gestor
+El agente es capaz de consultar la base de datos BM_CONTABILIDAD_CDG.db (que simula un entorno real de control de gestión bancario) para generar análisis comprehensivos del rendimiento de cada gestor comercial. La información se estructura mediante KPIs financieros especializados:
 
+KPIs de Rentabilidad:
 
+ROE por gestor: Beneficio generado / Patrimonio gestionado
 
-1\. Análisis de Resultados Financieros
+Margen neto: (Ingresos - Gastos asignados) / Ingresos totales
 
+Contribución marginal por producto comercializado
 
+Eficiencia operativa: Gastos / Número de contratos
 
-El agente es capaz de consultar una base de datos estructurada (simulando tablas propias de un departamento de control de gestión) para generar informes comparativos del rendimiento del gestor. La información se estructura en base a KPIs de rentabilidad, solvencia y liquidez, y permite realizar comparaciones:
+KPIs de Solvencia:
 
+Análisis de riesgo por cartera del gestor
 
+Distribución por segmentos de cliente (Minorista, Privada, Empresas, Personal, Fondos)
 
-Entre períodos (actual vs anteriores).
+Evaluación de la calidad crediticia de la cartera
 
+KPIs de Liquidez:
 
+Gestión de flujos de caja por gestor
 
-Frente a presupuestos definidos.
+Análisis de vencimientos y renovaciones
 
+Tesorería generada vs consumida
 
+Análisis Comparativos:
 
-Contra un grupo comparable de referencia.
+Temporal: Período actual vs anteriores (septiembre vs octubre 2025)
 
+Presupuestario: Precios reales vs estándares presupuestarios (PRECIO_POR_PRODUCTO_REAL vs PRECIO_POR_PRODUCTO_STD)
 
+Peer comparison: Rendimiento vs otros gestores del mismo centro/segmento
 
-Para ello se utilizará una combinación de SQL queries, herramientas auxiliares y capacidades del LLM.
+2. Sistema de Dashboards Duales Especializados
+Dashboard del Gestor Comercial
+Propósito Organizacional: Democratizar el acceso a información de control de gestión, reduciendo la dependencia de consultas manuales al departamento financiero.
 
+Capacidades Funcionales:
 
+Análisis completo de cartera propia (contratos, rentabilidad, crecimiento)
 
-2\. Generación de Análisis para el Gestor o Analista Financiero
+Visualización de precios por producto asignados a su segmento
 
+Análisis de asignación de costes por gestor según centro contable
 
+Interpretación en lenguaje natural de tendencias y desviaciones
 
-A partir de un input proporcionado desde el frontend, el agente genera un informe completo en forma de dashboard financiero. Este incluirá:
+Comparativas temporales y vs objetivos presupuestarios
 
+Dashboard de Control de Gestión/Dirección Financiera
+Propósito Organizacional: Herramienta estratégica para análisis global con acceso completo a datos reales calculados.
 
+Capacidades Funcionales:
 
-Indicadores clave (KPIs).
+Acceso completo a tabla PRECIO_POR_PRODUCTO_REAL con variaciones mensuales
 
+Análisis consolidado de todos los gestores y centros (1-5)
 
+Visualización de redistribución automática de gastos centrales (centros 6-8)
 
-Gráficas y tablas dinámicas.
+Detección automática de desviaciones significativas vs estándares
 
+Análisis de causas de desviaciones con drill-down completo hasta transacción
 
+Dashboards Dinámicos y Conversacionales
+Dashboard Base Predeterminado:
 
-Interpretación textual.
+Cada tipo de usuario tiene un dashboard inicial optimizado
 
+KPIs principales mostrados por defecto según mejores prácticas identificadas
 
+Pivoteo Conversacional Dinámico:
 
-Capacidad de conversación interactiva con el agente.
+El gestor puede solicitar cambios de visualización mediante lenguaje natural
 
+Ejemplos: "Cambia este gráfico de barras a uno circular", "Muéstrame la evolución temporal", "Compara mi cartera con el promedio del centro"
 
+Generación automática de nuevos gráficos basados en consultas específicas
 
-El dashboard será flexible y permitirá cambios en tiempo real, como modificar el tipo de visualización (por ejemplo, cambiar un gráfico de barras a un pie chart). Esta funcionalidad supone un reto importante en el diseño del frontend, que deberá ser potente, intuitivo y completamente interactivo.
+Persistencia de configuraciones personalizadas por gestor
 
+3. Análisis de Causas de Desviaciones con IA
+El agente identifica automáticamente desviaciones, anomalías y eventos críticos utilizando la rica información transaccional de MOVIMIENTOS_CONTRATOS y los cálculos de PRECIO_POR_PRODUCTO_REAL.
 
+Capacidades de Detección:
 
-3\. Análisis de Causas Inmediatas de las Desviaciones
+Desviaciones >15% entre precio real vs estándar por producto-segmento
 
+Anomalías en volumen de movimientos por gestor
 
+Contratos con rentabilidad atípica (positiva o negativa)
 
-El agente tendrá la capacidad de identificar desviaciones, anomalías y eventos críticos a nivel de contrato, cliente o gestor. Esta funcionalidad se apoya en:
+Cambios súbitos en mix de productos por gestor
 
+Análisis Causal Automatizado:
 
+Drill-down desde nivel consolidado hasta contrato individual
 
-Datos transaccionales recogidos en la base de datos.
+Identificación de clientes/contratos específicos que causan desviaciones
 
+Correlación con eventos temporales (campañas, cambios regulatorios)
 
+Explicaciones contextuales basadas en datos históricos
 
-Inteligencia contextual del LLM.
+Alertas Inteligentes:
 
+Notificaciones proactivas por desviaciones significativas
 
+Sistema de semáforo (verde/amarillo/rojo) por KPI
 
-Inputs opcionales por parte del usuario desde el frontend.
+Recomendaciones accionables específicas por gestor
 
+4. Evaluación de Impacto en Incentivos
+Esta funcionalidad revoluciona la gestión de incentivos al conectar automáticamente el rendimiento real con los esquemas de compensación variable.
 
+Cálculo Automático de Cumplimiento:
 
-El objetivo es proporcionar explicaciones razonadas y accionables sobre las causas de las desviaciones en el rendimiento financiero.
+Evaluación vs objetivos presupuestarios (convergencia hacia PRECIO_POR_PRODUCTO_STD)
 
+Análisis de crecimiento de cartera (nuevos contratos, volumen gestionado)
 
+Medición de eficiencia operativa (coste unitario por gestor)
 
-4\. Impacto de los Resultados en el Esquema de Incentivos
+Simulación "What-If":
 
+Proyecciones: "¿Qué pasa si cierro 5 contratos más este mes?"
 
+Escenarios de optimización: "¿Qué productos debo priorizar para maximizar incentivos?"
 
-Esta funcionalidad permite al agente relacionar los resultados financieros con el sistema de incentivos de cada gestor, en base a objetivos predefinidos. Dichos objetivos pueden ser introducidos manualmente por el usuario o estar ya presentes en el sistema. El agente deberá:
+Análisis de sensibilidad por variables clave
 
+Argumentación Estructurada:
 
+Justificación cuantitativa de cada componente del incentivo
 
-Evaluar el cumplimiento de objetivos.
+Documentación auditable para comités de retribución
 
+Comparativas transparentes vs otros gestores
 
+5. Soporte Avanzado para Business Reviews
+El agente actúa como especialista en control de gestión, preparando automáticamente materiales ejecutivos y proporcionando soporte en tiempo real.
 
-Interpretar resultados por centro o segmento mediante filtros.
+Preparación Automática:
 
+Generación de presentaciones PowerPoint con análisis clave
 
+Resúmenes ejecutivos personalizados por audiencia (Comité Dirección, Consejo Administración)
 
-Ofrecer una argumentación estructurada sobre el rendimiento y su impacto en los incentivos.
+Gráficos optimizados para presentación ejecutiva
 
+Asistente en Tiempo Real:
 
+Respuesta inmediata a preguntas durante reuniones
 
-5\. Soporte Interactivo para Business Reviews
+Cálculos ad-hoc basados en escenarios planteados
 
+Acceso instantáneo a drill-down de cualquier métrica presentada
 
+Conocimiento Experto:
 
-El agente actuará como asistente en tiempo real durante la preparación del Business Review. Está entrenado con criterios y lógica de control de gestión, por lo que podrá:
+Metodologías de control de gestión bancario
 
+Interpretación de normativa contable específica
 
+Mejores prácticas de análisis de rentabilidad por gestor
 
-Resolver dudas conceptuales o metodológicas.
+6. Sistema de Aprendizaje Continuo (Reflection Pattern)
+Feedback Loop Integrado:
 
+Cada gráfico/respuesta incluye valoración del usuario (👍👎)
 
+Comentarios textuales específicos sobre áreas de mejora
 
-Preparar resúmenes ejecutivos.
+Incorporación automática de feedback en comportamiento futuro
 
+Personalización por Gestor:
 
+Adaptación al estilo comunicativo de cada usuario
 
-Adaptarse progresivamente al lenguaje y contexto de cada gestor, mediante aprendizaje continuo (feedback conversacional).
+Memoria de preferencias de visualización
 
+Contexto acumulativo de terminología específica de Banca March
 
+Memoria Organizacional:
 
-Estructura del Proyecto:
+Patrones de uso por tipo de gestor/área
 
+Identificación de consultas más frecuentes
 
+Mejora iterativa de la calidad del agente
 
-\## Estructura de Carpetas
+7. Catálogo Extenso de Consultas SQL Inteligentes
+Biblioteca Estructurada de Consultas:
 
+Análisis de rentabilidad: Por gestor/centro/segmento/producto usando MAESTRO_CONTRATOS y MOVIMIENTOS_CONTRATOS
 
+Evolución temporal: Comparativas mes/trimestre/año con PRECIO_POR_PRODUCTO_REAL
 
-```
+Análisis de desviaciones: vs PRECIO_POR_PRODUCTO_STD con explicación de causas
 
+Drill-down completo: Desde consolidado hasta movimiento individual en MOVIMIENTOS_CONTRATOS
+
+Análisis de cartera: Crecimiento comercial usando MAESTRO_CONTRATOS con filtros temporales
+
+Motor de Selección Inteligente:
+
+Selección automática de consultas apropiadas según contexto
+
+Combinación de múltiples consultas para respuestas complejas
+
+Optimización basada en performance y relevancia
+
+Respuestas Multimodal:
+
+Numéricas: Con contexto explicativo y benchmarks
+
+Gráficas: Visualizaciones automáticas según tipo de datos
+
+Textuales: Explicaciones en lenguaje natural de patrones identificados
+
+ARQUITECTURA TÉCNICA
+Estructura de Carpetas
+text
 /
-
 ├── backend/
-
 │   ├── src/
-
 │   │   ├── database/
-
-│   │   │   └── BM\_CONTABILIDAD\_CDG.db\*\*\*\*
-
-│   │   ├── queries/
-
-│   │   ├── tools/
-
+│   │   │   └── BM_CONTABILIDAD_CDG.db ✅
 │   │   ├── agents/
-
-│   │   └── main.py
-
+│   │   │   ├── cdg_agent.py           # Agente principal
+│   │   │   ├── analysis_agent.py      # Análisis financiero especializado
+│   │   │   ├── deviation_agent.py     # Detección de desviaciones
+│   │   │   └── chat_agent.py          # Conversación interactiva
+│   │   ├── tools/
+│   │   │   ├── sql_tools.py           # Herramientas consultas SQL
+│   │   │   ├── kpi_calculator.py      # Cálculos financieros
+│   │   │   ├── chart_generator.py     # Generación gráficos
+│   │   │   └── report_generator.py    # Business Reviews automáticos
+│   │   ├── queries/
+│   │   │   ├── gestor_queries.py      # Consultas por gestor
+│   │   │   ├── comparative_queries.py # Consultas comparativas
+│   │   │   ├── deviation_queries.py   # Consultas desviaciones
+│   │   │   └── incentive_queries.py   # Consultas incentivos
+│   │   ├── prompts/
+│   │   │   ├── __init__.py
+│   │   │   ├── system_prompts.py          # Prompts de sistema por agente
+│   │   │   ├── user_prompts.py             # Templates de prompts de usuario
+│   │   │   ├── role_definitions.py         # Definición de roles específicos
+│   │   │   ├── context_builders.py         # Constructores de contexto dinámico
+│   │   │   ├── financial_glossary.py       # Terminología financiera específica
+│   │   │   └── prompt_templates.py         # Templates reutilizables
+│   │   ├── utils/
+│   │   │   ├── reflection_pattern.py  # Aprendizaje continuo
+│   └── config.py             # Configuración Azure OpenAI
+│   └── main.py                   # API FastAPI principal
 │   ├── scripts/
-
 │   └── requirements.txt
-
 ├── frontend/
-
 │   ├── src/
-
-│   │   ├── assets/
-
 │   │   ├── components/
-
-│   │   └── styles/
-
+│   │   │   ├── Dashboard/
+│   │   │   │   ├── GestorDashboard.jsx      # Dashboard gestor
+│   │   │   │   ├── ControlGestionDashboard.jsx # Dashboard CDG
+│   │   │   │   ├── KPICards.jsx             # Tarjetas KPIs
+│   │   │   │   └── InteractiveCharts.jsx    # Gráficos dinámicos
+│   │   │   ├── Chat/
+│   │   │   │   ├── ChatInterface.jsx        # Interfaz chat
+│   │   │   │   └── ConversationalPivot.jsx  # Pivoteo conversacional
+│   │   │   └── Analytics/
+│   │   │       ├── DeviationAnalysis.jsx    # Análisis desviaciones
+│   │   │       └── DrillDownView.jsx        # Vista drill-down
+│   │   ├── pages/
+│   │   │   ├── GestorView.jsx              # Vista gestor comercial
+│   │   │   ├── ControlGestionView.jsx      # Vista control de gestión
+│   │   │   └── BusinessReviewView.jsx      # Vista Business Review
+│   │   └── services/
+│   │       ├── api.js                      # Conexión backend
+│   │       └── chatService.js              # Servicio chat
 │   ├── app.py
-
-│   ├── debug\_api.py
-
-│   ├── run\_app.py
-
+│   ├── debug_api.py
+│   ├── run_app.py
 │   ├── config.toml
-
 │   └── requirements.txt
-
 ├── .env
-
 └── .gitignore
+Backend - Tecnologías y Patrones
+Tecnologías Core:
 
-```
+FastAPI: API REST para comunicación frontend-backend
 
+SQLite: Base de datos BM_CONTABILIDAD_CDG.db con 13 tablas interrelacionadas
 
+Azure OpenAI: Integración LLM para capacidades conversacionales
 
-El proyecto se organizará en dos grandes bloques:
+Pandas: Procesamiento de datos financieros y cálculos KPIs
 
+Patrones Agenticos Implementados:
 
+Tool Pattern: Cada funcionalidad como @tool decorado, catálogo modular reutilizable
 
-Backend
+Reflection Pattern: Autoevaluación y mejora continua basada en feedback
 
+Agentic Pattern: Toma de decisiones autónoma sobre herramientas a utilizar
 
+Multiagent Pattern: Agentes especializados coordinados por agente principal
 
-Contendrá toda la lógica funcional del agente:
+Diccionarios Principales:
 
+tools_catalog: Registro de todas las herramientas disponibles (@tool decoradas)
 
+queries_catalog: Biblioteca de consultas SQL categorizadas por funcionalidad
 
-Conexión y consultas a la base de datos.
+reflection_memory: Sistema de memoria para aprendizaje continuo por gestor
 
+Frontend - Experiencia de Usuario
+Tecnologías UI:
 
+React: Construcción de interfaces interactivas y componentes reutilizables
 
-Lógica de negocio y análisis.
+Ant Design (AntD): Diseño empresarial con componentes UI profesionales predefinidos
 
+Recharts/D3.js: Representación de KPIs en formato gráfico con interactividad completa
 
+Capacidades Interactivas:
 
-Integración con la API de Azure OpenAI mediante el archivo initial\_agent.py.
+Dashboards modulares: Intercambiables según rol de usuario (Gestor vs Control Gestión)
 
+Gráficos dinámicos: Transformación en tiempo real (barras ↔ pie chart ↔ líneas)
 
+Chat integrado: Conversación contextual sobre datos mostrados en dashboard
 
-Preparación de respuestas del agente y generación de informes.
+Pivoteo conversacional: Modificación de visualizaciones mediante lenguaje natural
 
-
-
-Se incluirá también una carpeta data/ que contendrá la base de datos contable y archivos simulados.
-
-
-
-Quiero que implemente utilidades que como un diccionario de tools, diccionario de queries, un reflection\_pattern (Que el agente pueda aprender de los diferentes inputs)
-
-
-
-Frontend
-
-
-
-Estará diseñado para ser profesional, modular e interactivo. Se emplearán las siguientes tecnologías:
-
-
-
-React: para la construcción de interfaces interactivas.
-
-
-
-Ant Design (AntD): para diseño empresarial con componentes UI predefinidos.
-
-
-
-Recharts / D3.js: para representación de KPIs en formato gráfico.
-
+Drill-down interactivo: Navegación desde consolidado hasta transacción individual
 
 
 
@@ -326,64 +426,28 @@ Propósito: Define la estructura organizativa de centros operativos y de soporte
 
 Estructura y Lógica:
 
-
-
 CENTRO\_ID: Identificador único del centro (1-8)
-
-
 
 DESC\_CENTRO: Descripción funcional del centro
 
-
-
 IND\_CENTRO\_FINALISTA: Indicador binario que clasifica los centros:
 
-
-
 1: Centros finalistas (1-5) con actividad comercial directa y contratos
-
-
-
 0: Centros de soporte (6-8) que proporcionan servicios centrales
-
-
 
 EMPRESA\_ID: Vinculación con la entidad legal (siempre 1 en esta implementación)
 
-
-
 Centros Finalistas (1-5):
-
-
-
 MADRID-OFICINA PRINCIPAL: Centro principal con mayor volumen de contratos
-
-
-
 PALMA-SANT MIQUEL: Oficina regional Baleares
-
-
-
 BARCELONA-BALMES: Oficina regional Cataluña
-
-
-
 MALAGA-PARQUE LITORAL: Oficina regional Andalucía
-
-
-
 BILBAO-MARQUÉS DEL PUERTO: Oficina regional País Vasco
 
-
-
 Centros de Soporte (6-8):
-
 6\. RRHH: Gestión de recursos humanos y gastos de personal
-
 7\. DIRECCIÓN FINANCIERA: Planificación, control y reporting corporativo
-
 8\. TECNOLOGÍA: Sistemas informáticos, infraestructura IT y desarrollo
-
 
 
 Uso en el Sistema: Los gastos de centros 6-8 se redistribuyen proporcionalmente entre centros 1-5 según el volumen de contratos para el cálculo de precios reales por producto.
@@ -394,51 +458,18 @@ Uso en el Sistema: Los gastos de centros 6-8 se redistribuyen proporcionalmente 
 
 Propósito: Base de datos de clientes activos con asignación comercial específica.
 
-
-
 Estructura y Lógica:
-
-
-
 CLIENTE\_ID: Identificador único del cliente (1-85)
-
-
-
 NOMBRE\_CLIENTE: Nombre completo del cliente
-
-
-
 GESTOR\_ID: Gestor comercial asignado (relación directa con MAESTRO\_GESTORES)
-
-
-
 EMPRESA\_ID: Entidad legal (siempre 1)
 
-
-
 Distribución Geográfica: Los nombres reflejan la distribución regional:
-
-
-
 Madrid: Nombres castellanos tradicionales (García, López, Martínez)
-
-
-
 Baleares: Nombres catalanes/mallorquines (Garau, Crespí, Mesquida)
-
-
-
 Cataluña: Nombres catalanes (Pujol, Vila, Oliveras)
-
-
-
 Andalucía: Nombres andaluces (Jiménez, Moreno, González)
-
-
-
 País Vasco: Nombres euskeras (Goikoetxea, Etxebarria, Azkarate)
-
-
 
 Uso en el Sistema: Base para análisis de customer lifetime value, segmentación comportamental y trazabilidad completa desde contrato hasta cliente final.
 
@@ -448,70 +479,26 @@ Uso en el Sistema: Base para análisis de customer lifetime value, segmentación
 
 Propósito: Registro central de todos los contratos activos que constituye el núcleo del sistema de costes.
 
-
-
 Estructura y Lógica:
 
-
-
 CONTRATO\_ID: Identificador único (formato 1001-1075, 2001-2069, 3001-3072)
-
-
-
 FECHA\_ALTA: Fecha de formalización del contrato
-
-
-
 CLIENTE\_ID: Cliente titular del contrato
-
-
-
 GESTOR\_ID: Gestor comercial responsable
-
-
-
 PRODUCTO\_ID: Producto financiero contratado
-
-
-
 CENTRO\_CONTABLE: Centro que absorbe los gastos (siempre 1-5)
-
-
-
 EMPRESA\_ID: Entidad legal (siempre 1)
 
-
-
 Distribución Temporal:
-
-
-
 Base enero-mayo 2025: 187 contratos
-
-
-
 Nuevos octubre 2025: 29 contratos adicionales
-
-
-
 Total activo: 216 contratos
-
-
 
 Familias de Contratos por Producto:
 
-
-
 Serie 1000: Préstamos Hipotecarios (100100100100)
-
-
-
 Serie 2000: Depósitos a Plazo Fijo (400200100100)
-
-
-
 Serie 3000: Fondos Banca March (600100300300)
-
 
 
 Uso Crítico: Esta tabla es el núcleo del sistema de costes. La distribución de los 216 contratos por centro determina cómo se reparten los gastos totales de €291,600 mensuales para calcular el precio real por producto.
@@ -522,51 +509,20 @@ Uso Crítico: Esta tabla es el núcleo del sistema de costes. La distribución d
 
 Propósito: Plan contable específico para productos financieros y estructura de costes.
 
-
-
 Estructura y Lógica:
 
-
-
 CUENTA\_ID: Código contable único (formato 6-7 dígitos)
-
-
-
 DESC\_CUENTA: Descripción detallada de la cuenta
-
-
-
 LINEA\_CDR: Vinculación con líneas del Cuadro de Resultados
-
-
-
 EMPRESA\_ID: Entidad legal (siempre 1)
-
-
 
 Clasificación por Familias:
 
-
-
 76xxxx: Ingresos por productos (intereses, comisiones)
-
-
-
 64xxxx: Gastos financieros (intereses pagados)
-
-
-
 62xxxx: Gastos operativos (personal, administración)
-
-
-
 68xxxx: Amortizaciones (software, equipos)
-
-
-
 69xxxx: Otros gastos (impuestos, fondos de garantía)
-
-
 
 Uso en el Sistema: Referencia para contabilización automática de gastos e ingresos, trazabilidad contable y cumplimiento normativo.
 
@@ -576,55 +532,22 @@ Uso en el Sistema: Referencia para contabilización automática de gastos e ingr
 
 Propósito: Catálogo del equipo comercial con especialización por segmento y ubicación geográfica.
 
-
-
 Estructura y Lógica:
 
-
-
 GESTOR\_ID: Identificador único (1-30)
-
-
-
 DESC\_GESTOR: Nombre completo del gestor
-
-
-
 CENTRO: Centro de trabajo (1-5)
-
-
-
 SEGMENTO\_ID: Especialización comercial exclusiva
-
-
 
 Distribución por Centro:
 
-
-
 Centro 1 (Madrid): 8 gestores (ID 1-8)
-
-
-
 Centro 2 (Palma): 8 gestores (ID 9-16)
-
-
-
 Centro 3 (Barcelona): 5 gestores (ID 17-21)
-
-
-
 Centro 4 (Málaga): 5 gestores (ID 22-26)
-
-
-
 Centro 5 (Bilbao): 4 gestores (ID 27-30)
 
-
-
 Especialización por Segmento: Cada gestor se dedica exclusivamente a un segmento, permitiendo expertise específica y cálculo de KPIs individuales.
-
-
 
 Uso en el Sistema: Base para análisis de productividad comercial, cálculo de incentivos, evaluación de performance y asignación de objetivos comerciales.
 
@@ -634,295 +557,118 @@ Uso en el Sistema: Base para análisis de productividad comercial, cálculo de i
 
 Propósito: Estructura del Cuadro de Resultados (P\&L) para reporting ejecutivo automático.
 
-
-
 Estructura y Lógica:
 
-
-
 COD\_LINEA\_CDR: Código único de línea (formato CRxxxx)
-
-
-
 DES\_LINEA\_CDR: Descripción de la partida contable
-
-
 
 Jerarquía del P\&L:
 
-
-
 CR0001: Ingresos financieros
-
-
-
 CR0003: Gastos Financieros
-
-
-
 CR0007: MARGEN FINANCIERO
-
-
-
 CR0008: Comisiones Netas
-
-
-
 CR0012: MARGEN BRUTO
-
-
-
 CR0014: Gastos de Personal
-
-
-
 CR0016: Gastos de Administración
-
-
-
 CR0017: Amortizaciones
-
-
-
 CR0018: MARGEN DE EXPLOTACIÓN
-
-
-
 CR0029: Coste de capital
-
-
-
 CR0030: MARGEN APORTADO
 
-
-
 Uso en el Sistema: Generación automática de Business Reviews, drill-down desde visión consolidada hasta detalle por gestor/producto.
-
 
 
 **7. MAESTRO\_PRODUCTOS**
 
 Propósito: Catálogo de productos financieros con configuración de modelos de negocio.
 
-
-
 Estructura y Lógica:
 
-
-
 PRODUCTO\_ID: Código único de 12 dígitos
-
-
-
 DESC\_PRODUCTO: Denominación comercial
-
-
-
 IND\_FABRICA: Indicador de modelo de distribución (0/1)
-
-
-
 FABRICA: Porcentaje de comisión para la gestora (0.0-0.85)
-
-
-
 BANCO: Porcentaje de comisión para el banco (0.15-1.0)
-
-
-
 EMPRESA\_ID: Entidad legal (siempre 1)
-
-
 
 Productos Disponibles:
 
-
-
 100100100100: Préstamo Hipotecario (100% banco)
-
-
-
 400200100100: Depósito a Plazo Fijo en Euros (100% banco)
-
-
-
 600100300300: Fondo Banca March (85% gestora, 15% banco)
 
-
-
 Uso en el Sistema: Base para cálculo de precios estándar y reales, análisis de contribución marginal y optimización de mix de productos.
-
 
 
 **8. MAESTRO\_SEGMENTOS**
 
 Propósito: Clasificación estratégica de la cartera por tipología de cliente.
 
-
-
 Estructura y Lógica:
 
-
-
 SEGMENTO\_ID: Código único (formato Nxxxxx)
-
-
-
 DESC\_SEGMENTO: Descripción del perfil de cliente
-
-
-
 EMPRESA\_ID: Entidad legal (siempre 1)
-
-
 
 Segmentos Definidos:
 
-
-
 N10101: Banca Minorista (particulares, renta media-baja)
-
-
-
 N10102: Banca Privada (patrimonios elevados, +€1M)
-
-
-
 N10103: Banca de Empresas (pymes, corporaciones)
-
-
-
 N10104: Banca Personal (profesionales, renta media-alta)
-
-
-
 N20301: Fondos (gestión colectiva de inversiones)
 
-
-
 Uso en el Sistema: Segmentación para pricing diferencial, análisis de rentabilidad y estrategias comerciales específicas por tipología.
-
-
 
 🔗 Relaciones Clave entre Tablas Maestras
 
 MAESTRO\_CONTRATOS es la tabla central que conecta:
-
-
-
 Cliente (MAESTRO\_CLIENTES)
-
-
-
 Gestor (MAESTRO\_GESTORES)
-
-
-
 Producto (MAESTRO\_PRODUCTOS)
-
-
-
 Centro (MAESTRO\_CENTRO)
-
-
 
 MAESTRO\_GESTORES vincula segmentos con centros:
 
-
-
 Cada gestor pertenece a un centro específico
-
-
-
 Cada gestor se especializa en un segmento único
-
-
 
 MAESTRO\_CENTRO clasifica la estructura organizativa:
 
-
-
 Centros finalistas (1-5) con contratos directos
-
-
-
 Centros de soporte (6-8) con redistribución de gastos
 
-
-
 Esta arquitectura permite trazabilidad completa desde cualquier gasto hasta el cliente final, pasando por gestor, producto y segmento, proporcionando la base para el análisis de rentabilidad integral del Agente CDG.
-
 
 
 **9. GASTOS\_CENTRO**
 
 Propósito: Registro mensual de gastos directos por centro de coste, columna vertebral del sistema de cálculo de precios reales.
 
-
-
 Estructura y Lógica según BM\_CONTABILIDAD\_CDG.db:
 
-
-
 EMPRESA: Entidad legal (siempre 1)
-
-
-
 CENTRO\_CONTABLE: Centro que registra el gasto (1-8)
-
-
-
 CONCEPTO\_COSTE: Naturaleza del gasto
-
-
-
 FECHA: Período de imputación mensual
-
-
-
 IMPORTE: Valor monetario del gasto en euros
-
-
 
 Conceptos de Gasto y su Representación Funcional:
 
-
-
 Personal (40-60% del total): Incluye salarios base, seguridad social, incentivos comerciales, formación. Representa el mayor componente de coste operativo
-
-
-
 Tecnología (25-35%): Sistemas core banking, software especializado, infraestructura IT, licencias. Refleja la digitalización bancaria
-
-
-
 Suministros (8-15%): Telecomunicaciones, energía, material de oficina, servicios básicos de operación
-
-
-
 Papelería (2-5%): Documentación legal, impresión, material administrativo específico bancario
-
-
 
 Distribución Real por Período:
 
-
-
 Septiembre 2025: €455,000 distribuidos en centros 1-8
-
-
-
 Octubre 2025: €222,718 (post-redistribución automática de centrales)
-
-
 
 Lógica de Redistribución Automática: El sistema redistribuye automáticamente los gastos de centros de soporte (6-8) hacia centros finalistas (1-5) usando la fórmula:
 
-
-
 Gasto\_Redistribuido\_Centro\_i = Gasto\_Central\_Total × (Contratos\_Centro\_i / Total\_Contratos\_Finalistas)
-
-
 
 **10. MOVIMIENTOS\_CONTRATOS**
 
@@ -930,79 +676,35 @@ Gasto\_Redistribuido\_Centro\_i = Gasto\_Central\_Total × (Contratos\_Centro\_i
 
 La tabla MOVIMIENTOS\_CONTRATOS constituye el motor transaccional de Banca March, registrando en tiempo real cada operación financiera que genera valor económico en la entidad. Desde la perspectiva organizacional, esta tabla funciona como el libro mayor digital que captura toda la actividad comercial y operativa, proporcionando trazabilidad completa desde cada euro hasta el contrato específico que lo origina.
 
-
-
 Banca March utiliza esta tabla para mantener un control exhaustivo de la rentabilidad real de cada línea de negocio, permitiendo que tanto la Dirección Financiera como los gestores comerciales puedan evaluar en tiempo real el rendimiento de sus carteras de clientes.
-
-
 
 🎯 Funcionalidad Operativa en la Organización
 
 Usuarios Principales:
 
-
-
 Área Financiera: Utiliza estos datos para generar automáticamente el Cuadro de Resultados mensual y el reporting consolidado al Consejo de Administración.
-
-
 
 Gestores Comerciales: Consultan diariamente la rentabilidad generada por sus contratos específicos, permitiendo optimizar su estrategia de cross-selling y priorizar clientes más rentables.
 
-
-
 Control de Gestión: Analiza mensualmente estos movimientos para calcular el PRECIO\_POR\_PRODUCTO\_REAL, identificando desviaciones respecto a los estándares presupuestarios.
 
-
-
 Auditoría Interna: Realiza trazabilidad completa de ingresos y gastos desde el consolidado hasta la transacción individual.
-
 
 
 📊 Estructura de Datos y Arquitectura Transaccional
 
 Campos de la Tabla:
 
-
-
 MOVIMIENTO\_ID: Identificador único secuencial de cada transacción
-
-
-
 EMPRESA\_ID: Entidad legal (siempre 1 para Banca March)
-
-
-
 FECHA: Fecha valor de la operación (registro diario en tiempo real)
-
-
-
 CONTRATO\_ID: Contrato origen del movimiento (NULL para gastos centrales)
-
-
-
 CENTRO\_CONTABLE: Centro que registra la operación (1-8)
-
-
-
 CUENTA\_ID: Cuenta contable específica según plan de cuentas
-
-
-
 DIVISA: Moneda de la operación (EUR para todas las transacciones)
-
-
-
 IMPORTE: Valor monetario (positivo=ingreso, negativo=gasto)
-
-
-
 LINEA\_CUENTA\_RESULTADOS: Clasificación automática en el P\&L
-
-
-
 CONCEPTO\_GESTION: Descripción operativa para análisis de gestión
-
-
 
 🏦 Tipología de Movimientos desde la Perspectiva de Banca March
 
@@ -1010,152 +712,77 @@ A. INGRESOS POR PRODUCTOS FINANCIEROS (IMPORTE > 0)
 
 Préstamos Hipotecarios:
 
-
-
 760001: Intereses cobrados préstamos hipotecarios
-
-
 
 Lógica: Base del margen financiero de Banca March
 
-
-
 Frecuencia: Mensual por cada contrato activo
-
-
 
 Impacto P\&L: Línea CR0001 (Ingresos financieros)
 
-
-
 Depósitos a Plazo Fijo:
 
-
-
 760008: Comisiones por cancelación anticipada
-
-
-
 760012: Comisiones de gestión y mantenimiento
-
-
 
 Lógica: Ingresos por servicios bancarios tradicionales
 
-
-
 Frecuencia: Variable según comportamiento del cliente
 
-
-
 Impacto P\&L: Línea CR0008 (Comisiones Netas)
-
-
 
 Fondos Banca March:
 
-
-
 760022: Comisiones de suscripción (entrada al fondo)
-
-
-
 760023: Comisiones de reembolso (salida del fondo)
-
-
 
 Lógica: Fee income por gestión de activos
 
-
-
 Frecuencia: Según decisiones de inversión del cliente
-
-
 
 Impacto P\&L: Línea CR0008 (Comisiones Netas)
 
-
-
 Repartos Internegocio:
 
-
-
 760024: Reparto internegocio banco (15%)
-
-
-
 760025: Reparto internegocio gestora (85%)
-
-
 
 Lógica: Banca March opera con modelo "fábrica" donde la gestora externa recibe el 85% de las comisiones y el banco retiene el 15%
 
-
-
 Frecuencia: Mensual por cada fondo comercializado
 
-
-
 Impacto P\&L: Línea CR001104 (Repartos internegocio)
-
-
 
 B. GASTOS FINANCIEROS (IMPORTE < 0)
 
 Coste de Captación:
 
-
-
 640001: Intereses pagados en depósitos a plazo fijo
-
-
 
 Lógica: Coste directo de captación de pasivo
 
-
-
 Frecuencia: Mensual según condiciones pactadas
-
-
 
 Impacto P\&L: Línea CR0003 (Gastos Financieros)
 
 
-
 Cargas Fiscales y Regulatorias:
-
-
 
 691001: Impuesto sobre depósitos bancarios
 
-
-
 Lógica: Carga fiscal específica del sector bancario español
-
-
 
 Frecuencia: Mensual sobre saldos de depósitos
 
-
-
 Impacto P\&L: Línea CR001302 (Impuestos específicos)
-
-
 
 691002: Fondo de garantía de depósitos
 
-
-
 Lógica: Contribución obligatoria al sistema de garantía
-
-
 
 Frecuencia: Mensual sobre volumen de depósitos garantizados
 
-
-
 Impacto P\&L: Línea CR001301 (Fondos de garantía)
-
 
 
 C. GASTOS OPERATIVOS SIN CONTRATO (CONTRATO\_ID = NULL)
@@ -1770,7 +1397,163 @@ El sistema permite pasar de un modelo de control reactivo (detectar problemas al
 
 
 
+**FUNCIONALIDADES AVANZADAS Y ARQUITECTURA DE DASHBOARDS**
+6. Sistema de Dashboards Duales Especializados
+Dashboard del Gestor Comercial:
 
+Propósito Organizacional: Democratizar el acceso a información de control de gestión, reduciendo la dependencia de consultas manuales al departamento financiero
+
+Capacidades Funcionales:
+
+Análisis completo de cartera propia (contratos, rentabilidad, crecimiento)
+
+Visualización de precios por producto asignados a su segmento
+
+Análisis de asignación de costes por gestor
+
+Interpretación en lenguaje natural de tendencias y desviaciones
+
+Comparativas temporales y vs objetivos presupuestarios
+
+Acceso a Datos: Limitado a su cartera y datos consolidados públicos
+
+Interacción: Conversacional con capacidad de modificar visualizaciones dinámicamente
+
+Dashboard de Control de Gestión/Dirección Financiera:
+
+Propósito Organizacional: Herramienta estratégica para análisis global con acceso completo a datos reales calculados
+
+Capacidades Funcionales:
+
+Acceso completo a tabla PRECIO_POR_PRODUCTO_REAL con variaciones mensuales
+
+Análisis consolidado de todos los gestores y centros
+
+Detección automática de desviaciones significativas vs estándares
+
+Generación de alertas proactivas por anomalías
+
+Análisis de causas de desviaciones con drill-down completo
+
+Acceso a Datos: Sin restricciones, incluyendo datos sensibles de costes reales
+
+Capacidades Adicionales: Simulación de escenarios, análisis predictivo, reportes ejecutivos
+
+7. Sistema de Dashboards Dinámicos y Conversacionales
+Dashboard Base Predeterminado:
+
+Cada tipo de usuario (Gestor/Control de Gestión) tiene un dashboard inicial optimizado
+
+KPIs principales mostrados por defecto según mejores prácticas identificadas
+
+Gráficos estándar basados en patrones de uso más frecuentes
+
+Pivoteo Conversacional Dinámico:
+
+Capacidad de transformación: El gestor puede solicitar cambios de visualización mediante lenguaje natural
+
+Ejemplo: "Cambia este gráfico de barras a uno circular"
+
+Ejemplo: "Muéstrame la evolución de estos datos en el tiempo"
+
+Ejemplo: "Compara mi cartera con el promedio del centro"
+
+Generación de vistas personalizadas: Creación automática de nuevos gráficos basados en consultas específicas
+
+Persistencia de preferencias: Guardar configuraciones personalizadas por gestor
+
+8. Sistema de Aprendizaje Continuo (Reflection Pattern)
+Feedback Loop Integrado:
+
+Evaluación de calidad: Cada gráfico/respuesta incluye opción de valoración (👍👎)
+
+Feedback específico: Comentarios textuales del gestor sobre qué mejorar
+
+Incorporación automática: El agente modifica su comportamiento basado en feedback recibido
+
+Personalización por gestor: Adaptación al estilo y preferencias específicas de cada usuario
+
+Memoria Organizacional:
+
+Patrones de uso: Identificación de consultas más frecuentes por tipo de gestor
+
+Preferencias visuales: Qué tipos de gráficos prefiere cada gestor/área
+
+Contexto de negocio: Aprendizaje de terminología específica de Banca March
+
+Mejora iterativa: Cada interacción mejora la calidad del agente para futuros usuarios
+
+9. Catálogo Extenso de Consultas SQL Inteligentes
+Biblioteca de Consultas Estructurada:
+
+Consultas por categoría:
+
+Análisis de rentabilidad por gestor/centro/segmento/producto
+
+Evolución temporal (comparativas mes/trimestre/año)
+
+Análisis de desviaciones vs estándares presupuestarios
+
+Drill-down desde consolidado hasta transacción individual
+
+Análisis de cartera y crecimiento comercial
+
+Cálculos de KPIs financieros (ROE, margen neto, eficiencia operativa)
+
+Selección Inteligente de Consultas:
+
+Motor de decisión: El agente selecciona automáticamente las consultas apropiadas según el contexto de la pregunta
+
+Combinación de consultas: Capacidad de ejecutar múltiples consultas para respuestas complejas
+
+Optimización automática: Selección de la consulta más eficiente para cada caso
+
+Aprendizaje de patrones: Mejora en la selección basada en feedback de usuarios
+
+Respuestas Multimodal:
+
+Numéricas: Valores específicos con contexto explicativo
+
+Gráficas: Visualizaciones automáticas según tipo de datos
+
+Textuales: Explicaciones en lenguaje natural de tendencias y patrones
+
+Combinadas: Integración de números, gráficos y explicaciones en una respuesta coherente
+
+10. Implementación de Patrones Agenticos Azure
+Tool Pattern:
+
+Implementación de cada funcionalidad como @tool decorado
+
+Catálogo modular de herramientas SQL, cálculo, visualización y análisis
+
+Reutilización de tools entre diferentes agentes especializados
+
+Reflection Pattern:
+
+Sistema de autoevaluación de respuestas antes de presentarlas al usuario
+
+Mecanismo de corrección automática basado en feedback
+
+Memoria a largo plazo para mejora continua de la calidad
+
+Agentic Pattern:
+
+Agente principal que coordina múltiples agentes especializados
+
+Toma de decisiones autónoma sobre qué herramientas utilizar
+
+Capacidad de razonamiento sobre datos financieros complejos
+
+Multiagent Pattern (Futuro):
+
+Agente especializado en análisis financiero
+
+Agente especializado en generación de visualizaciones
+
+Agente especializado en detección de anomalías
+
+Agente coordinador que orquesta la colaboración
 
 ------------------------------------------------------------------------------------------------------------
 

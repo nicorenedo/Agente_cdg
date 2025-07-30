@@ -9,7 +9,7 @@ st.set_page_config(page_title="Agent Interaction")
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "backend" / "src"))
 
 from agentic_patterns_azure.planning_pattern.react_agent import ReactAgent
-from defined_tools import sum_two_elements, multiply_two_elements, compute_log
+from notebooks.defined_tools import sum_two_elements, multiply_two_elements, compute_log
 
 # Initialize the agent with the imported tools
 agent = ReactAgent(tools=[sum_two_elements, multiply_two_elements, compute_log])
