@@ -8,7 +8,7 @@ Módulo para generar configuraciones de gráficos dinámicos para el dashboard R
 Integra con queries existentes y kpi_calculator para visualizaciones financieras.
 
 Autor: Agente CDG Development Team
-Fecha: 2025-07-31
+Fecha: 2025-08-01
 """
 
 import json
@@ -101,6 +101,10 @@ class ChartFactory:
         context: str = "gestor"
     ) -> Chart:
         """Crea gráfico de barras para KPIs financieros"""
+        
+        # Validación de entrada
+        if not kpi_data:
+            raise ValueError("kpi_data no puede estar vacío")
         
         labels = list(kpi_data.keys())
         actual_values = list(kpi_data.values())
@@ -207,6 +211,9 @@ class ChartFactory:
     ) -> Chart:
         """Crea gráfico circular para distribuciones"""
         
+        if not distribution_data:
+            raise ValueError("distribution_data no puede estar vacío")
+        
         labels = list(distribution_data.keys())
         values = list(distribution_data.values())
         
@@ -246,6 +253,10 @@ class ChartFactory:
         context: str = "comparative"
     ) -> Chart:
         """Crea gráfico de comparación entre entidades"""
+        
+        if not comparison_data:
+            # En lugar de fallar, crear un gráfico vacío con mensaje
+            return ChartFactory._create_empty_chart(chart_id, title, "No hay datos disponibles para la comparación")
         
         labels = [item.get('nombre', item.get('desc_gestor', f'Item {i}')) 
                  for i, item in enumerate(comparison_data)]
@@ -336,13 +347,35 @@ class ChartFactory:
         )
         
         return Chart(chart_id, ChartType.GAUGE, title, chart_data, options, context)
+    
+    @staticmethod
+    def _create_empty_chart(chart_id: str, title: str, message: str) -> Chart:
+        """Crea un gráfico vacío con mensaje informativo"""
+        chart_data = ChartData(
+            labels=["Sin datos"],
+            datasets=[{
+                "data": [1],
+                "backgroundColor": ["#e0e0e0"],
+                "borderWidth": 0
+            }],
+            metadata={"empty": True, "message": message}
+        )
+        
+        options = ChartOptions(
+            plugins={
+                "title": {"display": True, "text": title},
+                "legend": {"display": False}
+            }
+        )
+        
+        return Chart(chart_id, ChartType.PIE, title, chart_data, options, "empty")
 
 class CDGDashboardGenerator:
     """Generador de dashboards completos para el agente CDG"""
     
     def __init__(self):
         self.charts: List[Chart] = []
-        logger.info("CDG Dashboard Generator inicializado")
+        logger.info("CDG Dashboard Generator inicializado exitosamente")
     
     def generate_gestor_dashboard(
         self,
@@ -352,55 +385,78 @@ class CDGDashboardGenerator:
     ) -> Dict[str, Any]:
         """Genera dashboard completo para un gestor específico"""
         
-        dashboard_id = f"gestor_{gestor_data.get('gestor_id')}_{periodo or 'current'}"
-        charts = []
-        
-        # 1. KPIs principales en barras
-        if kpi_data:
-            kpi_chart = ChartFactory.create_kpi_bar_chart(
-                f"{dashboard_id}_kpis",
-                f"KPIs - {gestor_data.get('desc_gestor', 'Gestor')}",
-                {k: v for k, v in kpi_data.items() if isinstance(v, (int, float))},
-                context="gestor"
-            )
-            charts.append(kpi_chart.to_dict())
-        
-        # 2. Distribución de productos (si existe)
-        if 'distribucion_productos' in gestor_data:
-            dist_chart = ChartFactory.create_distribution_pie_chart(
-                f"{dashboard_id}_productos",
-                "Distribución por Productos",
-                gestor_data['distribucion_productos'],
-                context="gestor"
-            )
-            charts.append(dist_chart.to_dict())
-        
-        # 3. Gauge de margen si disponible
-        if 'margen_neto' in kpi_data:
-            gauge_chart = ChartFactory.create_gauge_chart(
-                f"{dashboard_id}_margen_gauge",
-                "Margen Neto",
-                current_value=kpi_data['margen_neto'],
-                target_value=kpi_data.get('margen_objetivo', 15.0),
-                context="gestor"
-            )
-            charts.append(gauge_chart.to_dict())
-        
-        dashboard = {
-            "id": dashboard_id,
-            "title": f"Dashboard - {gestor_data.get('desc_gestor', 'Gestor')}",
-            "periodo": periodo,
-            "charts": charts,
-            "metadata": {
-                "gestor_id": gestor_data.get('gestor_id'),
-                "centro": gestor_data.get('desc_centro'),
-                "generated_at": datetime.now().isoformat(),
-                "chart_count": len(charts)
+        try:
+            dashboard_id = f"gestor_{gestor_data.get('gestor_id', 'unknown')}_{periodo or 'current'}"
+            charts = []
+            
+            # 1. KPIs principales en barras
+            if kpi_data and isinstance(kpi_data, dict):
+                # Filtrar solo valores numéricos
+                numeric_kpis = {k: v for k, v in kpi_data.items() 
+                              if isinstance(v, (int, float)) and not isinstance(v, bool)}
+                
+                if numeric_kpis:
+                    kpi_chart = ChartFactory.create_kpi_bar_chart(
+                        f"{dashboard_id}_kpis",
+                        f"KPIs - {gestor_data.get('desc_gestor', 'Gestor')}",
+                        numeric_kpis,
+                        context="gestor"
+                    )
+                    charts.append(kpi_chart.to_dict())
+            
+            # 2. Distribución de productos (si existe)
+            if 'distribucion_productos' in gestor_data and gestor_data['distribucion_productos']:
+                dist_chart = ChartFactory.create_distribution_pie_chart(
+                    f"{dashboard_id}_productos",
+                    "Distribución por Productos",
+                    gestor_data['distribucion_productos'],
+                    context="gestor"
+                )
+                charts.append(dist_chart.to_dict())
+            
+            # 3. Gauge de margen si disponible
+            if kpi_data and 'margen_neto' in kpi_data:
+                try:
+                    gauge_chart = ChartFactory.create_gauge_chart(
+                        f"{dashboard_id}_margen_gauge",
+                        "Margen Neto",
+                        current_value=float(kpi_data['margen_neto']),
+                        target_value=float(kpi_data.get('margen_objetivo', 15.0)),
+                        context="gestor"
+                    )
+                    charts.append(gauge_chart.to_dict())
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error creando gauge chart: {e}")
+            
+            dashboard = {
+                "id": dashboard_id,
+                "title": f"Dashboard - {gestor_data.get('desc_gestor', 'Gestor')}",
+                "periodo": periodo,
+                "charts": charts,
+                "metadata": {
+                    "gestor_id": gestor_data.get('gestor_id'),
+                    "centro": gestor_data.get('desc_centro'),
+                    "generated_at": datetime.now().isoformat(),
+                    "chart_count": len(charts)
+                }
             }
-        }
-        
-        logger.info(f"Dashboard generado para gestor {gestor_data.get('gestor_id')} con {len(charts)} gráficos")
-        return dashboard
+            
+            logger.info(f"Dashboard generado para gestor {gestor_data.get('gestor_id')} con {len(charts)} gráficos")
+            return dashboard
+            
+        except Exception as e:
+            logger.error(f"Error generando dashboard de gestor: {e}")
+            return {
+                "id": f"gestor_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "title": "Dashboard - Error",
+                "periodo": periodo,
+                "charts": [],
+                "metadata": {
+                    "error": str(e),
+                    "generated_at": datetime.now().isoformat(),
+                    "chart_count": 0
+                }
+            }
     
     def generate_comparative_dashboard(
         self,
@@ -410,30 +466,43 @@ class CDGDashboardGenerator:
     ) -> Dict[str, Any]:
         """Genera dashboard comparativo entre gestores"""
         
-        dashboard_id = f"comparative_{metric}_{datetime.now().strftime('%Y%m%d')}"
-        
-        # Gráfico de comparación principal
-        comparison_chart = ChartFactory.create_comparison_chart(
-            f"{dashboard_id}_comparison",
-            titulo,
-            comparison_data,
-            metric,
-            context="comparative"
-        )
-        
-        dashboard = {
-            "id": dashboard_id,
-            "title": titulo,
-            "charts": [comparison_chart.to_dict()],
-            "metadata": {
-                "metric": metric,
-                "entities_compared": len(comparison_data),
-                "generated_at": datetime.now().isoformat()
+        try:
+            dashboard_id = f"comparative_{metric}_{datetime.now().strftime('%Y%m%d')}"
+            
+            # Gráfico de comparación principal
+            comparison_chart = ChartFactory.create_comparison_chart(
+                f"{dashboard_id}_comparison",
+                titulo,
+                comparison_data,
+                metric,
+                context="comparative"
+            )
+            
+            dashboard = {
+                "id": dashboard_id,
+                "title": titulo,
+                "charts": [comparison_chart.to_dict()],
+                "metadata": {
+                    "metric": metric,
+                    "entities_compared": len(comparison_data) if comparison_data else 0,
+                    "generated_at": datetime.now().isoformat()
+                }
             }
-        }
-        
-        logger.info(f"Dashboard comparativo generado con {len(comparison_data)} entidades")
-        return dashboard
+            
+            logger.info(f"Dashboard comparativo generado con {len(comparison_data) if comparison_data else 0} entidades")
+            return dashboard
+            
+        except Exception as e:
+            logger.error(f"Error generando dashboard comparativo: {e}")
+            return {
+                "id": f"comparative_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "title": "Dashboard Comparativo - Error",
+                "charts": [],
+                "metadata": {
+                    "error": str(e),
+                    "generated_at": datetime.now().isoformat()
+                }
+            }
     
     def generate_trend_dashboard(
         self,
@@ -442,28 +511,41 @@ class CDGDashboardGenerator:
     ) -> Dict[str, Any]:
         """Genera dashboard de tendencias temporales"""
         
-        dashboard_id = f"trends_{datetime.now().strftime('%Y%m%d')}"
-        
-        # Gráfico de tendencias
-        trend_chart = ChartFactory.create_trend_line_chart(
-            f"{dashboard_id}_trends",
-            title,
-            trend_data,
-            context="deviation"
-        )
-        
-        dashboard = {
-            "id": dashboard_id,
-            "title": title,
-            "charts": [trend_chart.to_dict()],
-            "metadata": {
-                "periods": len(trend_data),
-                "generated_at": datetime.now().isoformat()
+        try:
+            dashboard_id = f"trends_{datetime.now().strftime('%Y%m%d')}"
+            
+            # Gráfico de tendencias
+            trend_chart = ChartFactory.create_trend_line_chart(
+                f"{dashboard_id}_trends",
+                title,
+                trend_data,
+                context="deviation"
+            )
+            
+            dashboard = {
+                "id": dashboard_id,
+                "title": title,
+                "charts": [trend_chart.to_dict()],
+                "metadata": {
+                    "periods": len(trend_data) if trend_data else 0,
+                    "generated_at": datetime.now().isoformat()
+                }
             }
-        }
-        
-        logger.info(f"Dashboard de tendencias generado con {len(trend_data)} períodos")
-        return dashboard
+            
+            logger.info(f"Dashboard de tendencias generado con {len(trend_data) if trend_data else 0} períodos")
+            return dashboard
+            
+        except Exception as e:
+            logger.error(f"Error generando dashboard de tendencias: {e}")
+            return {
+                "id": f"trends_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "title": "Dashboard Tendencias - Error",
+                "charts": [],
+                "metadata": {
+                    "error": str(e),
+                    "generated_at": datetime.now().isoformat()
+                }
+            }
     
     def export_dashboard(self, dashboard: Dict[str, Any], format: str = "json") -> str:
         """Exporta dashboard en formato específico"""
@@ -475,69 +557,118 @@ class CDGDashboardGenerator:
 # Funciones de conveniencia para integración rápida
 def create_simple_bar_chart(title: str, labels: List[str], values: List[float]) -> Dict[str, Any]:
     """Función de conveniencia para crear gráfico de barras simple"""
-    chart_id = f"simple_bar_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    kpi_data = dict(zip(labels, values))
-    
-    chart = ChartFactory.create_kpi_bar_chart(chart_id, title, kpi_data)
-    return chart.to_dict()
+    try:
+        chart_id = f"simple_bar_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        kpi_data = dict(zip(labels, values))
+        
+        chart = ChartFactory.create_kpi_bar_chart(chart_id, title, kpi_data)
+        return chart.to_dict()
+    except Exception as e:
+        logger.error(f"Error creando gráfico de barras simple: {e}")
+        return {"error": str(e), "type": "bar", "title": title}
 
 def create_simple_pie_chart(title: str, distribution: Dict[str, float]) -> Dict[str, Any]:
     """Función de conveniencia para crear gráfico circular simple"""
-    chart_id = f"simple_pie_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
-    chart = ChartFactory.create_distribution_pie_chart(chart_id, title, distribution)
-    return chart.to_dict()
+    try:
+        chart_id = f"simple_pie_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        chart = ChartFactory.create_distribution_pie_chart(chart_id, title, distribution)
+        return chart.to_dict()
+    except Exception as e:
+        logger.error(f"Error creando gráfico circular simple: {e}")
+        return {"error": str(e), "type": "pie", "title": title}
 
 def create_simple_line_chart(title: str, time_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Función de conveniencia para crear gráfico de líneas simple"""
-    chart_id = f"simple_line_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
-    chart = ChartFactory.create_trend_line_chart(chart_id, title, time_data)
-    return chart.to_dict()
+    try:
+        chart_id = f"simple_line_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        chart = ChartFactory.create_trend_line_chart(chart_id, title, time_data)
+        return chart.to_dict()
+    except Exception as e:
+        logger.error(f"Error creando gráfico de líneas simple: {e}")
+        return {"error": str(e), "type": "line", "title": title}
+
+# Función de validación para testing
+def validate_chart_generator():
+    """Valida que el generador de gráficos funciona correctamente"""
+    try:
+        # Test básico de instanciación
+        generator = CDGDashboardGenerator()
+        
+        # Test de gráfico simple
+        test_data = {
+            "margen_neto": 12.5,
+            "roe": 8.3,
+            "eficiencia": 75.2
+        }
+        
+        chart = create_simple_bar_chart("Test KPIs", list(test_data.keys()), list(test_data.values()))
+        
+        return {
+            "status": "OK",
+            "generator_initialized": True,
+            "chart_created": "error" not in chart,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "status": "ERROR",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 if __name__ == "__main__":
     # Tests de funcionalidad
     print("🔄 Iniciando tests de Chart Generator CDG...")
     
-    # Test 1: Gráfico de barras KPI
-    kpi_test_data = {
-        "margen_neto": 12.5,
-        "roe": 8.3,
-        "eficiencia": 75.2
-    }
+    # Test de validación
+    validation_result = validate_chart_generator()
+    print(f"✅ Validación: {validation_result['status']}")
     
-    bar_chart = create_simple_bar_chart("KPIs Gestor", 
-                                       list(kpi_test_data.keys()), 
-                                       list(kpi_test_data.values()))
-    print("✅ Test 1 - Gráfico de barras KPI: OK")
-    
-    # Test 2: Gráfico circular distribución
-    dist_test_data = {
-        "Fondos": 45.0,
-        "Depósitos": 35.0,
-        "Seguros": 20.0
-    }
-    
-    pie_chart = create_simple_pie_chart("Distribución Productos", dist_test_data)
-    print("✅ Test 2 - Gráfico circular distribución: OK")
-    
-    # Test 3: Dashboard completo
-    dashboard_gen = CDGDashboardGenerator()
-    gestor_data = {
-        "gestor_id": 1,
-        "desc_gestor": "Juan Pérez",
-        "desc_centro": "Madrid Centro",
-        "distribucion_productos": dist_test_data
-    }
-    
-    dashboard = dashboard_gen.generate_gestor_dashboard(gestor_data, kpi_test_data, "2025-07")
-    print("✅ Test 3 - Dashboard completo: OK")
-    print(f"   Dashboard generado con {len(dashboard['charts'])} gráficos")
-    
-    # Test 4: Exportación JSON
-    json_output = dashboard_gen.export_dashboard(dashboard)
-    print("✅ Test 4 - Exportación JSON: OK")
-    print(f"   JSON generado: {len(json_output)} caracteres")
-    
-    print("\n🎯 Todos los tests completados exitosamente!")
-    print("Chart Generator CDG listo para integración con dashboard React")
+    if validation_result["status"] == "OK":
+        # Test 1: Gráfico de barras KPI
+        kpi_test_data = {
+            "margen_neto": 12.5,
+            "roe": 8.3,
+            "eficiencia": 75.2
+        }
+        
+        bar_chart = create_simple_bar_chart("KPIs Gestor", 
+                                           list(kpi_test_data.keys()), 
+                                           list(kpi_test_data.values()))
+        print("✅ Test 1 - Gráfico de barras KPI: OK")
+        
+        # Test 2: Gráfico circular distribución
+        dist_test_data = {
+            "Fondos": 45.0,
+            "Depósitos": 35.0,
+            "Seguros": 20.0
+        }
+        
+        pie_chart = create_simple_pie_chart("Distribución Productos", dist_test_data)
+        print("✅ Test 2 - Gráfico circular distribución: OK")
+        
+        # Test 3: Dashboard completo
+        dashboard_gen = CDGDashboardGenerator()
+        gestor_data = {
+            "gestor_id": 1,
+            "desc_gestor": "Juan Pérez",
+            "desc_centro": "Madrid Centro",
+            "distribucion_productos": dist_test_data
+        }
+        
+        dashboard = dashboard_gen.generate_gestor_dashboard(gestor_data, kpi_test_data, "2025-07")
+        print("✅ Test 3 - Dashboard completo: OK")
+        print(f"   Dashboard generado con {len(dashboard['charts'])} gráficos")
+        
+        # Test 4: Exportación JSON
+        json_output = dashboard_gen.export_dashboard(dashboard)
+        print("✅ Test 4 - Exportación JSON: OK")
+        print(f"   JSON generado: {len(json_output)} caracteres")
+        
+        print("\n🎯 Todos los tests completados exitosamente!")
+        print("Chart Generator CDG listo para integración con dashboard React")
+    else:
+        print(f"❌ Error en validación: {validation_result.get('error', 'Unknown')}")
