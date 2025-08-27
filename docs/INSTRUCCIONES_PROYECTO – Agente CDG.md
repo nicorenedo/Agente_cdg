@@ -309,6 +309,7 @@ text
 │   │   │   ├── chart_generator.py     # Generación gráficos✅
 │   │   │   └── report_generator.py    # Business Reviews automáticos✅
 │   │   ├── queries/
+│   │   │   ├── period_queries.py      # Consultas por gestor✅
 │   │   │   ├── gestor_queries.py      # Consultas por gestor✅
 │   │   │   ├── comparative_queries.py # Consultas comparativas✅
 │   │   │   ├── deviation_queries.py   # Consultas desviaciones✅
@@ -326,11 +327,15 @@ text
 │   │   │   ├── dynamic_config.py✅
 │   │   │   ├── initial_agent.py✅
 │   ├── tests/
+│   │   ├── test_cdg_agent.py✅
 │   │   ├── test_gestor_queries.py✅
 │   │   ├── test_incentive_queries.py✅
 │   │   ├── test_comparative_queries.py✅
 │   │   ├── test_deviation_queries.py✅
 │   │   ├── test_dynamic_config.py✅
+│   │   ├── test_reflection_integration.py✅
+│   │   ├── test_import.py✅
+│   │   ├── test_debug_import.py✅
 │   │   ├── test_quick_fix.py✅
 │   └── config.py ✅            # Configuración Azure OpenAI
 │   └── main.py ✅                  # API FastAPI principal
@@ -364,6 +369,11 @@ text
 │   │       ├── theme.js                      # Tema✅
 │   │   └── app.jsx ✅
 │   │   └── index.js ✅
+│   │   └── index.css ✅
+│   │   └── reportWebVitals.js ✅
+│   ├── public/
+│   │   ├── index.html ✅
+│   ├── node_modules ✅
 │   ├── package.json ✅
 ├── .env
 └── .gitignore
@@ -420,17 +430,17 @@ Drill-down interactivo: Navegación desde consolidado hasta transacción individ
 
 
 
-**\*\*\*\*BM\_CONTABILIDAD\_CDG.db**
+**\*\*\*\*BM_CONTABILIDAD_CDG.db**
 
 
 
 La arquitectura del sistema se fundamenta en la base de datos contable BM\_CONTABILIDAD\_CDG.db que replica fielmente la estructura operativa de una entidad financiera, con 13 tablas interrelacionadas que capturan desde la estructura organizativa hasta los movimientos financieros y métricas de control.
 
-La base de datos BM\_CONTABILIDAD\_CDG.db tiene el contenido de los datos de contabilidad, maestros y catálogos de datos, datos de Control de Gestión y operaciones contables. Esta compuesta de las siguientes tablas:
+La base de datos BM_CONTABILIDAD_CDG.db tiene el contenido de los datos de contabilidad, maestros y catálogos de datos, datos de Control de Gestión y operaciones contables. Esta compuesta de las siguientes tablas:
 
 
 
-**1. MAESTRO\_CENTRO**
+**1. MAESTRO_CENTRO**
 
 Propósito: Define la estructura organizativa de centros operativos y de soporte de la entidad financiera.
 
@@ -438,16 +448,16 @@ Propósito: Define la estructura organizativa de centros operativos y de soporte
 
 Estructura y Lógica:
 
-CENTRO\_ID: Identificador único del centro (1-8)
+CENTRO_ID: Identificador único del centro (1-8)
 
-DESC\_CENTRO: Descripción funcional del centro
+DESC_CENTRO: Descripción funcional del centro
 
-IND\_CENTRO\_FINALISTA: Indicador binario que clasifica los centros:
+IND_CENTRO_FINALISTA: Indicador binario que clasifica los centros:
 
 1: Centros finalistas (1-5) con actividad comercial directa y contratos
 0: Centros de soporte (6-8) que proporcionan servicios centrales
 
-EMPRESA\_ID: Vinculación con la entidad legal (siempre 1 en esta implementación)
+EMPRESA_ID: Vinculación con la entidad legal (siempre 1 en esta implementación)
 
 Centros Finalistas (1-5):
 MADRID-OFICINA PRINCIPAL: Centro principal con mayor volumen de contratos
@@ -466,15 +476,15 @@ Uso en el Sistema: Los gastos de centros 6-8 se redistribuyen proporcionalmente 
 
 
 
-**2. MAESTRO\_CLIENTES**
+**2. MAESTRO_CLIENTES**
 
 Propósito: Base de datos de clientes activos con asignación comercial específica.
 
 Estructura y Lógica:
-CLIENTE\_ID: Identificador único del cliente (1-85)
-NOMBRE\_CLIENTE: Nombre completo del cliente
-GESTOR\_ID: Gestor comercial asignado (relación directa con MAESTRO\_GESTORES)
-EMPRESA\_ID: Entidad legal (siempre 1)
+CLIENTE_ID: Identificador único del cliente (1-85)
+NOMBRE_CLIENTE: Nombre completo del cliente
+GESTOR_ID: Gestor comercial asignado (relación directa con MAESTRO\_GESTORES)
+EMPRESA_ID: Entidad legal (siempre 1)
 
 Distribución Geográfica: Los nombres reflejan la distribución regional:
 Madrid: Nombres castellanos tradicionales (García, López, Martínez)
@@ -487,19 +497,19 @@ Uso en el Sistema: Base para análisis de customer lifetime value, segmentación
 
 
 
-**3. MAESTRO\_CONTRATOS**
+**3. MAESTRO_CONTRATOS**
 
 Propósito: Registro central de todos los contratos activos que constituye el núcleo del sistema de costes.
 
 Estructura y Lógica:
 
-CONTRATO\_ID: Identificador único (formato 1001-1075, 2001-2069, 3001-3072)
-FECHA\_ALTA: Fecha de formalización del contrato
-CLIENTE\_ID: Cliente titular del contrato
-GESTOR\_ID: Gestor comercial responsable
-PRODUCTO\_ID: Producto financiero contratado
-CENTRO\_CONTABLE: Centro que absorbe los gastos (siempre 1-5)
-EMPRESA\_ID: Entidad legal (siempre 1)
+CONTRATO_ID: Identificador único (formato 1001-1075, 2001-2069, 3001-3072)
+FECHA_ALTA: Fecha de formalización del contrato
+CLIENTE_ID: Cliente titular del contrato
+GESTOR_ID: Gestor comercial responsable
+PRODUCTO_ID: Producto financiero contratado
+CENTRO_CONTABLE: Centro que absorbe los gastos (siempre 1-5)
+EMPRESA_ID: Entidad legal (siempre 1)
 
 Distribución Temporal:
 Base enero-mayo 2025: 187 contratos
@@ -517,16 +527,16 @@ Uso Crítico: Esta tabla es el núcleo del sistema de costes. La distribución d
 
 
 
-**4. MAESTRO\_CUENTAS**
+**4. MAESTRO_CUENTAS**
 
 Propósito: Plan contable específico para productos financieros y estructura de costes.
 
 Estructura y Lógica:
 
-CUENTA\_ID: Código contable único (formato 6-7 dígitos)
-DESC\_CUENTA: Descripción detallada de la cuenta
-LINEA\_CDR: Vinculación con líneas del Cuadro de Resultados
-EMPRESA\_ID: Entidad legal (siempre 1)
+CUENTA_ID: Código contable único (formato 6-7 dígitos)
+DESC_CUENTA: Descripción detallada de la cuenta
+LINEA_CDR: Vinculación con líneas del Cuadro de Resultados
+EMPRESA_ID: Entidad legal (siempre 1)
 
 Clasificación por Familias:
 
@@ -540,16 +550,16 @@ Uso en el Sistema: Referencia para contabilización automática de gastos e ingr
 
 
 
-**5. MAESTRO\_GESTORES**
+**5. MAESTRO_GESTORES**
 
 Propósito: Catálogo del equipo comercial con especialización por segmento y ubicación geográfica.
 
 Estructura y Lógica:
 
-GESTOR\_ID: Identificador único (1-30)
-DESC\_GESTOR: Nombre completo del gestor
+GESTOR_ID: Identificador único (1-30)
+DESC_GESTOR: Nombre completo del gestor
 CENTRO: Centro de trabajo (1-5)
-SEGMENTO\_ID: Especialización comercial exclusiva
+SEGMENTO_ID: Especialización comercial exclusiva
 
 Distribución por Centro:
 
@@ -565,14 +575,14 @@ Uso en el Sistema: Base para análisis de productividad comercial, cálculo de i
 
 
 
-**6. MAESTRO\_LINEA\_CDR**
+**6. MAESTRO_LINEA_CDR**
 
 Propósito: Estructura del Cuadro de Resultados (P\&L) para reporting ejecutivo automático.
 
 Estructura y Lógica:
 
-COD\_LINEA\_CDR: Código único de línea (formato CRxxxx)
-DES\_LINEA\_CDR: Descripción de la partida contable
+COD_LINEA_CDR: Código único de línea (formato CRxxxx)
+DES_LINEA_CDR: Descripción de la partida contable
 
 Jerarquía del P\&L:
 
@@ -591,18 +601,18 @@ CR0030: MARGEN APORTADO
 Uso en el Sistema: Generación automática de Business Reviews, drill-down desde visión consolidada hasta detalle por gestor/producto.
 
 
-**7. MAESTRO\_PRODUCTOS**
+**7. MAESTRO_PRODUCTOS**
 
 Propósito: Catálogo de productos financieros con configuración de modelos de negocio.
 
 Estructura y Lógica:
 
-PRODUCTO\_ID: Código único de 12 dígitos
-DESC\_PRODUCTO: Denominación comercial
-IND\_FABRICA: Indicador de modelo de distribución (0/1)
+PRODUCTO_ID: Código único de 12 dígitos
+DESC_PRODUCTO: Denominación comercial
+IND_FABRICA: Indicador de modelo de distribución (0/1)
 FABRICA: Porcentaje de comisión para la gestora (0.0-0.85)
 BANCO: Porcentaje de comisión para el banco (0.15-1.0)
-EMPRESA\_ID: Entidad legal (siempre 1)
+EMPRESA_ID: Entidad legal (siempre 1)
 
 Productos Disponibles:
 
@@ -613,15 +623,15 @@ Productos Disponibles:
 Uso en el Sistema: Base para cálculo de precios estándar y reales, análisis de contribución marginal y optimización de mix de productos.
 
 
-**8. MAESTRO\_SEGMENTOS**
+**8. MAESTRO_SEGMENTOS**
 
 Propósito: Clasificación estratégica de la cartera por tipología de cliente.
 
 Estructura y Lógica:
 
-SEGMENTO\_ID: Código único (formato Nxxxxx)
-DESC\_SEGMENTO: Descripción del perfil de cliente
-EMPRESA\_ID: Entidad legal (siempre 1)
+SEGMENTO_ID: Código único (formato Nxxxxx)
+DESC_SEGMENTO: Descripción del perfil de cliente
+EMPRESA_ID: Entidad legal (siempre 1)
 
 Segmentos Definidos:
 
@@ -635,18 +645,18 @@ Uso en el Sistema: Segmentación para pricing diferencial, análisis de rentabil
 
 🔗 Relaciones Clave entre Tablas Maestras
 
-MAESTRO\_CONTRATOS es la tabla central que conecta:
-Cliente (MAESTRO\_CLIENTES)
-Gestor (MAESTRO\_GESTORES)
-Producto (MAESTRO\_PRODUCTOS)
-Centro (MAESTRO\_CENTRO)
+MAESTRO_CONTRATOS es la tabla central que conecta:
+Cliente (MAESTRO_CLIENTES)
+Gestor (MAESTRO_GESTORES)
+Producto (MAESTRO_PRODUCTOS)
+Centro (MAESTRO_CENTRO)
 
-MAESTRO\_GESTORES vincula segmentos con centros:
+MAESTRO_GESTORES vincula segmentos con centros:
 
 Cada gestor pertenece a un centro específico
 Cada gestor se especializa en un segmento único
 
-MAESTRO\_CENTRO clasifica la estructura organizativa:
+MAESTRO_CENTRO clasifica la estructura organizativa:
 
 Centros finalistas (1-5) con contratos directos
 Centros de soporte (6-8) con redistribución de gastos
@@ -654,15 +664,15 @@ Centros de soporte (6-8) con redistribución de gastos
 Esta arquitectura permite trazabilidad completa desde cualquier gasto hasta el cliente final, pasando por gestor, producto y segmento, proporcionando la base para el análisis de rentabilidad integral del Agente CDG.
 
 
-**9. GASTOS\_CENTRO**
+**9. GASTOS_CENTRO**
 
 Propósito: Registro mensual de gastos directos por centro de coste, columna vertebral del sistema de cálculo de precios reales.
 
-Estructura y Lógica según BM\_CONTABILIDAD\_CDG.db:
+Estructura y Lógica según BM_CONTABILIDAD_CDG.db:
 
 EMPRESA: Entidad legal (siempre 1)
-CENTRO\_CONTABLE: Centro que registra el gasto (1-8)
-CONCEPTO\_COSTE: Naturaleza del gasto
+CENTRO_CONTABLE: Centro que registra el gasto (1-8)
+CONCEPTO_COSTE: Naturaleza del gasto
 FECHA: Período de imputación mensual
 IMPORTE: Valor monetario del gasto en euros
 
@@ -680,13 +690,13 @@ Octubre 2025: €222,718 (post-redistribución automática de centrales)
 
 Lógica de Redistribución Automática: El sistema redistribuye automáticamente los gastos de centros de soporte (6-8) hacia centros finalistas (1-5) usando la fórmula:
 
-Gasto\_Redistribuido\_Centro\_i = Gasto\_Central\_Total × (Contratos\_Centro\_i / Total\_Contratos\_Finalistas)
+Gasto_Redistribuido_Centro_i = Gasto_Central_Total × (Contratos_Centro_i / Total_Contratos_Finalistas)
 
-**10. MOVIMIENTOS\_CONTRATOS**
+**10. MOVIMIENTOS_CONTRATOS**
 
 📋 Contexto y Propósito Organizacional
 
-La tabla MOVIMIENTOS\_CONTRATOS constituye el motor transaccional de Banca March, registrando en tiempo real cada operación financiera que genera valor económico en la entidad. Desde la perspectiva organizacional, esta tabla funciona como el libro mayor digital que captura toda la actividad comercial y operativa, proporcionando trazabilidad completa desde cada euro hasta el contrato específico que lo origina.
+La tabla MOVIMIENTOS_CONTRATOS constituye el motor transaccional de Banca March, registrando en tiempo real cada operación financiera que genera valor económico en la entidad. Desde la perspectiva organizacional, esta tabla funciona como el libro mayor digital que captura toda la actividad comercial y operativa, proporcionando trazabilidad completa desde cada euro hasta el contrato específico que lo origina.
 
 Banca March utiliza esta tabla para mantener un control exhaustivo de la rentabilidad real de cada línea de negocio, permitiendo que tanto la Dirección Financiera como los gestores comerciales puedan evaluar en tiempo real el rendimiento de sus carteras de clientes.
 
@@ -698,7 +708,7 @@ Usuarios Principales:
 
 Gestores Comerciales: Consultan diariamente la rentabilidad generada por sus contratos específicos, permitiendo optimizar su estrategia de cross-selling y priorizar clientes más rentables.
 
-Control de Gestión: Analiza mensualmente estos movimientos para calcular el PRECIO\_POR\_PRODUCTO\_REAL, identificando desviaciones respecto a los estándares presupuestarios.
+Control de Gestión: Analiza mensualmente estos movimientos para calcular el PRECIO_POR_PRODUCTO_REAL, identificando desviaciones respecto a los estándares presupuestarios.
 
 Auditoría Interna: Realiza trazabilidad completa de ingresos y gastos desde el consolidado hasta la transacción individual.
 
@@ -707,16 +717,16 @@ Auditoría Interna: Realiza trazabilidad completa de ingresos y gastos desde el 
 
 Campos de la Tabla:
 
-MOVIMIENTO\_ID: Identificador único secuencial de cada transacción
-EMPRESA\_ID: Entidad legal (siempre 1 para Banca March)
+MOVIMIENTO_ID: Identificador único secuencial de cada transacción
+EMPRESA_ID: Entidad legal (siempre 1 para Banca March)
 FECHA: Fecha valor de la operación (registro diario en tiempo real)
-CONTRATO\_ID: Contrato origen del movimiento (NULL para gastos centrales)
-CENTRO\_CONTABLE: Centro que registra la operación (1-8)
-CUENTA\_ID: Cuenta contable específica según plan de cuentas
+CONTRATO_ID: Contrato origen del movimiento (NULL para gastos centrales)
+CENTRO_CONTABLE: Centro que registra la operación (1-8)
+CUENTA_ID: Cuenta contable específica según plan de cuentas
 DIVISA: Moneda de la operación (EUR para todas las transacciones)
 IMPORTE: Valor monetario (positivo=ingreso, negativo=gasto)
-LINEA\_CUENTA\_RESULTADOS: Clasificación automática en el P\&L
-CONCEPTO\_GESTION: Descripción operativa para análisis de gestión
+LINEA_CUENTA_RESULTADOS: Clasificación automática en el P\&L
+CONCEPTO_GESTION: Descripción operativa para análisis de gestión
 
 🏦 Tipología de Movimientos desde la Perspectiva de Banca March
 
@@ -797,7 +807,7 @@ Frecuencia: Mensual sobre volumen de depósitos garantizados
 Impacto P\&L: Línea CR001301 (Fondos de garantía)
 
 
-C. GASTOS OPERATIVOS SIN CONTRATO (CONTRATO\_ID = NULL)
+C. GASTOS OPERATIVOS SIN CONTRATO (CONTRATO_ID = NULL)
 
 Gastos de Centros Centrales:
 
@@ -893,7 +903,7 @@ Día 4: Análisis de ingresos netos por contrato y gestor
 
 
 
-Día 5: Integración en cálculo de PRECIO\_POR\_PRODUCTO\_REAL
+Día 5: Integración en cálculo de PRECIO_POR_PRODUCTO_REAL
 
 
 
@@ -943,23 +953,23 @@ El sistema permite el paso de un modelo de gestión basado en intuición a uno b
 
 Preguntas relacionadas
 
-Cuáles son los tipos de movimientos que engloba la tabla MOVIMIENTOS\_CONTRATOS desde la banca
+Cuáles son los tipos de movimientos que engloba la tabla MOVIMIENTOS_CONTRATOS desde la banca
 
-Cómo refleja la tabla MOVIMIENTOS\_CONTRATOS la operativa específica de Banca March
+Cómo refleja la tabla MOVIMIENTOS_CONTRATOS la operativa específica de Banca March
 
-Qué funciones cumple la tabla MOVIMIENTOS\_CONTRATOS en el control de contratos bancarios
+Qué funciones cumple la tabla MOVIMIENTOS_CONTRATOS en el control de contratos bancarios
 
 Qué impacto tienen los distintos movimientos en la rentabilidad y gestión de Banca March
 
-De qué manera facilita la vista de movimientos en MOVIMIENTOS\_CONTRATOS la toma de decisiones en la banca
+De qué manera facilita la vista de movimientos en MOVIMIENTOS_CONTRATOS la toma de decisiones en la banca
 
 
 
-**11. PRECIO\_POR\_PRODUCTO\_STD**
+**11. PRECIO_POR_PRODUCTO_STD**
 
 📋 Contexto y Propósito Estratégico
 
-La tabla PRECIO\_POR\_PRODUCTO\_STD constituye el corazón del sistema de pricing presupuestario de Banca March, diseñada específicamente para proporcionar a los gestores comerciales una referencia clara y objetiva del coste que representa cada producto financiero para la entidad. Esta tabla es el resultado directo del proceso anual de presupuestación que lleva a cabo la Dirección Financiera en colaboración con las áreas de Control de Gestión, Riesgos y Planificación Estratégica.
+La tabla PRECIO_POR_PRODUCTO_STD constituye el corazón del sistema de pricing presupuestario de Banca March, diseñada específicamente para proporcionar a los gestores comerciales una referencia clara y objetiva del coste que representa cada producto financiero para la entidad. Esta tabla es el resultado directo del proceso anual de presupuestación que lleva a cabo la Dirección Financiera en colaboración con las áreas de Control de Gestión, Riesgos y Planificación Estratégica.
 
 
 
@@ -991,15 +1001,15 @@ Campos de la Tabla:
 
 
 
-SEGMENTO\_ID: Tipología de cliente especializada del gestor (N10101, N10102, N10103, N10104, N20301)
+SEGMENTO_ID: Tipología de cliente especializada del gestor (N10101, N10102, N10103, N10104, N20301)
 
 
 
-PRODUCTO\_ID: Código único del producto financiero (100100100100, 400200100100, 600100300300)
+PRODUCTO_ID: Código único del producto financiero (100100100100, 400200100100, 600100300300)
 
 
 
-PRECIO\_MANTENIMIENTO: Coste estándar unitario por contrato expresado en valores negativos (representa coste para el banco)
+PRECIO_MANTENIMIENTO: Coste estándar unitario por contrato expresado en valores negativos (representa coste para el banco)
 
 
 
@@ -1007,7 +1017,7 @@ ANNO: Ejercicio presupuestario de vigencia (2025)
 
 
 
-FECHA\_ACTUALIZACION: Fecha de la última actualización presupuestaria (2025-01-01)
+FECHA_ACTUALIZACION: Fecha de la última actualización presupuestaria (2025-01-01)
 
 
 
@@ -1185,31 +1195,31 @@ Campos de la Tabla:
 
 
 
-SEGMENTO\_ID: Clasificación de cliente (N10101, N10102, N10103, N10104, N20301)
+SEGMENTO_ID: Clasificación de cliente (N10101, N10102, N10103, N10104, N20301)
 
 
 
-PRODUCTO\_ID: Código único del producto financiero (100100100100, 400200100100, 600100300300)
+PRODUCTO_ID: Código único del producto financiero (100100100100, 400200100100, 600100300300)
 
 
 
-PRECIO\_MANTENIMIENTO\_REAL: Coste real calculado por contrato (valores negativos = coste para el banco)
+PRECIO_MANTENIMIENTO_REAL: Coste real calculado por contrato (valores negativos = coste para el banco)
 
 
 
-FECHA\_CALCULO: Período mensual de referencia (2025-09-01, 2025-10-01, etc.)
+FECHA_CALCULO: Período mensual de referencia (2025-09-01, 2025-10-01, etc.)
 
 
 
-NUM\_CONTRATOS\_BASE: Número de contratos activos utilizados como denominador del cálculo
+NUM_CONTRATOS_BASE: Número de contratos activos utilizados como denominador del cálculo
 
 
 
-GASTOS\_TOTALES\_ASIGNADOS: Importe total de gastos asignados al producto-segmento
+GASTOS_TOTALES_ASIGNADOS: Importe total de gastos asignados al producto-segmento
 
 
 
-COSTE\_UNITARIO\_CALCULADO: Valor absoluto del precio para facilitar análisis comparativos
+COSTE_UNITARIO_CALCULADO: Valor absoluto del precio para facilitar análisis comparativos
 
 
 
@@ -1223,15 +1233,15 @@ Fase 1: Consolidación de Datos Base (Días 1-3 del mes)
 
 
 
-Cierre contable mensual de la tabla GASTOS\_CENTRO con todos los gastos por centro de coste
+Cierre contable mensual de la tabla GASTOS_CENTRO con todos los gastos por centro de coste
 
 
 
-Consolidación de MOVIMIENTOS\_CONTRATOS con toda la actividad transaccional del período
+Consolidación de MOVIMIENTOS_CONTRATOS con toda la actividad transaccional del período
 
 
 
-Validación de la tabla MAESTRO\_CONTRATOS con el censo actualizado de contratos activos
+Validación de la tabla MAESTRO_CONTRATOS con el censo actualizado de contratos activos
 
 
 
@@ -1243,7 +1253,7 @@ Los gastos de los centros de soporte (6-8: RRHH, Dirección Financiera, Tecnolog
 
 
 
-Gasto\_Redistribuido\_Centro\_i = Gastos\_Centrales\_Total × (Contratos\_Centro\_i / Total\_Contratos\_Finalistas)
+Gasto_Redistribuido_Centro_i = Gastos_Centrales_Total × (Contratos_Centro_i / Total_Contratos_Finalistas)
 
 
 
@@ -1261,7 +1271,7 @@ Cada combinación segmento-producto recibe una asignación de gasto basada en la
 
 
 
-Gasto\_Producto = Σ(Coste\_Unitario\_Centro\_i × Contratos\_Producto\_Centro\_i)
+Gasto_Producto = Σ(Coste_Unitario_Centro_i × Contratos_Producto_Centro_i)
 
 
 
@@ -1271,7 +1281,7 @@ El precio final se obtiene dividiendo el gasto total asignado entre el número d
 
 
 
-PRECIO\_MANTENIMIENTO\_REAL = -(Gasto\_Producto / Total\_Contratos\_Producto)
+PRECIO_MANTENIMIENTO_REAL = -(Gasto_Producto / Total_Contratos_Producto)
 
 
 
@@ -1291,7 +1301,7 @@ Tolerancia de redondeo: Diferencia absoluta < €1.00
 
 
 
-Análisis de coherencia: Variaciones mes-mes dentro de banda esperada \[-20%, +10%]
+Análisis de coherencia: Variaciones mes-mes dentro de banda esperada [-20%, +10%]
 
 
 

@@ -1,8 +1,8 @@
 // src/components/Analytics/DrillDownView.jsx
-// Vista drill-down crítica para navegación desde consolidado hasta transacción individual
+// Análisis de drill-down jerárquico - CORREGIDO para backend Banca March
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Table, Breadcrumb, Button, Space, Tooltip, Tag, Descriptions, Row, Col } from 'antd';
+import { Card, Table, Breadcrumb, Button, Space, Tooltip, Tag, Descriptions, Row, Col, message } from 'antd';
 import { 
   ArrowLeftOutlined, 
   FileTextOutlined,
@@ -91,7 +91,7 @@ const DrillDownView = ({
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [chartData, setChartData] = useState([]);
 
-  // Cargar datos según el nivel actual
+  // ✅ CORREGIDO: Cargar datos según el nivel actual con campos en mayúsculas
   const loadLevelData = useCallback(async () => {
     setLoading(true);
     try {
@@ -101,7 +101,7 @@ const DrillDownView = ({
       switch (currentLevel) {
         case DRILL_LEVELS.CONSOLIDATED:
           // Vista consolidada - ranking de gestores
-          response = await api.getComparativeRanking(currentPeriod, 'margen_neto');
+          response = await api.getComparativeRanking(currentPeriod, 'MARGEN_NETO');
           if (response.data) {
             setData(response.data.ranking || []);
             prepareConsolidatedChartData(response.data.ranking || []);
@@ -110,10 +110,11 @@ const DrillDownView = ({
 
         case DRILL_LEVELS.CENTER:
           // Vista por centro - gestores del centro
-          response = await api.getComparativeRanking(currentPeriod, 'margen_neto');
+          response = await api.getComparativeRanking(currentPeriod, 'MARGEN_NETO');
           if (response.data && context.centroId) {
             const centerData = response.data.ranking.filter(
-              item => item.centro_id === context.centroId || item.desc_centro === context.centroName
+              item => (item.CENTRO_ID || item.centro_id) === context.centroId || 
+                       (item.DESC_CENTRO || item.desc_centro) === context.centroName
             );
             setData(centerData);
             prepareManagerChartData(centerData);
@@ -125,37 +126,76 @@ const DrillDownView = ({
           if (context.gestorId) {
             response = await api.getGestorPerformance(context.gestorId, currentPeriod);
             if (response.data) {
-              const gestorData = [response.data.gestor];
-              setData(gestorData);
-              prepareGestorChartData(response.data.kpis);
+              // Para mostrar datos del gestor y sus clientes
+              try {
+                const clientesResponse = await api.getClientesPorGestor(context.gestorId);
+                if (clientesResponse.data) {
+                  setData(clientesResponse.data.clientes || []);
+                }
+              } catch (error) {
+                console.warn('Endpoint getClientesPorGestor no disponible, usando datos mock');
+                setData(generateMockClientData(context.gestorId));
+              }
+              prepareGestorChartData(response.data.kpis || {});
             }
           }
           break;
 
         case DRILL_LEVELS.CLIENT:
-          // Simular datos de clientes del gestor
-          // En producción vendría de un endpoint específico
-          setData(generateMockClientData(context.gestorId));
+          // Obtener clientes del gestor
+          if (context.gestorId) {
+            try {
+              response = await api.getClientesPorGestor(context.gestorId);
+              if (response.data) {
+                setData(response.data.clientes || []);
+              }
+            } catch (error) {
+              console.warn('Endpoint getClientesPorGestor no disponible, usando datos mock');
+              setData(generateMockClientData(context.gestorId));
+            }
+          }
           break;
 
         case DRILL_LEVELS.CONTRACT:
-          // Simular contratos del cliente
-          // En producción vendría de MAESTROCONTRATOS filtrado
-          setData(generateMockContractData(context.clienteId));
+          // Obtener contratos del cliente
+          if (context.clienteId) {
+            try {
+              response = await api.getContratosPorCliente(context.clienteId);
+              if (response.data) {
+                setData(response.data.contratos || []);
+              }
+            } catch (error) {
+              console.warn('Endpoint getContratosPorCliente no disponible, usando datos mock');
+              setData(generateMockContractData(context.clienteId));
+            }
+          }
           break;
 
         case DRILL_LEVELS.TRANSACTION:
-          // Simular movimientos del contrato
-          // En producción vendría de MOVIMIENTOSCONTRATOS filtrado
-          setData(generateMockTransactionData(context.contratoId));
+          // Obtener movimientos del contrato
+          if (context.contratoId) {
+            try {
+              response = await api.getMovimientosPorContrato(context.contratoId);
+              if (response.data) {
+                setData(response.data.movimientos || []);
+              }
+            } catch (error) {
+              console.warn('Endpoint getMovimientosPorContrato no disponible, usando datos mock');
+              setData(generateMockTransactionData(context.contratoId));
+            }
+          }
           break;
 
         default:
+          // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
+          console.warn('Nivel de drill-down no reconocido:', currentLevel);
           setData([]);
+          break;
       }
 
     } catch (error) {
       console.error('Error cargando datos de drill-down:', error);
+      message.error('Error al cargar los datos del drill-down');
     } finally {
       setLoading(false);
     }
@@ -166,7 +206,7 @@ const DrillDownView = ({
     loadLevelData();
   }, [loadLevelData]);
 
-  // Función para navegar a un nivel más profundo
+  // ✅ CORREGIDO: Función para navegar a un nivel más profundo con campos correctos
   const drillDown = (record) => {
     let newLevel;
     let newContext = { ...context };
@@ -176,8 +216,8 @@ const DrillDownView = ({
         newLevel = DRILL_LEVELS.CENTER;
         newContext = {
           ...newContext,
-          centroId: record.centro_id,
-          centroName: record.desc_centro
+          centroId: record.CENTRO_ID || record.centro_id,
+          centroName: record.DESC_CENTRO || record.desc_centro
         };
         break;
 
@@ -185,8 +225,8 @@ const DrillDownView = ({
         newLevel = DRILL_LEVELS.MANAGER;
         newContext = {
           ...newContext,
-          gestorId: record.gestor_id,
-          gestorName: record.desc_gestor
+          gestorId: record.GESTOR_ID || record.gestor_id,
+          gestorName: record.DESC_GESTOR || record.desc_gestor
         };
         break;
 
@@ -217,6 +257,8 @@ const DrillDownView = ({
         break;
 
       default:
+        // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
+        console.warn('No se puede hacer drill-down desde el nivel:', currentLevel);
         return;
     }
 
@@ -262,6 +304,10 @@ const DrillDownView = ({
       case DRILL_LEVELS.CONTRACT:
         delete newContext.movimientoId;
         break;
+      default:
+        // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
+        console.warn('Nivel objetivo no reconocido:', targetLevel);
+        break;
     }
 
     setCurrentLevel(targetLevel);
@@ -273,32 +319,30 @@ const DrillDownView = ({
     }
   };
 
-  // Funciones para preparar datos de gráficos
+  // ✅ CORREGIDO: Funciones para preparar datos de gráficos con campos correctos
   const prepareConsolidatedChartData = (data) => {
     const chartData = data.slice(0, 10).map(item => ({
-      desc_gestor: item.desc_gestor || 'Gestor',
-      margen_neto: item.margen_neto || 0,
-      roe: item.roe || 0,
-      eficiencia: item.eficiencia || 75
+      DESC_GESTOR: item.DESC_GESTOR || item.desc_gestor || 'Gestor',
+      MARGEN_NETO: item.MARGEN_NETO || item.margen_neto || 0,
+      ROE: item.ROE || item.roe || 0
     }));
     setChartData(chartData);
   };
 
   const prepareManagerChartData = (data) => {
     const chartData = data.map(item => ({
-      desc_gestor: item.desc_gestor || 'Gestor',
-      margen_neto: item.margen_neto || 0,
-      roe: item.roe || 0
+      DESC_GESTOR: item.DESC_GESTOR || item.desc_gestor || 'Gestor',
+      MARGEN_NETO: item.MARGEN_NETO || item.margen_neto || 0,
+      ROE: item.ROE || item.roe || 0
     }));
     setChartData(chartData);
   };
 
   const prepareGestorChartData = (kpis) => {
     const chartData = [{
-      metric: 'KPIs',
-      margen_neto: kpis.margen_neto || 0,
-      roe: kpis.roe || 0,
-      eficiencia: kpis.eficiencia || 75
+      DESC_GESTOR: 'KPIs',
+      MARGEN_NETO: kpis.MARGEN_NETO || kpis.margen_neto || 0,
+      ROE: kpis.ROE || kpis.roe || 0
     }];
     setChartData(chartData);
   };
@@ -383,14 +427,14 @@ const DrillDownView = ({
     ];
   };
 
-  // Configuración de columnas según nivel
+  // ✅ CORREGIDO: Configuración de columnas según nivel con campos correctos
   const getTableColumns = () => {
     switch (currentLevel) {
       case DRILL_LEVELS.CONSOLIDATED:
         return [
           {
             title: 'Centro',
-            dataIndex: 'desc_centro',
+            dataIndex: 'DESC_CENTRO',
             key: 'centro',
             ellipsis: true,
             render: (text, record) => (
@@ -399,29 +443,30 @@ const DrillDownView = ({
                 onClick={() => drillDown(record)}
                 style={{ color: theme.colors.bmGreenPrimary, padding: 0 }}
               >
-                <BankOutlined /> {text}
+                <BankOutlined /> {text || record.desc_centro}
               </Button>
             ),
           },
           {
             title: 'Gestor',
-            dataIndex: 'desc_gestor',
+            dataIndex: 'DESC_GESTOR',
             key: 'gestor',
             ellipsis: true,
+            render: (text, record) => text || record.desc_gestor,
           },
           {
             title: 'Margen Neto (%)',
-            dataIndex: 'margen_neto',
+            dataIndex: 'MARGEN_NETO',
             key: 'margen_neto',
-            render: (value) => `${(value || 0).toFixed(2)}%`,
-            sorter: (a, b) => (a.margen_neto || 0) - (b.margen_neto || 0),
+            render: (value, record) => `${((value || record.margen_neto) || 0).toFixed(2)}%`,
+            sorter: (a, b) => ((a.MARGEN_NETO || a.margen_neto) || 0) - ((b.MARGEN_NETO || b.margen_neto) || 0),
           },
           {
             title: 'ROE (%)',
-            dataIndex: 'roe',
+            dataIndex: 'ROE',
             key: 'roe',
-            render: (value) => `${(value || 0).toFixed(2)}%`,
-            sorter: (a, b) => (a.roe || 0) - (b.roe || 0),
+            render: (value, record) => `${((value || record.roe) || 0).toFixed(2)}%`,
+            sorter: (a, b) => ((a.ROE || a.roe) || 0) - ((b.ROE || b.roe) || 0),
           },
           {
             title: 'Acciones',
@@ -450,7 +495,7 @@ const DrillDownView = ({
         return [
           {
             title: 'Gestor',
-            dataIndex: 'desc_gestor',
+            dataIndex: 'DESC_GESTOR',
             key: 'gestor',
             render: (text, record) => (
               <Button
@@ -458,27 +503,28 @@ const DrillDownView = ({
                 onClick={() => drillDown(record)}
                 style={{ color: theme.colors.bmGreenPrimary, padding: 0 }}
               >
-                <UserOutlined /> {text}
+                <UserOutlined /> {text || record.desc_gestor}
               </Button>
             ),
           },
           {
             title: 'Segmento',
-            dataIndex: 'desc_segmento',
+            dataIndex: 'DESC_SEGMENTO',
             key: 'segmento',
             ellipsis: true,
+            render: (text, record) => text || record.desc_segmento,
           },
           {
             title: 'Margen Neto (%)',
-            dataIndex: 'margen_neto',
+            dataIndex: 'MARGEN_NETO',
             key: 'margen_neto',
-            render: (value) => `${(value || 0).toFixed(2)}%`,
+            render: (value, record) => `${((value || record.margen_neto) || 0).toFixed(2)}%`,
           },
           {
             title: 'Total Ingresos',
-            dataIndex: 'total_ingresos',
+            dataIndex: 'TOTAL_INGRESOS',
             key: 'ingresos',
-            render: (value) => `€${(value || 0).toLocaleString()}`,
+            render: (value, record) => `€${((value || record.total_ingresos) || 0).toLocaleString()}`,
           },
           {
             title: 'Acciones',
@@ -690,6 +736,8 @@ const DrillDownView = ({
         ];
 
       default:
+        // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
+        console.warn('Configuración de columnas no disponible para el nivel:', currentLevel);
         return [];
     }
   };
@@ -697,15 +745,6 @@ const DrillDownView = ({
   // Renderizar título según nivel
   const renderTitle = () => {
     const icons = {
-      [DRILL_LEVELS.CONSOLIDATED]: '🏦',
-      [DRILL_LEVELS.CENTER]: '🏢',
-      [DRILL_LEVELS.MANAGER]: '👨‍💼',
-      [DRILL_LEVELS.CLIENT]: '👤',
-      [DRILL_LEVELS.CONTRACT]: '📄',
-      [DRILL_LEVELS.TRANSACTION]: '💰'
-    };
-
-    const titles = {
       [DRILL_LEVELS.CONSOLIDATED]: 'Vista Consolidada - Todos los Centros',
       [DRILL_LEVELS.CENTER]: `Centro: ${context.centroName || context.centroId}`,
       [DRILL_LEVELS.MANAGER]: `Gestor: ${context.gestorName || context.gestorId}`,
@@ -714,7 +753,7 @@ const DrillDownView = ({
       [DRILL_LEVELS.TRANSACTION]: `Movimientos del Contrato ${context.contratoId}`
     };
 
-    return `${icons[currentLevel]} ${titles[currentLevel]}`;
+    return icons[currentLevel] || 'Vista no definida';
   };
 
   return (
@@ -763,7 +802,7 @@ const DrillDownView = ({
             Volver
           </Button>
         }
-        bordered={false}
+        variant="outlined"
         style={{ 
           borderRadius: 8,
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
@@ -784,7 +823,7 @@ const DrillDownView = ({
       {chartData.length > 0 && (
         <InteractiveCharts
           data={chartData}
-          availableKpis={['margen_neto', 'roe', 'eficiencia']}
+          availableKpis={['MARGEN_NETO', 'ROE']}
           title={`Análisis Visual - ${renderTitle()}`}
           description="Visualización de datos del nivel actual de drill-down"
         />
@@ -793,7 +832,7 @@ const DrillDownView = ({
       {/* Tabla principal con datos del nivel actual */}
       <Card
         title={`Detalle (${data.length} elementos)`}
-        bordered={false}
+        variant="outlined"
         style={{
           borderRadius: 8,
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
@@ -813,11 +852,11 @@ const DrillDownView = ({
           scroll={{ x: 'max-content' }}
           size="small"
           rowKey={(record) => 
-            record.gestor_id || 
+            record.GESTOR_ID || record.gestor_id ||
             record.cliente_id || 
             record.contrato_id || 
             record.movimiento_id || 
-            Math.random()
+            `row-${Math.random()}`
           }
         />
       </Card>

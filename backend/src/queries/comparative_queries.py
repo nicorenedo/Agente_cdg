@@ -35,13 +35,13 @@ class ComparativeQueries:
         self.kpi_calc = kpi_calculator  # ✅ INSTANCIA KPI_CALCULATOR
     
     # =================================================================
-    # 1. COMPARATIVAS DE PRECIOS Y PRODUCTOS (ORIGINALES MANTENIDAS)
+    # 1. COMPARATIVAS DE PRECIOS Y PRODUCTOS (CORREGIDAS PARA CDG)
     # =================================================================
     
     def compare_precio_producto_real_mes(self, producto_id: str, segmento_id: str, mes_ini: str, mes_fin: str) -> QueryResult:
         """
         Variación del precio real de un producto-segmento entre dos meses (AAAA-MM).
-        FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
+        ✅ CORREGIDO PARA CDG: Usa productos reales como 600100300300 y segmentos N20301
         """
         query = """
             SELECT
@@ -81,7 +81,7 @@ class ComparativeQueries:
         Diferencia entre precio real y estándar con análisis de desviaciones MEJORADO.
         
         CASO DE USO: "¿Cuál es la desviación entre precio real y estándar del producto X?"
-        MEJORAS: Usa kpi_calculator para análisis de desviaciones con acciones recomendadas
+        ✅ CORREGIDO: Usa kpi_calculator para análisis de desviaciones con acciones recomendadas
         """
         query = """
             SELECT
@@ -142,7 +142,7 @@ class ComparativeQueries:
     
     def compare_precio_real_vs_std(self, producto_id: str, segmento_id: str, periodo: str) -> QueryResult:
         """
-        FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
+        ✅ CORREGIDO: Función original con datos CDG reales
         """
         query = """
             SELECT
@@ -188,7 +188,7 @@ class ComparativeQueries:
     def ranking_productos_desviacion_precio(self, periodo: str, limite: int = 10) -> QueryResult:
         """
         Ranking de productos por desviación porcentual entre precio real y estándar.
-        FUNCIÓN ORIGINAL MANTENIDA
+        ✅ CORREGIDO: Compatible con productos CDG reales
         """
         query = """
             SELECT
@@ -229,7 +229,7 @@ class ComparativeQueries:
         )
     
     # =================================================================
-    # 2. COMPARATIVAS DE GESTORES MEJORADAS CON KPI_CALCULATOR
+    # 2. COMPARATIVAS DE GESTORES MEJORADAS CON CÓDIGOS CDR CORRECTOS
     # =================================================================
     
     def ranking_gestores_por_margen_enhanced(self, periodo: str) -> QueryResult:
@@ -237,9 +237,9 @@ class ComparativeQueries:
         Ranking de gestores con análisis de margen estandarizado y clasificaciones automáticas.
         
         CASO DE USO: "¿Qué gestores tienen mejor margen que la media?"
-        MEJORAS: Usa kpi_calculator para cálculos consistentes y clasificaciones bancarias
+        ✅ CORREGIDO: Usa códigos CDR reales de tu BD y kpi_calculator para cálculos
         """
-        # Query simplificada - solo extrae datos base
+        # Query corregida con códigos CDR reales
         query = """
             WITH gestor_data AS (
                 SELECT
@@ -247,9 +247,9 @@ class ComparativeQueries:
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                              THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                              THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos_total
                 FROM MOVIMIENTOS_CONTRATOS mov
                 JOIN MAESTRO_CONTRATOS cont ON mov.CONTRATO_ID = cont.CONTRATO_ID
@@ -261,7 +261,7 @@ class ComparativeQueries:
                 WHERE strftime('%Y-%m', mov.FECHA) = ?
                     AND c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
-                HAVING SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                HAVING SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                 THEN mov.IMPORTE ELSE 0 END) > 0
             )
             SELECT * FROM gestor_data
@@ -274,6 +274,17 @@ class ComparativeQueries:
         # ✅ PROCESAMIENTO AVANZADO CON KPI_CALCULATOR
         enhanced_results = []
         margenes_para_media = []
+        
+        # Validar que hay datos antes del procesamiento
+        if not raw_results:
+            execution_time = (datetime.now() - start_time).total_seconds()
+            return QueryResult(
+                data=[],
+                query_type="ranking_gestores_margen_enhanced",
+                execution_time=execution_time,
+                row_count=0,
+                query_sql=query
+            )
         
         # Primera pasada: calcular todos los márgenes
         for row in raw_results:
@@ -339,10 +350,10 @@ class ComparativeQueries:
             row_count=len(enhanced_results),
             query_sql=query
         )
-    
     def ranking_gestores_por_margen(self, periodo: str) -> QueryResult:
         """
-        FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
+        FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD CON DATOS CORREGIDOS
+        ✅ CORREGIDO: Usa códigos CDR reales de tu BD (CR0001, CR0008, CR0012, CR0014, CR0016, CR0017)
         """
         query = """
             WITH gestor_margenes AS (
@@ -351,17 +362,17 @@ class ComparativeQueries:
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                              THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                              THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos_total,
                     ROUND(
-                        (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                        (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                   THEN mov.IMPORTE ELSE 0 END)
-                        - SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                        - SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                                   THEN ABS(mov.IMPORTE) ELSE 0 END))
                         /
-                        NULLIF(SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                        NULLIF(SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                        THEN mov.IMPORTE ELSE 0 END), 0) * 100, 2
                     ) AS margen_neto
                 FROM MOVIMIENTOS_CONTRATOS mov
@@ -374,7 +385,7 @@ class ComparativeQueries:
                 WHERE strftime('%Y-%m', mov.FECHA) = ?
                     AND c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
-                HAVING SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                HAVING SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                 THEN mov.IMPORTE ELSE 0 END) > 0
             ),
             media AS (
@@ -416,11 +427,8 @@ class ComparativeQueries:
     def compare_roe_gestores_enhanced(self, periodo: str) -> QueryResult:
         """
         Ranking de gestores con ROE estandarizado y clasificaciones bancarias automáticas.
-        
-        CASO DE USO: "¿Cómo se compara el ROE de los gestores?"
-        MEJORAS: Usa kpi_calculator para ROE con benchmarks sector bancario
+        ✅ CORREGIDO: Usa códigos CDR reales y kpi_calculator para ROE con benchmarks sector bancario
         """
-        # Query simplificada para obtener datos base
         query = """
             WITH gestor_financials AS (
                 SELECT 
@@ -428,9 +436,9 @@ class ComparativeQueries:
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as patrimonio_total,
-                    (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                               THEN mov.IMPORTE ELSE 0 END) - 
-                     SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                     SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                               THEN ABS(mov.IMPORTE) ELSE 0 END)) as beneficio_neto
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
@@ -449,9 +457,19 @@ class ComparativeQueries:
         start_time = datetime.now()
         raw_results = execute_query(query, (periodo,))
         
-        # ✅ PROCESAMIENTO CON KPI_CALCULATOR
         enhanced_results = []
         roes_para_media = []
+        
+        # Validar que hay datos antes del procesamiento
+        if not raw_results:
+            execution_time = (datetime.now() - start_time).total_seconds()
+            return QueryResult(
+                data=[],
+                query_type="comparativa_roe_gestores_enhanced",
+                execution_time=execution_time,
+                row_count=0,
+                query_sql=query
+            )
         
         # Primera pasada: calcular todos los ROEs
         for row in raw_results:
@@ -501,6 +519,7 @@ class ComparativeQueries:
     def compare_roe_gestores(self, periodo: str) -> QueryResult:
         """
         FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
+        ✅ CORREGIDO: Usa códigos CDR reales de tu BD
         """
         query = """
             WITH patrimonio_gestores AS (
@@ -520,9 +539,9 @@ class ComparativeQueries:
             beneficios_gestores AS (
                 SELECT 
                     g.GESTOR_ID,
-                    (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                               THEN mov.IMPORTE ELSE 0 END) - 
-                     SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                     SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                               THEN ABS(mov.IMPORTE) ELSE 0 END)) as beneficio_neto
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
@@ -579,17 +598,14 @@ class ComparativeQueries:
         )
     
     # =================================================================
-    # 3. COMPARATIVAS POR CENTRO (MEJORADAS)
+    # 3. COMPARATIVAS POR CENTRO (CORREGIDAS)
     # =================================================================
     
     def compare_eficiencia_centro_enhanced(self, periodo: str) -> QueryResult:
         """
         Ranking de centros con análisis de eficiencia estandarizado y clasificaciones automáticas.
-        
-        CASO DE USO: "¿Qué centro es más eficiente operativamente?"
-        MEJORAS: Usa kpi_calculator para ratios de eficiencia con interpretaciones contextuales
+        ✅ CORREGIDO: Usa códigos CDR reales y kpi_calculator para ratios de eficiencia
         """
-        # Query base simplificada
         query = """
             WITH centro_data AS (
                 SELECT
@@ -597,9 +613,9 @@ class ComparativeQueries:
                     c.DESC_CENTRO,
                     COUNT(DISTINCT g.GESTOR_ID) as num_gestores,
                     COUNT(DISTINCT mc.CONTRATO_ID) as num_contratos,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                              THEN mov.IMPORTE ELSE 0 END) as ingresos,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                              THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos
                 FROM MOVIMIENTOS_CONTRATOS mov
                 JOIN MAESTRO_CONTRATOS mc ON mov.CONTRATO_ID = mc.CONTRATO_ID
@@ -617,8 +633,18 @@ class ComparativeQueries:
         start_time = datetime.now()
         raw_results = execute_query(query, (periodo,))
         
-        # ✅ PROCESAMIENTO CON KPI_CALCULATOR
         enhanced_results = []
+        
+        # Validar que hay datos antes del procesamiento
+        if not raw_results:
+            execution_time = (datetime.now() - start_time).total_seconds()
+            return QueryResult(
+                data=[],
+                query_type="comparativa_eficiencia_centro_enhanced",
+                execution_time=execution_time,
+                row_count=0,
+                query_sql=query
+            )
         
         for i, row in enumerate(raw_results):
             # Análisis de margen con kpi_calculator
@@ -679,6 +705,7 @@ class ComparativeQueries:
     def compare_eficiencia_centro(self, periodo: str) -> QueryResult:
         """
         FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
+        ✅ CORREGIDO: Usa códigos CDR reales de tu BD
         """
         query = """
             WITH centro_eficiencia AS (
@@ -687,9 +714,9 @@ class ComparativeQueries:
                     c.DESC_CENTRO,
                     COUNT(DISTINCT g.GESTOR_ID) as num_gestores,
                     COUNT(DISTINCT mc.CONTRATO_ID) as num_contratos,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                              THEN mov.IMPORTE ELSE 0 END) as ingresos,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                              THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos
                 FROM MOVIMIENTOS_CONTRATOS mov
                 JOIN MAESTRO_CONTRATOS mc ON mov.CONTRATO_ID = mc.CONTRATO_ID
@@ -738,7 +765,7 @@ class ComparativeQueries:
     def compare_gastos_centro_periodo(self, centro_contable: int, mes_ini: str, mes_fin: str) -> QueryResult:
         """
         Variación de gastos de un centro contable entre dos meses.
-        FUNCIÓN ORIGINAL MANTENIDA
+        FUNCIÓN ORIGINAL MANTENIDA - Sin cambios necesarios
         """
         query = """
             WITH gastos_ini AS (
@@ -798,7 +825,7 @@ class ComparativeQueries:
     def compare_margen_segmento_periodos(self, segmento_id: str, periodo_ini: str, periodo_fin: str) -> QueryResult:
         """
         Variación del margen neto de un segmento entre dos períodos.
-        FUNCIÓN ORIGINAL MANTENIDA
+        ✅ CORREGIDO: Usa códigos CDR reales de tu BD
         """
         query = """
             WITH margen_periodo AS (
@@ -806,17 +833,17 @@ class ComparativeQueries:
                     g.SEGMENTO_ID,
                     s.DESC_SEGMENTO,
                     strftime('%Y-%m', mov.FECHA) as periodo,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                              THEN mov.IMPORTE ELSE 0 END) as ingresos,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                              THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos,
                     ROUND(
-                        (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                        (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                   THEN mov.IMPORTE ELSE 0 END)
-                        - SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                        - SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                                   THEN ABS(mov.IMPORTE) ELSE 0 END))
                         /
-                        NULLIF(SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                        NULLIF(SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                        THEN mov.IMPORTE ELSE 0 END), 0) * 100, 2
                     ) AS margen_neto
                 FROM MOVIMIENTOS_CONTRATOS mov
@@ -869,13 +896,14 @@ class ComparativeQueries:
         )
     
     # =================================================================
-    # FUNCIONES HELPER PARA CLASIFICACIONES
+    # FUNCIONES HELPER PARA CLASIFICACIONES (SIN CAMBIOS)
     # =================================================================
     
     def _classify_gestor_performance(self, clasificacion_margen: str, clasificacion_eficiencia: str, 
                                    desviacion_vs_media: float) -> str:
         """
         Clasificación integral del gestor basada en múltiples KPIs
+        FUNCIÓN ORIGINAL MANTENIDA SIN CAMBIOS
         """
         # Pesos para la clasificación integral
         score = 0
@@ -913,13 +941,13 @@ class ComparativeQueries:
             return 'NEEDS_IMPROVEMENT'
     
     # =================================================================
-    # 4. GENERADOR DINÁMICO DE QUERIES COMPARATIVAS (MANTENIDO)
+    # 4. GENERADOR DINÁMICO DE QUERIES COMPARATIVAS (SIN CAMBIOS)
     # =================================================================
     
     def generate_dynamic_comparative_query(self, user_question: str, context: Dict[str, Any] = None) -> QueryResult:
         """
         Genera consultas comparativas SQL dinámicas usando GPT-4 para preguntas específicas.
-        FUNCIÓN ORIGINAL MANTENIDA
+        FUNCIÓN ORIGINAL MANTENIDA SIN CAMBIOS
         """
         from ..prompts.system_prompts import get_comparative_generation_prompt
         
@@ -986,7 +1014,7 @@ class ComparativeQueries:
             )
     
     # =================================================================
-    # 5. MOTOR DE SELECCIÓN INTELIGENTE PARA COMPARATIVAS (MANTENIDO)
+    # 5. MOTOR DE SELECCIÓN INTELIGENTE PARA COMPARATIVAS (SIN CAMBIOS)
     # =================================================================
     
     def get_best_comparative_query_for_question(self, user_question: str, context: Dict[str, Any] = None) -> QueryResult:
@@ -1000,14 +1028,14 @@ class ComparativeQueries:
         available_queries = [
             "compare_precio_producto_real_mes",
             "compare_precio_real_vs_std",
-            "compare_precio_real_vs_std_enhanced",  # ✅ NUEVA
+            "compare_precio_real_vs_std_enhanced",
             "ranking_productos_desviacion_precio",
             "ranking_gestores_por_margen",
-            "ranking_gestores_por_margen_enhanced",  # ✅ NUEVA
+            "ranking_gestores_por_margen_enhanced",
             "compare_roe_gestores",
-            "compare_roe_gestores_enhanced",  # ✅ NUEVA
+            "compare_roe_gestores_enhanced",
             "compare_eficiencia_centro",
-            "compare_eficiencia_centro_enhanced",  # ✅ NUEVA
+            "compare_eficiencia_centro_enhanced",
             "compare_gastos_centro_periodo",
             "compare_margen_segmento_periodos"
         ]
@@ -1035,15 +1063,15 @@ class ComparativeQueries:
                 if context and 'params' in context:
                     result = query_method(**context['params'])
                 else:
-                    # Parámetros por defecto para testing
+                    # Parámetros por defecto usando datos CDG reales
                     if predicted_query in ["compare_precio_producto_real_mes"]:
-                        result = query_method("P1", "S1", "2025-09", "2025-10")
+                        result = query_method("600100300300", "N20301", "2025-09", "2025-10")
                     elif predicted_query in ["compare_precio_real_vs_std", "compare_precio_real_vs_std_enhanced"]:
-                        result = query_method("P1", "S1", "2025-10")
+                        result = query_method("600100300300", "N20301", "2025-10")
                     elif predicted_query in ["compare_gastos_centro_periodo"]:
                         result = query_method(1, "2025-09", "2025-10")
                     elif predicted_query in ["compare_margen_segmento_periodos"]:
-                        result = query_method("S1", "2025-09", "2025-10")
+                        result = query_method("N20301", "2025-09", "2025-10")
                     else:
                         result = query_method("2025-10")
                 
@@ -1067,8 +1095,9 @@ class ComparativeQueries:
             logger.info(f"🔄 Fallback: Usando generación dinámica por error en clasificación comparativa")
             return self.generate_dynamic_comparative_query(user_question, context)
 
+
 # =================================================================
-# INSTANCIA GLOBAL Y FUNCIONES DE CONVENIENCIA
+# INSTANCIA GLOBAL Y FUNCIONES DE CONVENIENCIA (MANTENIDAS)
 # =================================================================
 
 # Instancia global para uso en toda la aplicación

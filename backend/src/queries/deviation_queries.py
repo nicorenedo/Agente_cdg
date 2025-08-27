@@ -9,6 +9,7 @@ INTEGRADO con kpi_calculator.py para análisis de desviaciones estandarizados y 
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from collections import defaultdict  
 
 from .gestor_queries import QueryResult
 from src.database.db_connection import execute_query
@@ -249,9 +250,9 @@ class DeviationQueries:
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                              THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                              THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos_total
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
@@ -348,19 +349,19 @@ class DeviationQueries:
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                              THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                              THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos_total,
                     ROUND(
                         CASE 
-                            WHEN SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                            WHEN SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                            THEN mov.IMPORTE ELSE 0 END) > 0
-                            THEN (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                            THEN (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                           THEN mov.IMPORTE ELSE 0 END) - 
-                                  SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA') 
+                                  SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
                                            THEN ABS(mov.IMPORTE) ELSE 0 END)) /
-                                 SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS') 
+                                 SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
                                           THEN mov.IMPORTE ELSE 0 END) * 100
                             ELSE NULL
                         END, 2
@@ -540,6 +541,144 @@ class DeviationQueries:
             query_sql=query
         )
     
+    def detect_patron_temporal_anomalias_enhanced(self, gestor_id: str = None, num_periods: int = 6) -> QueryResult:
+        """
+        Detecta patrones temporales anómalos con análisis estadístico mejorado y KPI calculator.
+        
+        CASO DE USO: "¿Hay gestores con patrones temporales irregulares en sus ingresos?"
+        MEJORAS: Análisis Z-score con clasificaciones automáticas y detección de volatilidad
+        """
+        query = """
+            WITH evolucion_temporal AS (
+                SELECT 
+                    g.GESTOR_ID,
+                    g.DESC_GESTOR,
+                    strftime('%Y-%m', mov.FECHA) as periodo,
+                    SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END) as ingresos_periodo,
+                    COUNT(DISTINCT mov.CONTRATO_ID) as contratos_activos,
+                    COUNT(DISTINCT mov.MOVIMIENTO_ID) as num_transacciones,
+                    LAG(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 1) OVER (
+                        PARTITION BY g.GESTOR_ID ORDER BY strftime('%Y-%m', mov.FECHA)
+                    ) as ingresos_anterior
+                FROM MAESTRO_GESTORES g
+                JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                WHERE c.IND_CENTRO_FINALISTA = 1
+                    AND (g.GESTOR_ID = ? OR ? IS NULL)
+                    AND strftime('%Y-%m', mov.FECHA) IS NOT NULL
+                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, strftime('%Y-%m', mov.FECHA)
+                ORDER BY g.GESTOR_ID, periodo DESC
+                LIMIT ?
+            )
+            SELECT * FROM evolucion_temporal WHERE periodo IS NOT NULL
+        """
+        
+        start_time = datetime.now()
+        params = (gestor_id, gestor_id, num_periods * 10) if gestor_id else (None, None, num_periods * 30)
+        raw_results = execute_query(query, params)
+        
+        # ✅ PROCESAMIENTO ESTADÍSTICO AVANZADO CON ANÁLISIS KPI
+        enhanced_results = []
+        
+        # Agrupar datos por gestor para análisis estadístico
+        gestores_data = {}
+        for row in raw_results:
+            gestor_id_row = row['GESTOR_ID']
+            if gestor_id_row not in gestores_data:
+                gestores_data[gestor_id_row] = []
+            gestores_data[gestor_id_row].append(row)
+        
+        for gestor_id_curr, datos_gestor in gestores_data.items():
+            # Calcular estadísticas del gestor
+            ingresos_list = [d['ingresos_periodo'] for d in datos_gestor if d['ingresos_periodo'] > 0]
+            
+            if len(ingresos_list) > 1:
+                media_ingresos = sum(ingresos_list) / len(ingresos_list)
+                varianza = sum((x - media_ingresos) ** 2 for x in ingresos_list) / len(ingresos_list)
+                desv_estandar = varianza ** 0.5 if varianza > 0 else 0
+                
+                for row in datos_gestor:
+                    # Calcular Z-score para cada período
+                    ingreso_actual = row['ingresos_periodo']
+                    z_score = 0
+                    if desv_estandar > 0:
+                        z_score = (ingreso_actual - media_ingresos) / desv_estandar
+                    
+                    # Calcular variación vs período anterior
+                    variacion_pct = 0
+                    if row['ingresos_anterior'] and row['ingresos_anterior'] > 0:
+                        variacion_pct = ((ingreso_actual - row['ingresos_anterior']) / row['ingresos_anterior']) * 100
+                    
+                    # ✅ CLASIFICACIÓN AUTOMÁTICA MEJORADA
+                    patron_anomalia = self._classify_temporal_anomaly(abs(z_score), abs(variacion_pct))
+                    
+                    # Solo incluir si es anómalo
+                    if patron_anomalia != 'NORMAL':
+                        enhanced_row = {
+                            **row,
+                            'media_ingresos_gestor': round(media_ingresos, 2),
+                            'desv_estandar_gestor': round(desv_estandar, 2),
+                            'z_score': round(z_score, 2),
+                            'variacion_vs_anterior_pct': round(variacion_pct, 2),
+                            'patron_anomalia': patron_anomalia,
+                            'nivel_volatilidad': self._classify_volatility_level(abs(z_score), abs(variacion_pct)),
+                            'es_outlier_temporal': abs(z_score) >= 2.0,
+                            'interpretacion': self._interpret_temporal_pattern(z_score, variacion_pct)
+                        }
+                        enhanced_results.append(enhanced_row)
+        
+        # Ordenar por severidad de anomalía
+        enhanced_results.sort(key=lambda x: abs(x['z_score']), reverse=True)
+        
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        return QueryResult(
+            data=enhanced_results,
+            query_type="patron_temporal_anomalias_enhanced",
+            execution_time=execution_time,
+            row_count=len(enhanced_results),
+            query_sql=query
+        )
+
+    def _classify_temporal_anomaly(self, z_score_abs: float, variacion_abs_pct: float) -> str:
+        """Clasificación de anomalías temporales"""
+        if z_score_abs >= 3.0 or variacion_abs_pct >= 100.0:
+            return 'VOLATILIDAD_EXTREMA'
+        elif z_score_abs >= 2.0 or variacion_abs_pct >= 50.0:
+            return 'ALTA_VOLATILIDAD'
+        elif z_score_abs >= 1.5 or variacion_abs_pct >= 25.0:
+            return 'CAMBIO_SIGNIFICATIVO'
+        elif variacion_abs_pct == 0:
+            return 'ESTANCAMIENTO'
+        else:
+            return 'NORMAL'
+    
+    def _classify_volatility_level(self, z_score_abs: float, variacion_abs_pct: float) -> str:
+        """Clasificación del nivel de volatilidad"""
+        if z_score_abs >= 3.0:
+            return 'EXTREMA'
+        elif z_score_abs >= 2.0:
+            return 'ALTA'
+        elif z_score_abs >= 1.0:
+            return 'MODERADA'
+        else:
+            return 'BAJA'
+    
+    def _interpret_temporal_pattern(self, z_score: float, variacion_pct: float) -> str:
+        """Interpretación contextual del patrón temporal"""
+        if z_score > 2.0:
+            return "Performance muy superior al promedio histórico"
+        elif z_score < -2.0:
+            return "Performance muy inferior al promedio histórico"
+        elif variacion_pct > 50.0:
+            return "Crecimiento acelerado respecto al período anterior"
+        elif variacion_pct < -50.0:
+            return "Caída significativa respecto al período anterior"
+        else:
+            return "Comportamiento dentro de rangos esperados"
+
+
     def identify_volumen_outliers(self, periodo: str = "2025-10", factor_outlier: float = 3.0) -> QueryResult:
         """
         FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD

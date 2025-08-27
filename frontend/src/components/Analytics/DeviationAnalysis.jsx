@@ -1,5 +1,5 @@
 // src/components/Analytics/DeviationAnalysis.jsx
-// Componente crítico para análisis de desviaciones con sistema de alertas y drill-down
+// Análisis de desviaciones - CORREGIDO para backend Banca March
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Table, Alert, Badge, Button, Space, Tooltip, Select, Row, Col, Statistic } from 'antd';
@@ -7,8 +7,8 @@ import {
   ExclamationCircleOutlined, 
   WarningOutlined, 
   CheckCircleOutlined,
-  TrendingUpOutlined,
-  TrendingDownOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
   EyeOutlined
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
@@ -29,16 +29,16 @@ const DEVIATION_THRESHOLDS = {
 const DEVIATION_TYPES = {
   PRECIO: 'precio',
   MARGEN: 'margen',
-  VOLUMEN: 'volumen',
-  EFICIENCIA: 'eficiencia'
+  VOLUMEN: 'volumen'
+  // ✅ ELIMINADO: eficiencia (no disponible en backend)
 };
 
-// Configuración de colores para sistema de semáforo
-const getDeviationColor = (deviation) => {
+// Función para determinar severidad
+const getSeverityLevel = (deviation) => {
   const absDeviation = Math.abs(deviation);
-  if (absDeviation >= DEVIATION_THRESHOLDS.CRITICAL) return theme.colors.error;
-  if (absDeviation >= DEVIATION_THRESHOLDS.WARNING) return theme.colors.warning;
-  return theme.colors.success;
+  if (absDeviation >= DEVIATION_THRESHOLDS.CRITICAL) return 'critical';
+  if (absDeviation >= DEVIATION_THRESHOLDS.WARNING) return 'warning';
+  return 'normal';
 };
 
 // Badge de estado según severidad
@@ -93,7 +93,7 @@ const DeviationAnalysis = ({
   const [summary, setSummary] = useState({});
   const [chartData, setChartData] = useState([]);
 
-  // Cargar datos de desviaciones
+  // ✅ CORREGIDO: Cargar datos de desviaciones con campos en mayúsculas
   const fetchDeviationData = useCallback(async () => {
     setLoading(true);
     try {
@@ -107,20 +107,41 @@ const DeviationAnalysis = ({
           ...(alertsResponse.data.precio_alerts || []).map(item => ({
             ...item,
             type: DEVIATION_TYPES.PRECIO,
-            deviation: item.precio_desviacion || 0,
-            severity: getSeverityLevel(item.precio_desviacion || 0)
+            deviation: item.PRECIO_DESVIACION || item.precio_desviacion || 0,
+            severity: getSeverityLevel(item.PRECIO_DESVIACION || item.precio_desviacion || 0),
+            // ✅ CORREGIDO: Usar campos en mayúsculas
+            desc_gestor: item.DESC_GESTOR || item.desc_gestor,
+            desc_centro: item.DESC_CENTRO || item.desc_centro,
+            gestor_id: item.GESTOR_ID || item.gestor_id,
+            centro_id: item.CENTRO_ID || item.centro_id,
+            valor_real: item.VALOR_REAL || item.valor_real,
+            valor_estandar: item.VALOR_ESTANDAR || item.valor_estandar
           })),
           ...(alertsResponse.data.margen_anomalies || []).map(item => ({
             ...item,
             type: DEVIATION_TYPES.MARGEN,
-            deviation: item.margen_desviacion || 0,
-            severity: getSeverityLevel(item.margen_desviacion || 0)
+            deviation: item.MARGEN_DESVIACION || item.margen_desviacion || 0,
+            severity: getSeverityLevel(item.MARGEN_DESVIACION || item.margen_desviacion || 0),
+            // ✅ CORREGIDO: Usar campos en mayúsculas
+            desc_gestor: item.DESC_GESTOR || item.desc_gestor,
+            desc_centro: item.DESC_CENTRO || item.desc_centro,
+            gestor_id: item.GESTOR_ID || item.gestor_id,
+            centro_id: item.CENTRO_ID || item.centro_id,
+            valor_real: item.VALOR_REAL || item.valor_real,
+            valor_estandar: item.VALOR_ESTANDAR || item.valor_estandar
           })),
           ...(alertsResponse.data.volumen_outliers || []).map(item => ({
             ...item,
             type: DEVIATION_TYPES.VOLUMEN,
-            deviation: item.volumen_desviacion || 0,
-            severity: getSeverityLevel(item.volumen_desviacion || 0)
+            deviation: item.VOLUMEN_DESVIACION || item.volumen_desviacion || 0,
+            severity: getSeverityLevel(item.VOLUMEN_DESVIACION || item.volumen_desviacion || 0),
+            // ✅ CORREGIDO: Usar campos en mayúsculas
+            desc_gestor: item.DESC_GESTOR || item.desc_gestor,
+            desc_centro: item.DESC_CENTRO || item.desc_centro,
+            gestor_id: item.GESTOR_ID || item.gestor_id,
+            centro_id: item.CENTRO_ID || item.centro_id,
+            valor_real: item.VALOR_REAL || item.valor_real,
+            valor_estandar: item.VALOR_ESTANDAR || item.valor_estandar
           }))
         ];
 
@@ -140,14 +161,6 @@ const DeviationAnalysis = ({
       setLoading(false);
     }
   }, [periodo]);
-
-  // Determinar nivel de severidad
-  const getSeverityLevel = (deviation) => {
-    const absDeviation = Math.abs(deviation);
-    if (absDeviation >= DEVIATION_THRESHOLDS.CRITICAL) return 'critical';
-    if (absDeviation >= DEVIATION_THRESHOLDS.WARNING) return 'warning';
-    return 'normal';
-  };
 
   // Calcular resumen estadístico
   const calculateSummary = (data) => {
@@ -173,7 +186,9 @@ const DeviationAnalysis = ({
         acc.push({
           type: item.type,
           count: 1,
-          avgDeviation: Math.abs(item.deviation)
+          avgDeviation: Math.abs(item.deviation),
+          // ✅ CORREGIDO: Añadir campo para gráficos con formato esperado
+          DESC_GESTOR: `Tipo ${item.type.toUpperCase()}`
         });
       }
       return acc;
@@ -207,7 +222,7 @@ const DeviationAnalysis = ({
     applyFilters();
   }, [applyFilters]);
 
-  // Configuración de columnas para la tabla de desviaciones
+  // ✅ CORREGIDO: Configuración de columnas con campos corregidos
   const columns = [
     {
       title: 'Gestor',
@@ -317,7 +332,7 @@ const DeviationAnalysis = ({
             <Statistic
               title="Total Desviaciones"
               value={summary.total || 0}
-              prefix={<TrendingUpOutlined />}
+              prefix={<ArrowUpOutlined />}
               valueStyle={{ color: theme.colors.bmGreenPrimary }}
             />
           </Col>
@@ -343,7 +358,7 @@ const DeviationAnalysis = ({
               value={summary.avgDeviation || 0}
               precision={1}
               suffix="%"
-              prefix={<TrendingDownOutlined />}
+              prefix={<ArrowDownOutlined />}
               valueStyle={{ color: theme.colors.bmGreenLight }}
             />
           </Col>
@@ -475,19 +490,6 @@ const DeviationAnalysis = ({
           </div>
         </Space>
       </Card>
-
-      {/* Estilos CSS para las filas de la tabla */}
-      <style jsx>{`
-        .deviation-critical {
-          background-color: ${theme.colors.error}15 !important;
-        }
-        .deviation-warning {
-          background-color: ${theme.colors.warning}15 !important;
-        }
-        .deviation-normal {
-          background-color: ${theme.colors.success}08 !important;
-        }
-      `}</style>
     </div>
   );
 };

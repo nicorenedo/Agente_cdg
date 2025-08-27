@@ -7,7 +7,8 @@ del agente CDG. Implementa manejo de contexto, sesiones, clasificación de inten
 procesamiento de feedback y orquestación con el agente coordinador principal.
 
 Autor: Agente CDG Development Team
-Fecha: 2025-08-01
+Fecha: 2025-08-25
+Versión: 2.0 - Actualizada para compatibilidad 100% con CDG Agent
 """
 
 import asyncio
@@ -352,7 +353,7 @@ class CDGChatAgent:
             """
             
             response = self.llm_client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": self.intent_classification_prompt},
                     {"role": "user", "content": classification_user_prompt}
@@ -424,7 +425,7 @@ class CDGChatAgent:
             
             # Procesar feedback con LLM usando prompt específico
             response = self.llm_client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": self.feedback_system_prompt},
                     {"role": "user", "content": feedback_prompt}
@@ -456,9 +457,6 @@ class CDGChatAgent:
             
             if 'chart_type_preference' in feedback:
                 session.user_preferences['chart_preference'] = feedback['chart_type_preference']
-            
-            # Análisis adicional del texto de feedback usando el análisis generado por el LLM
-            # (Se puede expandir según las necesidades específicas)
             
         except Exception as e:
             logger.warning(f"Error extrayendo preferencias de feedback: {e}")
@@ -630,7 +628,7 @@ except Exception as e:
 app = FastAPI(
     title="CDG Chat Agent API",
     description="API conversacional inteligente para el agente de Control de Gestión - Banca March",
-    version="1.0.0",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -639,10 +637,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000", 
+        "http://localhost:8000",      
+        "http://localhost:3000",
         "http://127.0.0.1:3000", 
         "http://localhost:3001",
-        "https://app.bancamarch.es"  # Producción
+        "https://app.bancamarch.es"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
@@ -826,7 +825,7 @@ async def health_check():
     return {
         "status": "healthy" if chat_agent is not None else "degraded",
         "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0",
+        "version": "2.0.0",
         "service": "CDG Chat Agent",
         "chat_agent_available": chat_agent is not None
     }

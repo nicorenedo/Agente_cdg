@@ -12,7 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 logger = logging.getLogger(__name__)
 
-class FinancialKPICalculator:
+class KPICalculator:
     """
     Calculadora de KPIs financieros específicos para control de gestión bancario
     
@@ -134,7 +134,7 @@ class FinancialKPICalculator:
         try:
             if not gastos or gastos <= 0:
                 return {
-                    'ratio_eficiencia': float('inf'),
+                    'ratio_eficiencia': 999999.99,
                     'clasificacion': 'GASTOS_NULOS',
                     'interpretacion': 'Sin gastos operativos'
                 }
@@ -312,7 +312,7 @@ class FinancialKPICalculator:
 # =================================================================
 
 # Instancia global para uso en toda la aplicación
-kpi_calculator = FinancialKPICalculator()
+kpi_calculator = KPICalculator()
 
 # Funciones de conveniencia para importación directa
 def calculate_margen_neto(ingresos: float, gastos: float) -> Dict[str, Any]:
@@ -326,3 +326,6 @@ def calculate_roe(beneficio_neto: float, patrimonio: float) -> Dict[str, Any]:
 def get_kpis_from_data(data_row: Dict[str, Any]) -> Dict[str, Any]:
     """Función de conveniencia para calcular KPIs desde datos"""
     return kpi_calculator.calculate_kpis_from_data(data_row)
+
+FinancialKPICalculator = KPICalculator
+__all__ = ['KPICalculator', 'FinancialKPICalculator']
