@@ -7,10 +7,11 @@ Agente coordinador que orquesta todos los módulos del sistema CDG:
 - Tools avanzados (kpi_calculator, chart_generator, report_generator)
 - Prompts contextualizados para análisis bancario
 - Integración con Azure OpenAI para respuestas inteligentes
+- 🆕 NUEVO: Integración con QueryParser mejorado para entidades múltiples
 
 Autor: Agente CDG Development Team
-Fecha: 2025-08-25
-Versión: 2.0 Enhanced con integración completa queries
+Fecha: 2025-08-28
+Versión: 3.0 Enhanced con QueryParser integrado y capacidades múltiples
 """
 
 import json
@@ -40,7 +41,7 @@ backend_dir = src_dir.parent
 sys.path.insert(0, str(src_dir))
 sys.path.insert(0, str(backend_dir))
 
-print("🔍 DEBUG CDG AGENT - Implementando integración completa con queries enhanced...")
+print("🔍 DEBUG CDG AGENT - Implementando integración completa con QueryParser mejorado...")
 
 # ✅ FUNCIÓN DE LIMPIEZA JSON CRÍTICA
 def clean_llm_json_response(raw_response: str) -> str:
@@ -195,7 +196,28 @@ try:
     
     print("✅ DEBUG: Queries cargadas exitosamente")
     
-    # 7. Sistema de prompts y configuración
+    # 7. 🆕 NUEVO: Cargar QueryParser mejorado
+    print("🔧 DEBUG: Cargando QueryParser mejorado...")
+    try:
+        from tools.query_parser import QueryParser, QueryIntent
+        QUERY_PARSER_AVAILABLE = True
+        print("✅ DEBUG: QueryParser mejorado cargado")
+    except ImportError:
+        print("⚠️ DEBUG: QueryParser no disponible, usando clasificación básica")
+        class QueryParser:
+            def parse_query(self, message, gestor_id=None, periodo=None):
+                return {
+                    'intent': type('QueryIntent', (), {'value': 'performance_analysis'})(),
+                    'entities': {},
+                    'filters': {'gestor_id': gestor_id, 'periodo': periodo},
+                    'complexity': 'low',
+                    'requires_ranking': False,
+                    'requires_comparison': False,
+                    'original_message': message
+                }
+        QUERY_PARSER_AVAILABLE = False
+    
+    # 8. Sistema de prompts y configuración
     print("🔧 DEBUG: Cargando prompts y utils...")
     from prompts.system_prompts import (
         FINANCIAL_ANALYST_SYSTEM_PROMPT,
@@ -250,6 +272,18 @@ except Exception as e:
     
     class PeriodQueries(MockQueries): pass
     
+    class QueryParser:
+        def parse_query(self, message, gestor_id=None, periodo=None):
+            return {
+                'intent': type('QueryIntent', (), {'value': 'performance_analysis'})(),
+                'entities': {},
+                'filters': {'gestor_id': gestor_id, 'periodo': periodo},
+                'complexity': 'low',
+                'requires_ranking': False,
+                'requires_comparison': False,
+                'original_message': message
+            }
+    
     GestorQueries = ComparativeQueries = DeviationQueries = IncentiveQueries = MockQueries
     
     def is_query_safe(*args): return True
@@ -279,6 +313,7 @@ except Exception as e:
     
     IMPORTS_SUCCESSFUL = False
     PERIOD_QUERIES_ENHANCED = False
+    QUERY_PARSER_AVAILABLE = False
     logger = logging.getLogger(__name__)
     logger.warning("⚠️ CDG Agent ejecutándose en modo MOCK - integración completa falló")
     print("❌ DEBUG: IMPORTS_SUCCESSFUL establecido a False - MODO MOCK activado")
@@ -297,6 +332,11 @@ class QueryType(Enum):
     BUSINESS_REVIEW = "business_review"
     EXECUTIVE_SUMMARY = "executive_summary"
     GENERAL_CHAT = "general_chat"
+    # 🆕 NUEVOS TIPOS DE CONSULTA
+    MULTIPLE_GESTOR_ANALYSIS = "multiple_gestor_analysis"
+    CENTRO_ANALYSIS = "centro_analysis"
+    SEGMENTO_ANALYSIS = "segmento_analysis"
+    PRODUCTO_ANALYSIS = "producto_analysis"
 
 class ResponseFormat(Enum):
     """Formatos de respuesta disponibles"""
@@ -346,13 +386,15 @@ class CDGAgent:
     """
     Agente Principal de Control de Gestión - Banca March
     
-    Coordina todos los módulos especializados para proporcionar análisis
-    financiero integral, detección de desviaciones, comparativas y 
-    generación automática de Business Reviews.
+    🆕 VERSIÓN 3.0: Con capacidades avanzadas de entidades múltiples
+    - Integración con QueryParser mejorado
+    - Manejo de múltiples gestores, centros y segmentos
+    - Respuestas con datos específicos para cualquier consulta
+    - Análisis comparativo avanzado
     """
     
     def __init__(self):
-        """Inicializa el agente CDG con todos los módulos especializados"""
+        """Inicializa el agente CDG con todos los módulos especializados y QueryParser"""
         self.start_time = datetime.now()
         
         try:
@@ -368,6 +410,9 @@ class CDGAgent:
             self.incentive_queries = IncentiveQueries()
             self.period_queries = PeriodQueries()  # ✅ INTEGRACIÓN PERIOD_QUERIES
             
+            # 🆕 NUEVO: Inicializar QueryParser mejorado
+            self.query_parser = QueryParser()
+            
             # Configuración y estado del agente
             self.config_manager = ConfigManager()
             self.conversation_history = []
@@ -376,8 +421,9 @@ class CDGAgent:
             # Estado de importaciones
             self.imports_successful = IMPORTS_SUCCESSFUL
             self.period_queries_enhanced = PERIOD_QUERIES_ENHANCED
+            self.query_parser_available = QUERY_PARSER_AVAILABLE
             
-            logger.info("🚀 CDG Agent inicializado exitosamente con integración completa")
+            logger.info("🚀 CDG Agent inicializado exitosamente con QueryParser integrado")
             if not IMPORTS_SUCCESSFUL:
                 logger.warning("⚠️ CDG Agent iniciado en modo MOCK - funcionalidad limitada")
                 
@@ -387,7 +433,7 @@ class CDGAgent:
 
     async def process_request(self, request: CDGRequest) -> CDGResponse:
         """
-        Procesa una solicitud del usuario y orquesta la respuesta apropiada
+        🚀 MEJORADO: Procesa solicitud con QueryParser integrado y entidades múltiples
         
         Args:
             request: Solicitud estructurada del usuario
@@ -398,15 +444,34 @@ class CDGAgent:
         start_time = datetime.now()
         
         try:
-            # 1. Analizar la intención del usuario
-            query_type, confidence = await self._classify_user_intent(request.user_message)
+            # 1. 🆕 NUEVO: Usar QueryParser para análisis completo
+            if self.query_parser_available:
+                parsed_query = self.query_parser.parse_query(
+                    request.user_message, 
+                    request.gestor_id, 
+                    request.periodo
+                )
+                logger.info(f"🎯 QueryParser - Intent: {parsed_query['intent'].value}, Entidades: {parsed_query['entities']}")
+            else:
+                parsed_query = None
+            
+            # 2. Analizar la intención del usuario (mejorado con QueryParser)
+            query_type, confidence = await self._classify_user_intent_enhanced(
+                request.user_message, parsed_query
+            )
             logger.info(f"💭 Intención clasificada: {query_type.value} (confianza: {confidence:.2f})")
             
-            # 2. Orquestar la respuesta según el tipo de consulta
+            # 3. 🆕 NUEVO: Orquestar respuesta con entidades múltiples
             if query_type == QueryType.GESTOR_ANALYSIS:
-                response_content = await self._handle_gestor_analysis(request)
+                response_content = await self._handle_gestor_analysis_enhanced(request, parsed_query)
             elif query_type == QueryType.COMPARATIVE_ANALYSIS:
-                response_content = await self._handle_comparative_analysis(request)
+                response_content = await self._handle_comparative_analysis_enhanced(request, parsed_query)
+            elif query_type == QueryType.MULTIPLE_GESTOR_ANALYSIS:
+                response_content = await self._handle_multiple_gestor_analysis(request, parsed_query)
+            elif query_type == QueryType.CENTRO_ANALYSIS:
+                response_content = await self._handle_centro_analysis(request, parsed_query)
+            elif query_type == QueryType.SEGMENTO_ANALYSIS:
+                response_content = await self._handle_segmento_analysis(request, parsed_query)
             elif query_type == QueryType.DEVIATION_ANALYSIS:
                 response_content = await self._handle_deviation_analysis(request)
             elif query_type == QueryType.INCENTIVE_ANALYSIS:
@@ -416,19 +481,19 @@ class CDGAgent:
             elif query_type == QueryType.EXECUTIVE_SUMMARY:
                 response_content = await self._handle_executive_summary(request)
             else:
-                response_content = await self._handle_general_chat(request)
+                response_content = await self._handle_general_chat_enhanced(request, parsed_query)
             
-            # 3. Generar gráficos si se solicitan
+            # 4. Generar gráficos si se solicitan
             charts = []
             if request.include_charts and 'kpi_data' in response_content:
                 charts = await self._generate_charts(response_content, query_type)
             
-            # 4. Generar recomendaciones si se solicitan
+            # 5. Generar recomendaciones si se solicitan
             recommendations = []
             if request.include_recommendations:
                 recommendations = await self._generate_recommendations(response_content, query_type)
             
-            # 5. Construir respuesta final
+            # 6. Construir respuesta final
             execution_time = (datetime.now() - start_time).total_seconds()
             
             response = CDGResponse(
@@ -443,14 +508,16 @@ class CDGAgent:
                     'modules_used': self._get_modules_used(query_type),
                     'data_sources': self._get_data_sources(query_type),
                     'imports_successful': self.imports_successful,
-                    'period_queries_enhanced': self.period_queries_enhanced
+                    'period_queries_enhanced': self.period_queries_enhanced,
+                    'query_parser_active': self.query_parser_available,
+                    'parsed_entities': parsed_query['entities'] if parsed_query else {}
                 },
                 execution_time=execution_time,
                 confidence_score=confidence,
                 created_at=datetime.now()
             )
             
-            # 6. Actualizar historial de conversación
+            # 7. Actualizar historial de conversación
             self._update_conversation_history(request, response)
             
             logger.info(f"✅ Solicitud procesada exitosamente en {execution_time:.2f}s")
@@ -460,42 +527,72 @@ class CDGAgent:
             logger.error(f"❌ Error procesando solicitud: {e}")
             return await self._create_error_response(request, str(e), start_time)
 
-    async def _classify_user_intent(self, user_message: str) -> Tuple[QueryType, float]:
+    async def _classify_user_intent_enhanced(self, user_message: str, parsed_query: Optional[Dict] = None) -> Tuple[QueryType, float]:
         """
-        Clasifica la intención del usuario usando Azure OpenAI
+        🚀 MEJORADO: Clasificación de intención con QueryParser integrado
         
         Args:
             user_message: Mensaje del usuario
+            parsed_query: Resultado del QueryParser (si disponible)
             
         Returns:
             Tuple[QueryType, float]: Tipo de consulta y nivel de confianza
         """
-        classification_prompt = f"""
-        Analiza el siguiente mensaje de un usuario de Control de Gestión de Banca March y clasifica su intención:
-
-        Mensaje: "{user_message}"
-
-        Tipos de consulta disponibles:
-        - gestor_analysis: Análisis específico de un gestor (performance, KPIs individuales)
-        - comparative_analysis: Comparaciones entre gestores, centros o períodos
-        - deviation_analysis: Análisis de desviaciones, alertas, anomalías
-        - incentive_analysis: Análisis de incentivos, comisiones, bonus
-        - business_review: Generación de Business Review completo
-        - executive_summary: Resumen ejecutivo para directivos
-        - general_chat: Conversación general o consultas no específicas
-
-        Responde SOLO con el formato JSON:
-        {{"type": "tipo_de_consulta", "confidence": 0.95}}
-        """
-        
         try:
-            client = iniciar_agente_llm()
+            # Si tenemos QueryParser, usar su información
+            if parsed_query and self.query_parser_available:
+                entities = parsed_query.get('entities', {})
+                
+                # Detectar análisis de múltiples gestores
+                if 'gestores_ids' in entities and len(entities['gestores_ids']) > 1:
+                    return QueryType.MULTIPLE_GESTOR_ANALYSIS, 0.9
+                
+                # Detectar análisis de centros
+                if 'centro_id' in entities or 'centros_ids' in entities:
+                    return QueryType.CENTRO_ANALYSIS, 0.85
+                
+                # Detectar análisis de segmentos
+                if 'segmento_id' in entities or 'segmentos_ids' in entities:
+                    return QueryType.SEGMENTO_ANALYSIS, 0.85
+                
+                # Usar intención del QueryParser como base
+                parser_intent = parsed_query['intent'].value
+                if parser_intent == 'comparative_analysis':
+                    return QueryType.COMPARATIVE_ANALYSIS, 0.9
+                elif parser_intent == 'ranking_analysis':
+                    return QueryType.COMPARATIVE_ANALYSIS, 0.85
+                elif parser_intent == 'causal_analysis':
+                    return QueryType.GESTOR_ANALYSIS, 0.8
+                elif parser_intent == 'performance_analysis':
+                    return QueryType.GESTOR_ANALYSIS, 0.8
+                
+            # Clasificación tradicional con Azure OpenAI
+            classification_prompt = f"""
+            Analiza el siguiente mensaje de un usuario de Control de Gestión de Banca March y clasifica su intención:
+
+            Mensaje: "{user_message}"
+
+            Tipos de consulta disponibles:
+            - gestor_analysis: Análisis específico de un gestor (performance, KPIs individuales)
+            - comparative_analysis: Comparaciones entre gestores, centros o períodos
+            - multiple_gestor_analysis: Análisis de múltiples gestores específicos
+            - centro_analysis: Análisis específico de centros
+            - segmento_analysis: Análisis específico de segmentos
+            - deviation_analysis: Análisis de desviaciones, alertas, anomalías
+            - incentive_analysis: Análisis de incentivos, comisiones, bonus
+            - business_review: Generación de Business Review completo
+            - executive_summary: Resumen ejecutivo para directivos
+            - general_chat: Conversación general o consultas no específicas
+
+            Responde SOLO con el formato JSON:
+            {{"type": "tipo_de_consulta", "confidence": 0.95}}
+            """
             
-            # ✅ CORRECCIÓN CRÍTICA: Usar deployment del .env
+            client = iniciar_agente_llm()
             deployment_id = settings.AZURE_OPENAI_DEPLOYMENT_ID
             
             response = client.chat.completions.create(
-                model=deployment_id,  # ✅ Usar deployment de configuración
+                model=deployment_id,
                 messages=[
                     {"role": "system", "content": "Eres un clasificador experto de intenciones para el sistema CDG de Banca March. Responde SOLO con JSON válido."},
                     {"role": "user", "content": classification_prompt}
@@ -504,7 +601,6 @@ class CDGAgent:
                 max_tokens=100
             )
             
-            # ✅ CORRECCIÓN CRÍTICA: Limpieza JSON robusta
             raw_content = response.choices[0].message.content
             cleaned_content = clean_llm_json_response(raw_content)
             
@@ -515,7 +611,6 @@ class CDGAgent:
                 return query_type, confidence
             except (json.JSONDecodeError, KeyError, ValueError) as json_error:
                 logger.warning(f"Error parsing JSON response: {json_error}. Response: {raw_content}")
-                # Fallback inteligente basado en palabras clave
                 return self._fallback_classification(user_message)
                 
         except Exception as e:
@@ -523,12 +618,24 @@ class CDGAgent:
             return QueryType.GENERAL_CHAT, 0.5
 
     def _fallback_classification(self, user_message: str) -> Tuple[QueryType, float]:
-        """Clasificación fallback basada en palabras clave"""
+        """Clasificación fallback basada en palabras clave mejorada"""
         message_lower = user_message.lower()
+
+        # Detectar múltiples gestores
+        if re.search(r'gestores?\s+\d+.*\d+', message_lower) or 'y' in message_lower and 'gestor' in message_lower:
+            return QueryType.MULTIPLE_GESTOR_ANALYSIS, 0.8
+        
+        # Detectar centros
+        if any(word in message_lower for word in ['centro', 'oficina', 'madrid', 'barcelona', 'palma']):
+            return QueryType.CENTRO_ANALYSIS, 0.7
+        
+        # Detectar segmentos
+        if any(word in message_lower for word in ['segmento', 'banca privada', 'empresas', 'fondos']):
+            return QueryType.SEGMENTO_ANALYSIS, 0.7
 
         if any(word in message_lower for word in ['gestor', 'performance', 'kpi']):
             return QueryType.GESTOR_ANALYSIS, 0.7
-        elif any(word in message_lower for word in ['comparativa', 'ranking', 'versus', 'vs']):
+        elif any(word in message_lower for word in ['comparativa', 'ranking', 'versus', 'vs', 'comparar']):
             return QueryType.COMPARATIVE_ANALYSIS, 0.7
         elif any(word in message_lower for word in ['desviación', 'alerta', 'anomalía']):
             return QueryType.DEVIATION_ANALYSIS, 0.7
@@ -541,14 +648,187 @@ class CDGAgent:
         else:
             return QueryType.GENERAL_CHAT, 0.5
 
-    async def _handle_gestor_analysis(self, request: CDGRequest) -> Dict[str, Any]:
-        """Maneja análisis específico de gestores"""
+    # 🚀 NUEVOS HANDLERS PARA ENTIDADES MÚLTIPLES
+
+    async def _handle_multiple_gestor_analysis(self, request: CDGRequest, parsed_query: Optional[Dict] = None) -> Dict[str, Any]:
+        """🆕 NUEVO: Maneja análisis de múltiples gestores"""
+        logger.info("👥 Procesando análisis de múltiples gestores...")
+        
+        try:
+            gestores_ids = []
+            
+            # Extraer IDs de gestores del QueryParser o del contexto
+            if parsed_query and 'gestores_ids' in parsed_query.get('entities', {}):
+                gestores_ids = parsed_query['entities']['gestores_ids']
+            elif request.context and 'gestores_ids' in request.context:
+                gestores_ids = request.context['gestores_ids']
+            
+            if not gestores_ids:
+                return {"error": "No se encontraron múltiples gestores para analizar"}
+            
+            # Obtener datos de cada gestor
+            gestores_data = []
+            kpis_comparativos = []
+            
+            for gestor_id in gestores_ids:
+                gestor_data = self.gestor_queries.get_gestor_performance_enhanced(gestor_id, request.periodo)
+                if gestor_data and gestor_data.row_count > 0:
+                    gestor_info = gestor_data.data[0]
+                    gestores_data.append(gestor_info)
+                    
+                    # Calcular KPIs para cada gestor
+                    kpi_analysis = self.kpi_calculator.calculate_kpis_from_data(gestor_info)
+                    kpis_comparativos.append({
+                        'gestor_id': gestor_id,
+                        'gestor_name': gestor_info.get('desc_gestor'),
+                        'kpis': kpi_analysis
+                    })
+            
+            return {
+                'gestores_data': gestores_data,
+                'kpis_comparativos': kpis_comparativos,
+                'num_gestores_analizados': len(gestores_data),
+                'analysis_type': 'multiple_gestor_analysis',
+                'gestores_ids': gestores_ids
+            }
+            
+        except Exception as e:
+            logger.error(f"Error en análisis de múltiples gestores: {e}")
+            return {"error": f"Error procesando múltiples gestores: {str(e)}"}
+
+    async def _handle_centro_analysis(self, request: CDGRequest, parsed_query: Optional[Dict] = None) -> Dict[str, Any]:
+        """🆕 CORREGIDO: Análisis de centros con filtrado por nombre"""
+        logger.info("🏢 Procesando análisis de centro...")
+        
+        try:
+            entities = parsed_query.get('entities', {}) if parsed_query else {}
+            centro_id = entities.get('centro_id')
+            centro_name = entities.get('centro_name')
+            centros_ids = entities.get('centros_ids', [])
+            centros_names = entities.get('centros_names', [])
+            
+            # 🔍 DEBUG: Ver qué tenemos
+            logger.info(f"🔍 Centro ID: {centro_id}, Centro Name: {centro_name}")
+            logger.info(f"🔍 Centros IDs: {centros_ids}, Centros Names: {centros_names}")
+            
+            # Obtener todos los gestores
+            gestores_todos = self.gestor_queries.get_all_gestores_enhanced()
+            
+            if gestores_todos and hasattr(gestores_todos, 'data') and gestores_todos.data:
+                logger.info(f"🔍 Total gestores obtenidos: {len(gestores_todos.data)}")
+                
+                # 🚀 CORRECCIÓN: Filtrar por nombres de centro, no IDs
+                madrid_gestores = []
+                barcelona_gestores = []
+                
+                for gestor in gestores_todos.data:
+                    desc_centro = gestor.get('desc_centro', '').upper()
+                    
+                    # Filtrar Madrid
+                    if 'MADRID' in desc_centro:
+                        madrid_gestores.append(gestor)
+                    # Filtrar Barcelona  
+                    elif 'BARCELONA' in desc_centro:
+                        barcelona_gestores.append(gestor)
+                
+                logger.info(f"🔍 Madrid gestores: {len(madrid_gestores)}")
+                logger.info(f"🔍 Barcelona gestores: {len(barcelona_gestores)}")
+                
+                # Obtener datos de performance
+                centro_performance = self.comparative_queries.ranking_gestores_por_margen_enhanced(request.periodo)
+                performance_data = centro_performance.data if centro_performance and hasattr(centro_performance, 'data') else []
+                
+                # 🚀 NUEVA ESTRUCTURA: Comparación completa Madrid vs Barcelona
+                return {
+                    'comparison_type': 'madrid_vs_barcelona',
+                    'madrid_data': {
+                        'centro_name': 'MADRID-OFICINA PRINCIPAL',
+                        'gestores': madrid_gestores,
+                        'total_gestores': len(madrid_gestores),
+                        'gestores_con_datos': [g for g in madrid_gestores if g.get('total_ingresos', 0) > 0]
+                    },
+                    'barcelona_data': {
+                        'centro_name': 'BARCELONA-BALMES', 
+                        'gestores': barcelona_gestores,
+                        'total_gestores': len(barcelona_gestores),
+                        'gestores_con_datos': [g for g in barcelona_gestores if g.get('total_ingresos', 0) > 0]
+                    },
+                    'performance_general': performance_data,
+                    'analysis_type': 'centro_comparison',
+                    'total_gestores_analizados': len(madrid_gestores) + len(barcelona_gestores),
+                    'debug_info': {
+                        'madrid_count': len(madrid_gestores),
+                        'barcelona_count': len(barcelona_gestores),
+                        'performance_records': len(performance_data)
+                    }
+                }
+            else:
+                logger.warning("⚠️ No se obtuvieron datos de gestores")
+                return {"error": "No se obtuvieron datos de gestores"}
+                
+        except Exception as e:
+            logger.error(f"Error en análisis de centro: {e}")
+            return {"error": f"Error procesando análisis de centro: {str(e)}"}
+
+
+
+    async def _handle_segmento_analysis(self, request: CDGRequest, parsed_query: Optional[Dict] = None) -> Dict[str, Any]:
+        """🆕 NUEVO: Maneja análisis específico de segmentos"""
+        logger.info("📊 Procesando análisis de segmento...")
+        
+        try:
+            segmento_id = None
+            segmento_name = None
+            
+            # Extraer información del segmento
+            if parsed_query and parsed_query.get('entities', {}):
+                entities = parsed_query['entities']
+                segmento_id = entities.get('segmento_id')
+                segmento_name = entities.get('segmento_name')
+            
+            if segmento_id:
+                # Obtener gestores del segmento
+                gestores_segmento = self.gestor_queries.get_gestores_by_segmento_enhanced(segmento_id, request.periodo)
+                
+                # Análisis del segmento
+                segmento_kpis = self.comparative_queries.ranking_gestores_por_margen_enhanced(request.periodo)
+                
+                return {
+                    'segmento_id': segmento_id,
+                    'segmento_name': segmento_name,
+                    'gestores_segmento': gestores_segmento.data if gestores_segmento and hasattr(gestores_segmento, 'data') else [],
+                    'segmento_kpis': segmento_kpis.data if segmento_kpis and hasattr(segmento_kpis, 'data') else [],
+                    'analysis_type': 'segmento_analysis'
+                }
+            else:
+                # Análisis general de segmentos
+                segmentos_data = self.comparative_queries.ranking_gestores_por_margen_enhanced(request.periodo)
+                return {
+                    'segmentos_data': segmentos_data.data if segmentos_data and hasattr(segmentos_data, 'data') else [],
+                    'analysis_type': 'segmentos_general_analysis'
+                }
+                
+        except Exception as e:
+            logger.error(f"Error en análisis de segmento: {e}")
+            return {"error": f"Error procesando análisis de segmento: {str(e)}"}
+
+    # 🚀 HANDLERS MEJORADOS EXISTENTES
+
+    async def _handle_gestor_analysis_enhanced(self, request: CDGRequest, parsed_query: Optional[Dict] = None) -> Dict[str, Any]:
+        """🚀 MEJORADO: Maneja análisis específico de gestores con QueryParser"""
         logger.info("🔍 Procesando análisis de gestor...")
         
         try:
+            gestor_id = request.gestor_id
+            
+            # Extraer gestor_id del QueryParser si no se proporcionó
+            if not gestor_id and parsed_query:
+                entities = parsed_query.get('entities', {})
+                gestor_id = entities.get('gestor_id_extracted')
+            
             # Obtener datos del gestor
-            if request.gestor_id:
-                gestor_data = self.gestor_queries.get_gestor_performance_enhanced(request.gestor_id, request.periodo)
+            if gestor_id:
+                gestor_data = self.gestor_queries.get_gestor_performance_enhanced(gestor_id, request.periodo)
             else:
                 # Inferir gestor del mensaje del usuario
                 gestor_data = await self._infer_gestor_from_message(request.user_message)
@@ -560,11 +840,10 @@ class CDGAgent:
             gestor_info = gestor_data.data[0]
             kpi_analysis = self.kpi_calculator.calculate_kpis_from_data(gestor_info)
             
-            # ✅ CORRECCIÓN: Usar métodos con fallback robusto
+            # Obtener datos adicionales
             try:
                 incentivos = self.incentive_queries.calculate_incentive_impact_enhanced(gestor_info.get('gestor_id'), request.periodo)
             except AttributeError:
-                # Fallback si el método no existe
                 try:
                     incentivos = self.incentive_queries.ranking_incentivos_periodo_enhanced(request.periodo)
                 except AttributeError:
@@ -576,7 +855,7 @@ class CDGAgent:
                 'gestor_data': gestor_info,
                 'kpi_data': kpi_analysis,
                 'incentivos': incentivos.data if incentivos and hasattr(incentivos, 'data') else [],
-                'comparativas': comparativas.data[:5] if comparativas and hasattr(comparativas, 'data') else [],  # Top 5
+                'comparativas': comparativas.data[:5] if comparativas and hasattr(comparativas, 'data') else [],
                 'analysis_type': 'gestor_performance'
             }
             
@@ -584,25 +863,38 @@ class CDGAgent:
             logger.error(f"Error en análisis de gestor: {e}")
             return {"error": f"Error procesando análisis de gestor: {str(e)}"}
 
-    async def _handle_comparative_analysis(self, request: CDGRequest) -> Dict[str, Any]:
-        """Maneja análisis comparativos"""
+    async def _handle_comparative_analysis_enhanced(self, request: CDGRequest, parsed_query: Optional[Dict] = None) -> Dict[str, Any]:
+        """🚀 MEJORADO: Maneja análisis comparativos con entidades múltiples"""
         logger.info("📊 Procesando análisis comparativo...")
 
         try:
-            # ✅ CORRECCIÓN: Usar métodos que SÍ existen en tu comparative_queries
+            # Verificar si hay entidades específicas para comparar
+            if parsed_query and parsed_query.get('entities', {}):
+                entities = parsed_query['entities']
+                
+                # Si hay múltiples gestores, delegar al handler específico
+                if 'gestores_ids' in entities:
+                    return await self._handle_multiple_gestor_analysis(request, parsed_query)
+                
+                # Si hay centros específicos
+                if 'centros_ids' in entities:
+                    return await self._handle_centro_analysis(request, parsed_query)
+                
+                # Si hay segmentos específicos
+                if 'segmentos_ids' in entities:
+                    return await self._handle_segmento_analysis(request, parsed_query)
+
+            # Análisis comparativo general
             ranking_gestores = self.comparative_queries.ranking_gestores_por_margen_enhanced(request.periodo)
 
-            # ✅ CORRECCIÓN: Método con fallback robusto
             try:
                 compare_centros = self.comparative_queries.compare_eficiencia_centros_enhanced(request.periodo)
             except AttributeError:
                 try:
                     compare_centros = self.comparative_queries.analyze_centros_performance_enhanced(request.periodo)
                 except AttributeError:
-                    # Fallback si no existe ningún método de centros
                     compare_centros = type('EmptyResult', (), {'data': []})()
 
-            # ✅ CORRECCIÓN: Verificar si existe método ROE
             try:
                 roe_analysis = self.comparative_queries.compare_roe_gestores_enhanced(request.periodo)
             except AttributeError:
@@ -620,17 +912,114 @@ class CDGAgent:
             logger.error(f"Error en análisis comparativo: {e}")
             return {"error": f"Error procesando análisis comparativo: {str(e)}"}
 
+    async def _handle_general_chat_enhanced(self, request: CDGRequest, parsed_query: Optional[Dict] = None) -> Dict[str, Any]:
+        """🚀 MEJORADO: Maneja conversación general con contexto enriquecido"""
+        logger.info("💬 Procesando conversación general...")
+        
+        try:
+            # Obtener contexto relevante basado en el mensaje y entidades extraídas
+            context_data = await self._get_relevant_context_enhanced(request.user_message, parsed_query)
+            
+            # Construir prompt contextualizado mejorado
+            system_prompt = FINANCIAL_ANALYST_SYSTEM_PROMPT
+            
+            entities_info = ""
+            if parsed_query and parsed_query.get('entities'):
+                entities_info = f"\nEntidades detectadas: {json.dumps(parsed_query['entities'], ensure_ascii=False)}"
+            
+            user_prompt = f"""
+            Usuario pregunta: {request.user_message}
+            {entities_info}
+            
+            Contexto disponible:
+            {json.dumps(context_data, indent=2, ensure_ascii=False)}
+            
+            Proporciona una respuesta útil y contextualizada para el usuario de Control de Gestión de Banca March.
+            Si hay datos específicos disponibles, úsalos. Si no hay datos suficientes, explica qué información adicional sería útil.
+            """
+            
+            # Llamar a Azure OpenAI con deployment correcto
+            client = iniciar_agente_llm()
+            deployment_id = settings.AZURE_OPENAI_DEPLOYMENT_ID
+            
+            response = client.chat.completions.create(
+                model=deployment_id,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2000
+            )
+            
+            return {
+                'response': response.choices[0].message.content,
+                'context_used': context_data,
+                'entities_detected': parsed_query['entities'] if parsed_query else {},
+                'analysis_type': 'general_chat_enhanced'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error en conversación general: {e}")
+            return {"error": f"Error procesando conversación: {str(e)}"}
+
+    async def _get_relevant_context_enhanced(self, user_message: str, parsed_query: Optional[Dict] = None) -> Dict[str, Any]:
+        """🚀 MEJORADO: Obtiene contexto relevante usando entidades extraídas"""
+        context = {}
+        
+        try:
+            periodo_actual = datetime.now().strftime('%Y-%m')
+            
+            # Si hay entidades específicas, obtener contexto relacionado
+            if parsed_query and parsed_query.get('entities'):
+                entities = parsed_query['entities']
+                
+                # Contexto de gestor específico
+                if 'gestor_id_extracted' in entities:
+                    gestor_id = entities['gestor_id_extracted']
+                    gestor_data = self.gestor_queries.get_gestor_performance_enhanced(gestor_id, periodo_actual)
+                    if gestor_data and gestor_data.row_count > 0:
+                        context['gestor_especifico'] = gestor_data.data[0]
+                
+                # Contexto de centro específico
+                if 'centro_id' in entities:
+                    centro_id = entities['centro_id']
+                    gestores_centro = self.gestor_queries.get_gestores_by_centro_enhanced(centro_id, periodo_actual)
+                    if gestores_centro and hasattr(gestores_centro, 'data'):
+                        context['gestores_centro'] = gestores_centro.data[:3]  # Top 3
+                
+                # Contexto de segmento específico
+                if 'segmento_id' in entities:
+                    segmento_id = entities['segmento_id']
+                    gestores_segmento = self.gestor_queries.get_gestores_by_segmento_enhanced(segmento_id, periodo_actual)
+                    if gestores_segmento and hasattr(gestores_segmento, 'data'):
+                        context['gestores_segmento'] = gestores_segmento.data[:3]  # Top 3
+            
+            # Contexto general
+            ranking_general = self.comparative_queries.ranking_gestores_por_margen_enhanced(periodo_actual)
+            if ranking_general and hasattr(ranking_general, 'data') and ranking_general.data:
+                context['top_performers'] = ranking_general.data[:3]
+            
+            # Alertas recientes
+            alertas_recientes = self.deviation_queries.detect_precio_desviaciones_criticas_enhanced(periodo_actual, 20.0)
+            if alertas_recientes and hasattr(alertas_recientes, 'data') and alertas_recientes.data:
+                context['alertas_activas'] = len(alertas_recientes.data)
+                
+        except Exception as e:
+            logger.warning(f"Error obteniendo contexto mejorado: {e}")
+        
+        return context
+
+    # RESTO DE MÉTODOS EXISTENTES (sin cambios significativos)
+
     async def _handle_deviation_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         """Maneja análisis de desviaciones"""
         logger.info("⚠️ Procesando análisis de desviaciones...")
         
         try:
-            # ✅ CORRECCIÓN: Usar métodos enhanced correctos
             desviaciones_precio = self.deviation_queries.detect_precio_desviaciones_criticas_enhanced(request.periodo, 15.0)
             anomalias_margen = self.deviation_queries.analyze_margen_anomalies_enhanced(request.periodo, 2.0)
             outliers_volumen = self.deviation_queries.identify_volumen_outliers_enhanced(request.periodo, 3.0)
-            
-            # Análisis de patrones temporales
             patrones_temporales = self.deviation_queries.detect_patron_temporal_anomalias_enhanced(None, 6)
             
             return {
@@ -652,12 +1041,10 @@ class CDGAgent:
         
         try:
             if request.gestor_id:
-                # ✅ CORRECCIÓN: Usar métodos enhanced con fallback
                 try:
                     incentivos_gestor = self.incentive_queries.calculate_incentive_impact_enhanced(request.gestor_id, request.periodo)
                     simulacion = self.incentive_queries.simulate_incentive_scenarios_enhanced(request.gestor_id, request.periodo)
                 except AttributeError:
-                    # Fallback si los métodos no existen
                     incentivos_gestor = type('EmptyResult', (), {'data': []})()
                     simulacion = type('EmptyResult', (), {'data': []})()
                 
@@ -668,7 +1055,6 @@ class CDGAgent:
                     'gestor_id': request.gestor_id
                 }
             else:
-                # Análisis general de incentivos
                 ranking_incentivos = self.incentive_queries.ranking_incentivos_periodo_enhanced(request.periodo)
                 try:
                     impacto_desviaciones = self.incentive_queries.analyze_deviation_impact_on_incentives_enhanced(request.periodo)
@@ -694,21 +1080,15 @@ class CDGAgent:
             if not request.gestor_id:
                 return {"error": "Se requiere gestor_id para generar Business Review"}
             
-            # Obtener datos completos del gestor
             gestor_data = self.gestor_queries.get_gestor_performance_enhanced(request.gestor_id, request.periodo)
             if not gestor_data or gestor_data.row_count == 0:
                 return {"error": "No se encontraron datos para el gestor especificado"}
             
             gestor_info = gestor_data.data[0]
-            
-            # Usar método correcto del KPI calculator
             kpi_analysis = self.kpi_calculator.calculate_kpis_from_data(gestor_info)
-            
-            # ✅ CORRECCIÓN: Usar métodos enhanced correctos
             deviation_alerts = self.deviation_queries.detect_precio_desviaciones_criticas_enhanced(request.periodo, 15.0)
             comparative_data = self.comparative_queries.ranking_gestores_por_margen_enhanced(request.periodo)
             
-            # Generar Business Review usando report_generator
             business_review = self.report_generator.generate_business_review(
                 gestor_data=gestor_info,
                 kpi_data=kpi_analysis,
@@ -731,11 +1111,9 @@ class CDGAgent:
         logger.info("📈 Generando Executive Summary...")
         
         try:
-            # ✅ CORRECCIÓN: Usar métodos enhanced correctos
             ranking_gestores = self.comparative_queries.ranking_gestores_por_margen_enhanced(request.periodo)
             desviaciones_criticas = self.deviation_queries.detect_precio_desviaciones_criticas_enhanced(request.periodo, 25.0)
             
-            # Verificar que los datos existen antes de procesarlos
             gestores_data = ranking_gestores.data if ranking_gestores and hasattr(ranking_gestores, 'data') else []
             desviaciones_data = desviaciones_criticas.data if desviaciones_criticas and hasattr(desviaciones_criticas, 'data') else []
             
@@ -746,7 +1124,6 @@ class CDGAgent:
                 'periodo': request.periodo
             }
             
-            # Generar executive summary
             executive_summary = self.report_generator.generate_executive_summary_report(
                 consolidated_data, request.periodo
             )
@@ -761,58 +1138,12 @@ class CDGAgent:
             logger.error(f"Error generando Executive Summary: {e}")
             return {"error": f"Error generando Executive Summary: {str(e)}"}
 
-    async def _handle_general_chat(self, request: CDGRequest) -> Dict[str, Any]:
-        """Maneja conversación general usando Azure OpenAI"""
-        logger.info("💬 Procesando conversación general...")
-        
-        try:
-            # Obtener contexto relevante basado en el mensaje
-            context_data = await self._get_relevant_context(request.user_message)
-            
-            # Construir prompt contextualizado
-            system_prompt = FINANCIAL_ANALYST_SYSTEM_PROMPT
-            user_prompt = f"""
-            Usuario pregunta: {request.user_message}
-            
-            Contexto disponible:
-            {json.dumps(context_data, indent=2, ensure_ascii=False)}
-            
-            Proporciona una respuesta útil y contextualizada para el usuario de Control de Gestión de Banca March.
-            """
-            
-            # Llamar a Azure OpenAI con deployment correcto
-            client = iniciar_agente_llm()
-            
-            # ✅ CORRECCIÓN CRÍTICA: Usar deployment del .env
-            deployment_id = settings.AZURE_OPENAI_DEPLOYMENT_ID
-            
-            response = client.chat.completions.create(
-                model=deployment_id,  # ✅ Usar deployment de configuración
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=2000
-            )
-            
-            return {
-                'response': response.choices[0].message.content,
-                'context_used': context_data,
-                'analysis_type': 'general_chat'
-            }
-            
-        except Exception as e:
-            logger.error(f"Error en conversación general: {e}")
-            return {"error": f"Error procesando conversación: {str(e)}"}
-
     async def _generate_charts(self, content_data: Dict[str, Any], query_type: QueryType) -> List[Dict[str, Any]]:
         """Genera gráficos apropiados según el tipo de análisis"""
         charts = []
         
         try:
             if query_type == QueryType.GESTOR_ANALYSIS and 'kpi_data' in content_data:
-                # Dashboard de gestor
                 dashboard = self.chart_generator.generate_gestor_dashboard(
                     content_data.get('gestor_data', {}),
                     content_data['kpi_data'],
@@ -820,8 +1151,7 @@ class CDGAgent:
                 )
                 charts.extend(dashboard.get('charts', []))
                 
-            elif query_type == QueryType.COMPARATIVE_ANALYSIS and 'ranking_gestores' in content_data:
-                # Gráfico comparativo
+            elif query_type in [QueryType.COMPARATIVE_ANALYSIS, QueryType.MULTIPLE_GESTOR_ANALYSIS] and 'ranking_gestores' in content_data:
                 comparative_chart = self.chart_generator.generate_comparative_dashboard(
                     content_data['ranking_gestores'],
                     metric='margen_neto',
@@ -830,7 +1160,6 @@ class CDGAgent:
                 charts.append(comparative_chart)
                 
             elif query_type == QueryType.DEVIATION_ANALYSIS:
-                # Gráficos de desviaciones si hay datos
                 if 'desviaciones_precio' in content_data and content_data['desviaciones_precio']:
                     deviation_chart = self.chart_generator.generate_trend_dashboard(
                         content_data['desviaciones_precio'],
@@ -848,10 +1177,8 @@ class CDGAgent:
         recommendations = []
         
         try:
-            if query_type == QueryType.GESTOR_ANALYSIS:
+            if query_type in [QueryType.GESTOR_ANALYSIS, QueryType.MULTIPLE_GESTOR_ANALYSIS]:
                 kpi_data = content_data.get('kpi_data', {})
-                
-                # Acceder correctamente a los datos calculados
                 resumen_performance = kpi_data.get('resumen_performance', {})
                 margen = resumen_performance.get('margen_neto_pct', 0)
                 roe = resumen_performance.get('roe_pct', 0)
@@ -867,7 +1194,7 @@ class CDGAgent:
                 if content_data.get('anomalias_margen'):
                     recommendations.append("Investigar causas de las anomalías en márgenes detectadas")
                     
-            elif query_type == QueryType.COMPARATIVE_ANALYSIS:
+            elif query_type in [QueryType.COMPARATIVE_ANALYSIS, QueryType.CENTRO_ANALYSIS, QueryType.SEGMENTO_ANALYSIS]:
                 recommendations.append("Analizar mejores prácticas de los gestores top performer")
                 recommendations.append("Implementar plan de mejora para gestores con performance inferior")
             
@@ -880,40 +1207,15 @@ class CDGAgent:
         
         return recommendations
 
-    async def _get_relevant_context(self, user_message: str) -> Dict[str, Any]:
-        """Obtiene contexto relevante para conversación general"""
-        context = {}
-        
-        try:
-            # Obtener datos recientes para contexto
-            periodo_actual = datetime.now().strftime('%Y-%m')
-            
-            # ✅ CORRECCIÓN: Usar métodos enhanced correctos
-            ranking_general = self.comparative_queries.ranking_gestores_por_margen_enhanced(periodo_actual)
-            if ranking_general and hasattr(ranking_general, 'data') and ranking_general.data:
-                context['top_performers'] = ranking_general.data[:3]
-            
-            # Alertas recientes
-            alertas_recientes = self.deviation_queries.detect_precio_desviaciones_criticas_enhanced(periodo_actual, 20.0)
-            if alertas_recientes and hasattr(alertas_recientes, 'data') and alertas_recientes.data:
-                context['alertas_activas'] = len(alertas_recientes.data)
-                
-        except Exception as e:
-            logger.warning(f"Error obteniendo contexto: {e}")
-        
-        return context
-
     async def _infer_gestor_from_message(self, user_message: str) -> Any:
         """Infiere el gestor del mensaje del usuario"""
         try:
-            # Buscar patrones comunes de nombres o IDs de gestores
             gestores_data = self.gestor_queries.get_all_gestores_enhanced()
             if gestores_data and hasattr(gestores_data, 'data') and gestores_data.data:
                 for gestor in gestores_data.data:
                     if gestor.get('desc_gestor', '').lower() in user_message.lower():
                         return self.gestor_queries.get_gestor_performance_enhanced(gestor.get('gestor_id'))
             
-            # Si no se encuentra, devolver el primer gestor como ejemplo
             if gestores_data and hasattr(gestores_data, 'data') and gestores_data.data:
                 primer_gestor = gestores_data.data[0]
                 return self.gestor_queries.get_gestor_performance_enhanced(primer_gestor.get('gestor_id'))
@@ -928,11 +1230,14 @@ class CDGAgent:
         module_mapping = {
             QueryType.GESTOR_ANALYSIS: ['gestor_queries', 'kpi_calculator', 'incentive_queries'],
             QueryType.COMPARATIVE_ANALYSIS: ['comparative_queries', 'kpi_calculator', 'chart_generator'],
+            QueryType.MULTIPLE_GESTOR_ANALYSIS: ['gestor_queries', 'kpi_calculator', 'comparative_queries'],
+            QueryType.CENTRO_ANALYSIS: ['gestor_queries', 'comparative_queries', 'kpi_calculator'],
+            QueryType.SEGMENTO_ANALYSIS: ['gestor_queries', 'comparative_queries', 'kpi_calculator'],
             QueryType.DEVIATION_ANALYSIS: ['deviation_queries', 'kpi_calculator'],
             QueryType.INCENTIVE_ANALYSIS: ['incentive_queries', 'kpi_calculator'],
             QueryType.BUSINESS_REVIEW: ['report_generator', 'chart_generator', 'kpi_calculator'],
             QueryType.EXECUTIVE_SUMMARY: ['report_generator', 'comparative_queries', 'deviation_queries'],
-            QueryType.GENERAL_CHAT: ['azure_openai', 'prompts']
+            QueryType.GENERAL_CHAT: ['azure_openai', 'prompts', 'query_parser']
         }
         return module_mapping.get(query_type, [])
 
@@ -986,10 +1291,11 @@ class CDGAgent:
             'modules_loaded': [
                 'kpi_calculator', 'chart_generator', 'report_generator',
                 'gestor_queries', 'comparative_queries', 'deviation_queries', 
-                'incentive_queries', 'period_queries'
+                'incentive_queries', 'period_queries', 'query_parser'
             ],
             'imports_successful': self.imports_successful,
             'period_queries_enhanced': self.period_queries_enhanced,
+            'query_parser_available': self.query_parser_available,
             'mode': 'PRODUCTION' if self.imports_successful else 'MOCK',
             'last_activity': self.conversation_history[-1]['timestamp'] if self.conversation_history else None
         }
@@ -999,7 +1305,6 @@ class CDGAgent:
         self.conversation_history = []
         logger.info("🔄 Historial de conversación reiniciado")
 
-    # ✅ MÉTODOS ADICIONALES PARA INTEGRACIÓN CON PERIOD_QUERIES
     def get_available_periods(self) -> Dict[str, Any]:
         """Obtiene períodos disponibles usando period_queries"""
         try:
@@ -1011,7 +1316,6 @@ class CDGAgent:
                     'enhanced': True
                 }
             else:
-                # Fallback a método básico
                 periods = ['2025-10', '2025-09', '2025-08']
                 return {
                     'periods': [{'periodo': p} for p in periods],
@@ -1029,7 +1333,7 @@ class CDGAgent:
                 result = self.period_queries.get_latest_period_enhanced()
                 if hasattr(result, 'data') and result.data:
                     return result.data[0].get('periodo', '2025-10')
-            return '2025-10'  # Fallback
+            return '2025-10'
         except Exception as e:
             logger.warning(f"Error obteniendo período más reciente: {e}")
             return '2025-10'
@@ -1070,29 +1374,32 @@ if __name__ == "__main__":
     import asyncio
     
     async def demo_cdg_agent():
-        """Demostración del agente CDG"""
-        print("🚀 Iniciando demo del CDG Agent...")
+        """Demostración del agente CDG mejorado"""
+        print("🚀 Iniciando demo del CDG Agent mejorado...")
         
         agent = create_cdg_agent()
         
-        # Test casos de uso típicos
+        # Test casos de uso mejorados
         test_cases = [
             {
-                "message": "¿Cómo está el performance del gestor Juan Pérez en octubre?",
-                "gestor_id": "1",
+                "message": "¿Cómo está el performance del gestor 18?",
+                "gestor_id": "18",
                 "periodo": "2025-10"
             },
             {
-                "message": "Muéstrame una comparativa de gestores por margen neto",
+                "message": "Compara los gestores 18 y 21 en términos de ROE",
                 "periodo": "2025-10"   
             },
             {
-                "message": "¿Hay alguna desviación crítica en los precios este mes?",
+                "message": "¿Cómo está el centro de Barcelona?",
                 "periodo": "2025-10"
             },
             {
-                "message": "Genera un Business Review completo para el gestor ID 1",
-                "gestor_id": "1",
+                "message": "Análisis del segmento de Banca de Empresas",
+                "periodo": "2025-10"
+            },
+            {
+                "message": "¿Hay alguna desviación crítica en los precios este mes?",
                 "periodo": "2025-10"
             }
         ]

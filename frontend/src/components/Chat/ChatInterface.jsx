@@ -1,18 +1,23 @@
 // src/components/Chat/ChatInterface.jsx
-// Componente de interfaz de chat - CORREGIDO para chatService actualizado
+// Interfaz de chat profesional v2.1 - Compatible con api.js v2.1 y chatService.js v2.1
+// Integración completa con procesamiento inteligente automático
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Input, Button, Typography, Spin, message as antdMessage, Avatar, Card } from 'antd';
-import { SendOutlined, UserOutlined, RobotOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Input, Button, Typography, Spin, message as antdMessage, Avatar, Card, Tooltip, Badge } from 'antd';
+import { SendOutlined, UserOutlined, RobotOutlined, ExclamationCircleOutlined, ClearOutlined, BulbOutlined } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import chatService from '../../services/chatService';
 import theme from '../../styles/theme';
 
 const { Paragraph, Text } = Typography;
 
-// Mensaje individual en la interfaz de chat
+// ========================================
+// 🎨 COMPONENTE DE MENSAJE INDIVIDUAL
+// ========================================
+
 const ChatMessageItem = ({ message, index }) => {
   const isUser = message.sender === 'user';
+  const hasExtras = message.charts?.length > 0 || message.recommendations?.length > 0;
 
   return (
     <div style={{
@@ -42,8 +47,22 @@ const ChatMessageItem = ({ message, index }) => {
         wordWrap: 'break-word',
         whiteSpace: 'pre-wrap',
         fontSize: 14,
-        border: !isUser ? `1px solid ${theme.colors.border}` : 'none'
+        border: !isUser ? `1px solid ${theme.colors.border}` : 'none',
+        position: 'relative'
       }}>
+        {/* Badge para mensajes con extras */}
+        {!isUser && hasExtras && (
+          <Badge 
+            count={<BulbOutlined style={{ color: theme.colors.bmGreenPrimary }} />}
+            style={{ 
+              position: 'absolute', 
+              top: -4, 
+              right: -4,
+              backgroundColor: 'transparent'
+            }}
+          />
+        )}
+
         <Paragraph 
           style={{ 
             margin: 0, 
@@ -57,7 +76,7 @@ const ChatMessageItem = ({ message, index }) => {
         {message.charts && message.charts.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <Text strong style={{ color: isUser ? '#fff' : theme.colors.bmGreenDark }}>
-              Gráficos:
+              📊 Gráficos Generados ({message.charts.length}):
             </Text>
             {message.charts.map((chart, chartIndex) => (
               <Card 
@@ -77,7 +96,7 @@ const ChatMessageItem = ({ message, index }) => {
                   fontSize: 12,
                   color: isUser ? '#fff' : theme.colors.textSecondary
                 }}>
-                  {JSON.stringify(chart, null, 2)}
+                  {typeof chart === 'string' ? chart : JSON.stringify(chart, null, 2)}
                 </pre>
               </Card>
             ))}
@@ -94,7 +113,7 @@ const ChatMessageItem = ({ message, index }) => {
             borderLeft: `3px solid ${isUser ? '#fff' : theme.colors.bmGreenPrimary}`
           }}>
             <Text strong style={{ color: isUser ? '#fff' : theme.colors.bmGreenDark }}>
-              Recomendaciones:
+              💡 Recomendaciones:
             </Text>
             <ul style={{ 
               marginTop: 4, 
@@ -116,6 +135,19 @@ const ChatMessageItem = ({ message, index }) => {
           </div>
         )}
 
+        {/* Metadatos del procesamiento */}
+        {message.metadata && message.metadata.processing_type && (
+          <div style={{
+            marginTop: 8,
+            fontSize: 10,
+            opacity: 0.6,
+            textAlign: 'right',
+            fontStyle: 'italic'
+          }}>
+            {message.metadata.processing_type === 'intelligent_success' ? '🧠 Procesamiento Inteligente' : '🔄 Procesamiento Estándar'}
+          </div>
+        )}
+
         {/* Timestamp del mensaje */}
         <div style={{ 
           marginTop: 8, 
@@ -123,10 +155,10 @@ const ChatMessageItem = ({ message, index }) => {
           opacity: 0.7,
           textAlign: isUser ? 'right' : 'left'
         }}>
-          {new Date().toLocaleTimeString('es-ES', { 
+          {message.timestamp ? new Date(message.timestamp).toLocaleTimeString('es-ES', { 
             hour: '2-digit', 
             minute: '2-digit' 
-          })}
+          }) : ''}
         </div>
       </div>
 
@@ -148,145 +180,234 @@ ChatMessageItem.propTypes = {
     sender: PropTypes.oneOf(['user', 'agent']).isRequired,
     text: PropTypes.string.isRequired,
     charts: PropTypes.array,
-    recommendations: PropTypes.array
+    recommendations: PropTypes.array,
+    metadata: PropTypes.object,
+    timestamp: PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)])
   }).isRequired,
   index: PropTypes.number.isRequired
 };
 
-// ✅ CORREGIDO: Componente principal de chat con integración mejorada
+// ========================================
+// 🎯 COMPONENTE PRINCIPAL DE CHAT
+// ========================================
+
 const ChatInterface = ({ 
-  userId, 
+  userId = 'frontend_user', 
   initialMessages = [], 
   gestorId = null, 
   periodo = null,
   height = '500px' 
 }) => {
   const [messages, setMessages] = useState(initialMessages);
-  const [inputValue, setInputValue] = useState('');
+  const [inputMessage, setInputMessage] = useState(''); // ✅ CORREGIDO: Variable correcta
   const [isSending, setIsSending] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState('checking');
+  const [suggestions, setSuggestions] = useState([]);
   const messagesEndRef = useRef(null);
 
-  // Scroll automático al final
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
+  // ========================================
+  // 🔧 INICIALIZACIÓN Y CONFIGURACIÓN
+  // ========================================
 
+  // Configurar usuario en chatService al montar
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  // ✅ CORREGIDO: Verificar conexión con el servicio de chat
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const isAvailable = await chatService.isServiceAvailable();
-        setIsConnected(isAvailable);
-      } catch (error) {
-        console.warn('Chat service not available:', error);
-        setIsConnected(false);
-      }
-    };
-
     if (userId) {
-      checkConnection();
+      chatService.setCurrentUserId(userId);
+      console.log(`🆔 Usuario configurado en ChatInterface: ${userId}`);
     }
   }, [userId]);
 
-  // ✅ CORREGIDO: Manejar envío de mensaje con estructura actualizada
-  const sendMessage = async () => {
-    if (!inputValue.trim()) {
+  // Cargar sugerencias personalizadas
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      try {
+        const suggestionsData = await chatService.getChatSuggestions();
+        setSuggestions(suggestionsData.suggestions || []);
+      } catch (error) {
+        console.warn('No se pudieron cargar sugerencias:', error);
+      }
+    };
+    
+    if (isConnected && messages.length === 0) {
+      loadSuggestions();
+    }
+  }, [isConnected, messages.length]);
+
+  // Scroll automático optimizado
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Verificar conexión con el servicio
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        setConnectionStatus('checking');
+        const isAvailable = await chatService.isServiceAvailable();
+        setIsConnected(isAvailable);
+        setConnectionStatus(isAvailable ? 'connected' : 'disconnected');
+      } catch (error) {
+        console.warn('Chat service no disponible:', error);
+        setIsConnected(false);
+        setConnectionStatus('error');
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ========================================
+  // 💬 FUNCIONALIDADES DE CHAT
+  // ========================================
+
+  // ✅ CORREGIDO: Manejo de envío de mensaje
+  const sendMessage = useCallback(async () => {
+    const messageText = inputMessage.trim(); // ✅ USAR LA VARIABLE CORRECTA
+    
+    if (!messageText) {
       antdMessage.warning('Por favor, escribe un mensaje antes de enviar');
       return;
     }
 
-    const newUserMessage = {
+    if (!isConnected) {
+      antdMessage.error('No hay conexión con el servicio de chat');
+      return;
+    }
+
+    // Crear mensaje del usuario
+    const userMessage = {
       sender: 'user',
-      text: inputValue.trim(),
-      charts: [],
-      recommendations: [],
+      text: messageText,
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, newUserMessage]);
-    setInputValue('');
+    setMessages(prev => [...prev, userMessage]);
+    setInputMessage(''); // ✅ LIMPIAR EL INPUT CORRECTAMENTE
     setIsSending(true);
 
     try {
-      // ✅ CORREGIDO: Usar estructura de opciones actualizada del chatService
-      const response = await chatService.sendMessage(
-        userId, 
-        newUserMessage.text, 
-        { 
-          gestorId, 
-          periodo,
-          includeCharts: true,
-          includeRecommendations: true,
-          context: {
-            previousMessages: messages.slice(-5), // Últimos 5 mensajes para contexto
-            currentView: gestorId ? 'gestor' : 'direccion'
+      // ✅ CORREGIDO: Llamada correcta a chatService.sendMessage
+      const options = {
+        gestorId,
+        periodo,
+        includeCharts: true,
+        includeRecommendations: true,
+        context: {
+          previousMessages: messages.slice(-3),
+          currentView: gestorId ? 'gestor' : 'direccion',
+          sessionInfo: {
+            gestorId,
+            periodo,
+            timestamp: new Date().toISOString()
           }
         }
-      );
+      };
 
-      if (response.error) {
-        antdMessage.error(`Error del agente: ${response.error}`);
-        
-        // Mensaje de error para el usuario
-        const errorMessage = {
-          sender: 'agent',
-          text: response.response || `Lo siento, ha ocurrido un error: ${response.error}. Por favor, inténtalo de nuevo.`,
-          charts: response.charts || [],
-          recommendations: response.recommendations || ['Intenta reformular tu pregunta', 'Verifica tu conexión', 'Contacta al soporte si persiste'],
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      } else {
-        const agentMessage = {
-          sender: 'agent',
-          text: response.response || 'He procesado tu solicitud. ¿Hay algo más en lo que pueda ayudarte?',
-          charts: response.charts || [],
-          recommendations: response.recommendations || [],
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, agentMessage]);
-      }
-    } catch (error) {
-      console.error('Error en chat:', error);
-      antdMessage.error(`Error de conexión con el chat`);
-      
-      // Mensaje de error de conexión
-      const connectionErrorMessage = {
+      console.log('🚀 Enviando mensaje:', messageText, 'con opciones:', options);
+
+      // ✅ PARÁMETROS CORRECTOS: solo (message, options)
+      const response = await chatService.sendMessage(messageText, options);
+
+      console.log('✅ Respuesta recibida:', response);
+
+      // Procesar respuesta del agente
+      const agentMessage = {
         sender: 'agent',
-        text: 'Lo siento, hay un problema de conexión con el sistema. Por favor, verifica tu conexión e inténtalo nuevamente.',
-        charts: [],
-        recommendations: ['Verifica tu conexión a internet', 'Recarga la página si el problema persiste', 'Contacta al soporte técnico si continúa el error'],
+        text: response.response || '✅ He procesado tu solicitud correctamente.',
+        charts: response.charts || [],
+        recommendations: response.recommendations || [],
+        metadata: {
+          processing_type: response.serviceMetadata?.processingType || 'unknown',
+          confidence: response.confidence_score,
+          execution_time: response.execution_time
+        },
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, connectionErrorMessage]);
+
+      setMessages(prev => [...prev, agentMessage]);
+
+      // Notificaciones de éxito
+      if (response.charts?.length > 0 || response.recommendations?.length > 0) {
+        antdMessage.success('Consulta procesada con información adicional');
+      }
+
+    } catch (error) {
+      console.error('❌ Error enviando mensaje:', error);
+      
+      const errorMessage = {
+        sender: 'agent',
+        text: '🔌 Lo siento, hay un problema de conexión. Por favor, verifica tu conexión e inténtalo nuevamente.',
+        recommendations: [
+          'Verifica tu conexión a internet',
+          'Recarga la página si el problema persiste',
+          'El servicio puede estar temporalmente caído'
+        ],
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
       setIsConnected(false);
+      setConnectionStatus('error');
+      antdMessage.error('Error de conexión con el servicio de chat');
     } finally {
       setIsSending(false);
     }
-  };
+  }, [inputMessage, isConnected, gestorId, periodo, messages]);
 
   // Manejar tecla Enter
-  const handleKeyPress = (e) => {
+  const handleKeyPress = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (!isSending && isConnected) {
         sendMessage();
       }
     }
-  };
+  }, [isSending, isConnected, sendMessage]);
+
+  // Usar sugerencia
+  const handleSuggestion = useCallback((suggestion) => {
+    setInputMessage(suggestion);
+    setTimeout(() => {
+      sendMessage();
+    }, 100);
+  }, [sendMessage]);
 
   // Limpiar chat
-  const clearChat = () => {
-    setMessages(initialMessages);
-    antdMessage.success('Chat limpiado');
+  const clearChat = useCallback(async () => {
+    try {
+      await chatService.resetChatSession();
+      setMessages([]);
+      antdMessage.success('💬 Chat reiniciado exitosamente');
+    } catch (error) {
+      console.warn('Error reiniciando chat:', error);
+      setMessages([]);
+      antdMessage.success('💬 Chat limpiado localmente');
+    }
+  }, []);
+
+  // Estado de conexión
+  const getConnectionStatusText = () => {
+    switch (connectionStatus) {
+      case 'checking': return 'Verificando conexión...';
+      case 'connected': return `🟢 Conectado${gestorId ? ` - Gestor ${gestorId}` : ' - Vista Dirección'}${periodo ? ` - ${periodo}` : ''}`;
+      case 'disconnected': return '🔴 Sin conexión con el servicio';
+      case 'error': return '⚠️ Error de conexión';
+      default: return 'Estado desconocido';
+    }
   };
+
+  // ========================================
+  // 🎨 RENDERIZADO DEL COMPONENTE
+  // ========================================
 
   return (
     <div style={{
@@ -303,7 +424,7 @@ const ChatInterface = ({
       <div style={{
         padding: '12px 16px',
         borderBottom: `1px solid ${theme.colors.border}`,
-        backgroundColor: theme.colors.bmGreenPrimary,
+        backgroundColor: isConnected ? theme.colors.bmGreenPrimary : theme.colors.textSecondary,
         color: '#fff',
         display: 'flex',
         justifyContent: 'space-between',
@@ -312,24 +433,27 @@ const ChatInterface = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <RobotOutlined style={{ fontSize: 16 }} />
           <Text strong style={{ color: '#fff', margin: 0 }}>
-            Asistente CDG
+            Asistente CDG v2.1
           </Text>
           {!isConnected && (
-            <ExclamationCircleOutlined 
-              style={{ color: '#ff4d4f', fontSize: 14 }} 
-              title="Sin conexión"
-            />
+            <Tooltip title="Sin conexión con el servicio">
+              <ExclamationCircleOutlined 
+                style={{ color: '#ff4d4f', fontSize: 14 }} 
+              />
+            </Tooltip>
           )}
         </div>
         
-        <Button 
-          type="text" 
-          size="small" 
-          onClick={clearChat}
-          style={{ color: '#fff', padding: '4px 8px' }}
-        >
-          Limpiar
-        </Button>
+        <Tooltip title="Reiniciar conversación">
+          <Button 
+            type="text" 
+            size="small" 
+            icon={<ClearOutlined />}
+            onClick={clearChat}
+            disabled={isSending}
+            style={{ color: '#fff', padding: '4px 8px' }}
+          />
+        </Tooltip>
       </div>
 
       {/* Área de mensajes */}
@@ -343,13 +467,40 @@ const ChatInterface = ({
           <div style={{
             textAlign: 'center',
             color: theme.colors.textSecondary,
-            marginTop: '20%'
+            marginTop: '10%'
           }}>
             <RobotOutlined style={{ fontSize: 32, marginBottom: 8 }} />
-            <div>¡Hola! Soy tu asistente de Control de Gestión.</div>
-            <div style={{ fontSize: 12, marginTop: 4 }}>
-              Pregúntame sobre KPIs, análisis o cualquier dato que necesites.
+            <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 4 }}>
+              ¡Hola! Soy tu asistente de Control de Gestión
             </div>
+            <div style={{ fontSize: 14, marginBottom: 16 }}>
+              Pregúntame sobre KPIs, análisis financieros o cualquier dato que necesites.
+            </div>
+
+            {/* Sugerencias */}
+            {suggestions.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <Text strong style={{ marginBottom: 8, display: 'block' }}>
+                  💡 Sugerencias:
+                </Text>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                  {suggestions.slice(0, 3).map((suggestion, index) => (
+                    <Button
+                      key={index}
+                      size="small"
+                      type="dashed"
+                      onClick={() => handleSuggestion(suggestion)}
+                      style={{
+                        borderColor: theme.colors.bmGreenPrimary,
+                        color: theme.colors.bmGreenPrimary
+                      }}
+                    >
+                      {suggestion}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -373,12 +524,12 @@ const ChatInterface = ({
       }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <Input.TextArea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            value={inputMessage} // ✅ CORREGIDO: Variable correcta
+            onChange={(e) => setInputMessage(e.target.value)} // ✅ CORREGIDO: Setter correcto
             onPressEnter={handleKeyPress}
             placeholder={
               isConnected 
-                ? 'Escribe tu pregunta sobre CDG aquí...' 
+                ? 'Pregunta sobre KPIs, análisis, gestores, centros...' 
                 : 'Servicio de chat no disponible'
             }
             rows={2}
@@ -391,37 +542,35 @@ const ChatInterface = ({
             }}
           />
 
-          <Button
-            type="primary"
-            icon={isSending ? <Spin size="small" /> : <SendOutlined />}
-            onClick={sendMessage}
-            disabled={isSending || !isConnected || !inputValue.trim()}
-            style={{
-              height: 60,
-              width: 60,
-              borderRadius: 6,
-              backgroundColor: theme.colors.bmGreenPrimary,
-              borderColor: theme.colors.bmGreenPrimary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Enviar mensaje"
-          />
+          <Tooltip title={isSending ? 'Enviando...' : 'Enviar mensaje'}>
+            <Button
+              type="primary"
+              icon={isSending ? <Spin size="small" /> : <SendOutlined />}
+              onClick={sendMessage}
+              disabled={isSending || !isConnected || !inputMessage.trim()} // ✅ CORREGIDO: Variable correcta
+              style={{
+                height: 60,
+                width: 60,
+                borderRadius: 6,
+                backgroundColor: isConnected ? theme.colors.bmGreenPrimary : theme.colors.textSecondary,
+                borderColor: isConnected ? theme.colors.bmGreenPrimary : theme.colors.textSecondary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            />
+          </Tooltip>
         </div>
 
         {/* Estado de conexión */}
         <div style={{
-          marginTop: 4,
+          marginTop: 6,
           fontSize: 11,
-          color: theme.colors.textSecondary,
-          textAlign: 'center'
+          color: isConnected ? theme.colors.textSecondary : theme.colors.error,
+          textAlign: 'center',
+          fontWeight: !isConnected ? 'bold' : 'normal'
         }}>
-          {isConnected ? (
-            `Conectado - ${gestorId ? `Gestor ${gestorId}` : 'Vista Dirección'} - ${periodo || 'Período actual'}`
-          ) : (
-            'Sin conexión con el servicio de chat'
-          )}
+          {getConnectionStatusText()}
         </div>
       </div>
     </div>
@@ -429,7 +578,7 @@ const ChatInterface = ({
 };
 
 ChatInterface.propTypes = {
-  userId: PropTypes.string.isRequired,
+  userId: PropTypes.string,
   initialMessages: PropTypes.array,
   gestorId: PropTypes.string,
   periodo: PropTypes.string,

@@ -1,5 +1,5 @@
 // src/pages/DireccionView.jsx
-// Vista de dirección ANTI-BUCLE INFINITO - Completamente optimizada
+// Vista de dirección ANTI-BUCLE INFINITO - Completamente optimizada y CORREGIDA
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -44,15 +44,15 @@ const DireccionView = () => {
     performance: 'buena'
   });
 
-  // 🔥 ANTI-BUCLE: Refs para controlar inicialización
+  // ✅ Refs para controlar inicialización y evitar bucles
   const isInitialized = useRef(false);
   const isFetchingPeriods = useRef(false);
   const isFetchingMetrics = useRef(false);
 
-  // 🔥 SOLUCIÓN 1: Usuario ID constante
+  // ✅ Usuario ID memoizado
   const userId = useMemo(() => 'direccion_user_001', []);
 
-  // 🔥 SOLUCIÓN 2: Función de formateo memoizada
+  // ✅ Función de formateo memoizada
   const formatPeriodLabel = useCallback((period) => {
     if (!period) return '';
     
@@ -86,10 +86,9 @@ const DireccionView = () => {
     return period;
   }, []);
 
-  // 🔥 SOLUCIÓN 3: Fetch períodos PROTEGIDO CONTRA BUCLES
+  // ✅ Fetch períodos con protección anti-bucle
   const fetchAvailablePeriods = useCallback(async () => {
     if (isFetchingPeriods.current || periodsLoading) return;
-    
     isFetchingPeriods.current = true;
     setPeriodsLoading(true);
     
@@ -98,19 +97,17 @@ const DireccionView = () => {
       
       try {
         const response = await api.getAvailablePeriods();
-        if (response.data && response.data.periods && response.data.periods.length > 0) {
+        if (response?.data?.periods?.length) {
           periodsData = response.data.periods.sort((a, b) => b.localeCompare(a));
         }
-      } catch (error) {
-        console.warn('Endpoint getAvailablePeriods no disponible, generando períodos automáticamente');
-        
+      } catch {
+        // Generar períodos automáticamente si el endpoint falla
         const now = new Date();
         for (let i = 0; i < 12; i++) {
           const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const year = date.getFullYear();
           const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = '01';
-          periodsData.push(`${year}-${month}-${day}`);
+          periodsData.push(`${year}-${month}-01`);
         }
       }
 
@@ -122,14 +119,12 @@ const DireccionView = () => {
         
         setAvailablePeriods(periodsWithLabels);
         
-        // Solo establecer período por defecto si no existe y no está en proceso
+        // Solo establecer período por defecto si no existe
         if (!currentPeriodo && periodsData.length > 0) {
           const defaultPeriod = periodsData[0];
           setCurrentPeriodo(defaultPeriod);
           
-          // PROTECCIÓN: Solo actualizar URL si realmente cambió
-          const currentUrlPeriod = searchParams.get('periodo');
-          if (currentUrlPeriod !== defaultPeriod) {
+          if (searchParams.get('periodo') !== defaultPeriod) {
             setSearchParams(prev => ({ 
               ...Object.fromEntries(prev), 
               periodo: defaultPeriod 
@@ -146,7 +141,7 @@ const DireccionView = () => {
       }
       
     } catch (error) {
-      console.error('Error obteniendo periodos disponibles:', error);
+      console.error('Error obteniendo periodos:', error);
       message.warning('Error al cargar períodos. Usando datos por defecto.');
       
       const fallbackPeriods = [
@@ -171,10 +166,9 @@ const DireccionView = () => {
     }
   }, [formatPeriodLabel, setSearchParams, periodsLoading, currentPeriodo, searchParams]);
 
-  // 🔥 SOLUCIÓN 4: Fetch métricas PROTEGIDO CONTRA BUCLES
+  // ✅ Fetch métricas con protección anti-bucle
   const fetchDashboardMetrics = useCallback(async (periodo) => {
     if (!periodo || isFetchingMetrics.current) return;
-    
     isFetchingMetrics.current = true;
     
     try {
@@ -196,64 +190,55 @@ const DireccionView = () => {
       }
     } catch (error) {
       console.warn('Error cargando métricas ejecutivas:', error);
+      // Datos fallback
+      setDashboardMetrics({
+        totalGestores: 30,
+        centros: 5,
+        alertasActivas: 3,
+        performance: 'buena'
+      });
     } finally {
       isFetchingMetrics.current = false;
     }
   }, []);
 
-  // 🔥 SOLUCIÓN ANTI-BUCLE PRINCIPAL: useEffect de inicialización UNA SOLA VEZ
+  // ✅ Inicialización controlada UNA SOLA VEZ
   useEffect(() => {
     if (isInitialized.current) return;
-    
-    let isMounted = true;
     isInitialized.current = true;
 
     const initializeComponent = async () => {
-      if (!isMounted) return;
-      
       setLoading(true);
       
       try {
-        // Cargar períodos solo una vez
         await fetchAvailablePeriods();
         
-        // Solo cargar métricas si tenemos período
         const periodoToUse = currentPeriodo || searchParams.get('periodo');
-        if (isMounted && periodoToUse) {
+        if (periodoToUse) {
           await fetchDashboardMetrics(periodoToUse);
         }
         
-        if (isMounted) {
-          setLastUpdate(new Date());
-        }
+        setLastUpdate(new Date());
       } catch (error) {
-        if (isMounted) {
-          console.error('Error inicializando componente:', error);
-        }
+        console.error('Error inicializando componente:', error);
       } finally {
-        if (isMounted) {
-          setTimeout(() => setLoading(false), 500);
-        }
+        setTimeout(() => setLoading(false), 500);
       }
     };
 
     initializeComponent();
+  }, []); // ✅ Dependencias vacías - solo se ejecuta UNA vez
 
-    return () => {
-      isMounted = false;
-    };
-  }, []); // ✅ DEPENDENCIAS VACÍAS - Solo se ejecuta UNA vez
-
-  // 🔥 useEffect PROTEGIDO para métricas cuando cambia período
+  // ✅ Effect protegido para métricas cuando cambia período
   useEffect(() => {
     if (currentPeriodo && !loading && !isFetchingMetrics.current && isInitialized.current) {
       fetchDashboardMetrics(currentPeriodo);
     }
   }, [currentPeriodo, fetchDashboardMetrics, loading]);
 
-  // 🔥 SOLUCIÓN 7: Handlers memoizados CON PROTECCIÓN
+  // ✅ Handlers memoizados con protecciones
   const handlePeriodChange = useCallback((newPeriod) => {
-    if (currentPeriodo === newPeriod) return; // ✅ Evitar cambios innecesarios
+    if (currentPeriodo === newPeriod) return;
     
     setCurrentPeriodo(newPeriod);
     const newParams = { periodo: newPeriod };
@@ -279,7 +264,7 @@ const DireccionView = () => {
   }, [comparisonMode, availablePeriods, currentPeriodo, setSearchParams]);
 
   const handleRefresh = useCallback(async () => {
-    if (refreshing) return; // ✅ Evitar múltiples refreshes
+    if (refreshing) return;
     
     setRefreshing(true);
     try {
@@ -305,48 +290,33 @@ const DireccionView = () => {
     navigate('/');
   }, [navigate]);
 
-  // 🔥 SOLUCIÓN 8: Componentes memoizados
+  // ✅ Header memoizado
   const renderDirectionHeader = useMemo(() => (
-    <Card 
-      variant="outlined"
-      style={{ 
-        marginBottom: theme.spacing.lg,
-        background: `linear-gradient(135deg, ${theme.colors.bmGreenDark}, ${theme.colors.bmGreenPrimary})`,
-        color: 'white',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-      }}
-    >
+    <Card style={{ 
+      marginBottom: 24,
+      background: `linear-gradient(135deg, ${theme.colors.bmGreenDark}, ${theme.colors.bmGreenPrimary})`,
+      color: 'white',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+    }}>
       <Row justify="space-between" align="middle">
         <Col>
           <Space align="center" size="large">
             <img 
               src={BancaMarchLogo} 
               alt="Banca March" 
-              style={{ height: '40px', filter: 'brightness(0) invert(1)' }}
+              style={{ height: 40, filter: 'brightness(0) invert(1)' }}
             />
             <div>
-              <Title 
-                level={2} 
-                style={{ 
-                  color: 'white', 
-                  margin: 0,
-                  fontWeight: 600 
-                }}
-              >
+              <Title level={3} style={{ color: 'white', margin: 0, fontWeight: 600 }}>
+                <DashboardOutlined style={{ marginRight: 8 }} />
                 Panel Ejecutivo de Dirección
               </Title>
-              <Text style={{ 
-                color: 'rgba(255,255,255,0.9)', 
-                fontSize: '16px' 
-              }}>
-                Control de Gestión Consolidado | Vista Estratégica
+              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16 }}>
+                Control de Gestión Consolidado
               </Text>
               {lastUpdate && (
                 <div style={{ marginTop: 4 }}>
-                  <Text style={{ 
-                    color: 'rgba(255,255,255,0.7)', 
-                    fontSize: '12px' 
-                  }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
                     Última actualización: {lastUpdate.toLocaleTimeString('es-ES')}
                   </Text>
                 </div>
@@ -357,15 +327,13 @@ const DireccionView = () => {
         
         <Col>
           <Space size="middle" wrap>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CalendarOutlined style={{ color: 'white', fontSize: '16px' }} />
-              <Text style={{ color: 'white', fontSize: '14px', fontWeight: 500 }}>
-                Período:
-              </Text>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarOutlined style={{ color: 'white' }} />
+              <Text style={{ color: 'white', fontWeight: 500 }}>Período:</Text>
               <Select
                 value={currentPeriodo}
                 onChange={handlePeriodChange}
-                style={{ minWidth: '150px' }}
+                style={{ minWidth: 150 }}
                 disabled={comparisonMode || periodsLoading}
                 loading={periodsLoading}
                 placeholder="Seleccionar período..."
@@ -383,11 +351,7 @@ const DireccionView = () => {
                 icon={<ReloadOutlined />}
                 onClick={handleRefresh}
                 loading={refreshing}
-                style={{ 
-                  borderColor: 'white',
-                  color: 'white',
-                  background: 'transparent'
-                }}
+                style={{ borderColor: 'white', color: 'white', background: 'transparent' }}
               />
             </Tooltip>
 
@@ -395,7 +359,6 @@ const DireccionView = () => {
               <Button
                 icon={<SwapOutlined />}
                 type={comparisonMode ? 'primary' : 'default'}
-                size="default"
                 onClick={handleComparisonModeToggle}
                 disabled={availablePeriods.length < 2}
                 style={{ 
@@ -411,11 +374,7 @@ const DireccionView = () => {
             <Button 
               icon={<ArrowLeftOutlined />}
               onClick={handleGoBack}
-              style={{ 
-                borderColor: 'white',
-                color: 'white',
-                background: 'transparent'
-              }}
+              style={{ borderColor: 'white', color: 'white', background: 'transparent' }}
             >
               Volver
             </Button>
@@ -429,23 +388,23 @@ const DireccionView = () => {
                 borderColor: theme.colors.bmGreenLight
               }}
             >
-              Exportar Reporte
+              Exportar
             </Button>
           </Space>
         </Col>
       </Row>
 
       {comparisonMode && comparisonPeriods.length >= 2 && (
-        <Row style={{ marginTop: theme.spacing.md }}>
+        <Row style={{ marginTop: 16 }}>
           <Col span={24}>
             <div style={{
-              padding: theme.spacing.sm,
+              padding: 12,
               backgroundColor: 'rgba(255,255,255,0.1)',
               borderRadius: 6,
               border: '1px solid rgba(255,255,255,0.2)'
             }}>
-              <Text style={{ color: 'white', fontSize: '14px' }}>
-                📊 <strong>Modo Comparación Activo:</strong> Comparando {comparisonPeriods.map(formatPeriodLabel).join(' vs ')}
+              <Text style={{ color: 'white', fontSize: 14 }}>
+                📊 <strong>Modo Comparación:</strong> {comparisonPeriods.map(formatPeriodLabel).join(' vs ')}
               </Text>
             </div>
           </Col>
@@ -468,141 +427,95 @@ const DireccionView = () => {
     formatPeriodLabel
   ]);
 
+  // ✅ Métricas ejecutivas memoizadas
   const renderExecutiveMetrics = useMemo(() => (
-    <Row gutter={[16, 16]} style={{ marginBottom: theme.spacing.lg }}>
+    <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
       <Col xs={24} sm={12} lg={6}>
-        <Card 
-          variant="outlined"
-          style={{ 
-            textAlign: 'center',
-            borderRadius: 8,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            borderTop: `4px solid ${theme.colors.bmGreenPrimary}`,
-            height: '120px'
-          }}
-        >
-          <div style={{ padding: theme.spacing.sm }}>
-            <Space direction="vertical" size="small">
-              <DashboardOutlined 
-                style={{ 
-                  fontSize: '24px', 
-                  color: theme.colors.bmGreenPrimary
-                }} 
-              />
-              <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary }}>
-                Vista Consolidada
-              </Title>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: '12px' }}>
-                {dashboardMetrics.totalGestores} gestores en {dashboardMetrics.centros} centros
-              </Text>
-            </Space>
-          </div>
+        <Card style={{ 
+          textAlign: 'center',
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          borderTop: `4px solid ${theme.colors.bmGreenPrimary}`,
+          height: 120
+        }}>
+          <Space direction="vertical" size="small">
+            <DashboardOutlined style={{ fontSize: 24, color: theme.colors.bmGreenPrimary }} />
+            <Title level={4} style={{ margin: 0 }}>Vista Consolidada</Title>
+            <Text style={{ fontSize: 12 }}>
+              {dashboardMetrics.totalGestores} gestores en {dashboardMetrics.centros} centros
+            </Text>
+          </Space>
         </Card>
       </Col>
 
       <Col xs={24} sm={12} lg={6}>
-        <Card 
-          variant="outlined"
-          style={{ 
-            textAlign: 'center',
-            borderRadius: 8,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            borderTop: `4px solid ${theme.colors.bmGreenLight}`,
-            height: '120px'
-          }}
-        >
-          <div style={{ padding: theme.spacing.sm }}>
-            <Space direction="vertical" size="small">
-              <Title level={3} style={{ 
-                margin: 0, 
-                color: theme.colors.bmGreenPrimary,
-                fontSize: '20px'
-              }}>
-                Real Time
-              </Title>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: '12px' }}>
-                Datos actualizados automáticamente
-              </Text>
-              <Badge 
-                status="processing" 
-                text="En línea" 
-                style={{ fontSize: '10px' }}
-              />
-            </Space>
-          </div>
+        <Card style={{ 
+          textAlign: 'center',
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          borderTop: `4px solid ${theme.colors.bmGreenLight}`,
+          height: 120
+        }}>
+          <Space direction="vertical" size="small">
+            <Title level={3} style={{ margin: 0, color: theme.colors.bmGreenPrimary, fontSize: 20 }}>
+              Real Time
+            </Title>
+            <Text style={{ fontSize: 12 }}>Datos actualizados automáticamente</Text>
+            <Badge status="processing" text="En línea" style={{ fontSize: 10 }} />
+          </Space>
         </Card>
       </Col>
 
       <Col xs={24} sm={12} lg={6}>
-        <Card 
-          variant="outlined"
-          style={{ 
-            textAlign: 'center',
-            borderRadius: 8,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            borderTop: `4px solid ${theme.colors.success}`,
-            height: '120px'
-          }}
-        >
-          <div style={{ padding: theme.spacing.sm }}>
-            <Space direction="vertical" size="small">
-              <Title level={3} style={{ 
-                margin: 0, 
-                color: theme.colors.success,
-                fontSize: '20px'
-              }}>
-                AI Insights
-              </Title>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: '12px' }}>
-                Performance: {dashboardMetrics.performance}
-              </Text>
-              <Badge 
-                color={dashboardMetrics.performance === 'excelente' ? 'green' : 
-                      dashboardMetrics.performance === 'buena' ? 'blue' : 'orange'}
-                text={dashboardMetrics.performance.toUpperCase()}
-                style={{ fontSize: '10px' }}
-              />
-            </Space>
-          </div>
+        <Card style={{ 
+          textAlign: 'center',
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          borderTop: `4px solid ${theme.colors.success}`,
+          height: 120
+        }}>
+          <Space direction="vertical" size="small">
+            <Title level={3} style={{ margin: 0, color: theme.colors.success, fontSize: 20 }}>
+              AI Insights
+            </Title>
+            <Text style={{ fontSize: 12 }}>Performance: {dashboardMetrics.performance}</Text>
+            <Badge 
+              color={dashboardMetrics.performance === 'excelente' ? 'green' : 
+                    dashboardMetrics.performance === 'buena' ? 'blue' : 'orange'}
+              text={dashboardMetrics.performance.toUpperCase()}
+              style={{ fontSize: 10 }}
+            />
+          </Space>
         </Card>
       </Col>
 
       <Col xs={24} sm={12} lg={6}>
-        <Card 
-          variant="outlined"
-          style={{ 
-            textAlign: 'center',
-            borderRadius: 8,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            borderTop: `4px solid ${dashboardMetrics.alertasActivas > 0 ? theme.colors.error : theme.colors.info}`,
-            height: '120px'
-          }}
-        >
-          <div style={{ padding: theme.spacing.sm }}>
-            <Space direction="vertical" size="small">
-              <Title level={3} style={{ 
-                margin: 0, 
-                color: dashboardMetrics.alertasActivas > 0 ? theme.colors.error : theme.colors.info,
-                fontSize: '20px'
-              }}>
-                Alertas
-              </Title>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: '12px' }}>
-                {dashboardMetrics.alertasActivas} alertas activas
-              </Text>
-              <Badge 
-                count={dashboardMetrics.alertasActivas} 
-                overflowCount={99}
-                style={{ fontSize: '10px' }}
-              />
-            </Space>
-          </div>
+        <Card style={{ 
+          textAlign: 'center',
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          borderTop: `4px solid ${dashboardMetrics.alertasActivas > 0 ? theme.colors.error : theme.colors.info}`,
+          height: 120
+        }}>
+          <Space direction="vertical" size="small">
+            <Title level={3} style={{ 
+              margin: 0, 
+              color: dashboardMetrics.alertasActivas > 0 ? theme.colors.error : theme.colors.info,
+              fontSize: 20
+            }}>
+              Alertas
+            </Title>
+            <Text style={{ fontSize: 12 }}>
+              {dashboardMetrics.alertasActivas} alertas activas
+            </Text>
+            <Badge count={dashboardMetrics.alertasActivas} overflowCount={99} />
+          </Space>
         </Card>
       </Col>
     </Row>
   ), [dashboardMetrics]);
 
-  // Props memoizadas para ControlGestionDashboard
+  // ✅ Props memoizadas para ControlGestionDashboard
   const dashboardProps = useMemo(() => ({
     userId,
     periodo: currentPeriodo,
@@ -611,7 +524,7 @@ const DireccionView = () => {
     availablePeriods
   }), [userId, currentPeriodo, comparisonMode, comparisonPeriods, availablePeriods]);
 
-  // Renderizar loading
+  // ✅ Loading inicial
   if (loading) {
     return (
       <div style={{
@@ -620,25 +533,16 @@ const DireccionView = () => {
         justifyContent: 'center',
         alignItems: 'center',
         height: '100vh',
-        backgroundColor: theme.colors.backgroundLight,
         background: `linear-gradient(135deg, ${theme.colors.bmGreenDark}15, ${theme.colors.bmGreenPrimary}10)`
       }}>
         <Space direction="vertical" align="center" size="large">
-          <img 
-            src={BancaMarchLogo} 
-            alt="Banca March" 
-            style={{ height: '60px', marginBottom: theme.spacing.lg }}
-          />
+          <img src={BancaMarchLogo} alt="Banca March" style={{ height: 60 }} />
           <Spin size="large" />
           <div style={{ textAlign: 'center' }}>
             <Title level={3} style={{ color: theme.colors.bmGreenDark, margin: 0 }}>
               Iniciando Panel Ejecutivo
             </Title>
-            <Text style={{ 
-              color: theme.colors.textSecondary,
-              fontSize: '16px',
-              marginTop: theme.spacing.sm
-            }}>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 16 }}>
               Cargando datos consolidados y períodos disponibles...
             </Text>
           </div>
@@ -647,14 +551,14 @@ const DireccionView = () => {
     );
   }
 
-  // No renderizar dashboard hasta tener período seleccionado
+  // ✅ Verificar período antes de renderizar
   if (!currentPeriodo) {
     return (
-      <div style={{ padding: theme.spacing.lg }}>
+      <div style={{ padding: 24 }}>
         <Card>
-          <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
+          <div style={{ textAlign: 'center', padding: 40 }}>
             <Spin size="large" />
-            <Paragraph style={{ marginTop: theme.spacing.lg }}>
+            <Paragraph style={{ marginTop: 24 }}>
               Cargando períodos disponibles...
             </Paragraph>
           </div>
@@ -666,49 +570,37 @@ const DireccionView = () => {
   return (
     <div style={{ 
       minHeight: '100vh',
-      backgroundColor: theme.colors.backgroundLight,
-      background: `linear-gradient(180deg, ${theme.colors.backgroundLight} 0%, ${theme.colors.background} 100%)`
+      background: `linear-gradient(180deg, ${theme.colors.backgroundLight}, ${theme.colors.background})`
     }}>
       
       {/* Header ejecutivo */}
       {renderDirectionHeader}
       
-      {/* Métricas ejecutivas destacadas */}
-      <div style={{ padding: `0 ${theme.spacing.lg}` }}>
+      {/* Métricas ejecutivas */}
+      <div style={{ padding: `0 24px` }}>
         {renderExecutiveMetrics}
       </div>
       
-      {/* Dashboard principal con períodos dinámicos - PROPS MEMOIZADAS */}
+      {/* Dashboard principal - PROPS MEMOIZADAS */}
       <ControlGestionDashboard {...dashboardProps} />
       
       {/* Footer ejecutivo */}
       <div style={{ 
-        padding: theme.spacing.lg,
+        padding: 24,
         textAlign: 'center',
         borderTop: `1px solid ${theme.colors.border}`,
         backgroundColor: theme.colors.background,
-        marginTop: theme.spacing.xl
+        marginTop: 24
       }}>
         <Space direction="vertical" size="small">
-          <Text style={{ 
-            color: theme.colors.textSecondary,
-            fontSize: '14px',
-            fontWeight: 500
-          }}>
+          <Text style={{ fontSize: 14, fontWeight: 500 }}>
             Panel Ejecutivo CDG - Banca March
           </Text>
-          <Text style={{ 
-            color: theme.colors.textSecondary,
-            fontSize: '12px'
-          }}>
-            Sistema de Control de Gestión Inteligente con IA | © 2025 Todos los derechos reservados
+          <Text style={{ fontSize: 12 }}>
+            Sistema de Control de Gestión Inteligente con IA | © 2025
           </Text>
           {lastUpdate && (
-            <Text style={{ 
-              color: theme.colors.textSecondary,
-              fontSize: '11px',
-              fontStyle: 'italic'
-            }}>
+            <Text style={{ fontSize: 11, fontStyle: 'italic' }}>
               Datos actualizados: {lastUpdate.toLocaleString('es-ES')}
             </Text>
           )}

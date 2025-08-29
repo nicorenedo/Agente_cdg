@@ -1,0 +1,48 @@
+import sqlite3
+
+def check_gestor_18():
+    conn = sqlite3.connect('backend/src/database/BMCONTABILIDADCDG.db')
+    cursor = conn.cursor()
+    
+    # 1. Verificar gestor en MAESTRO_GESTORES
+    print("1. ✅ VERIFICANDO GESTOR 18 EN MAESTRO_GESTORES")
+    cursor.execute("SELECT * FROM MAESTRO_GESTORES WHERE GESTOR_ID = 18")
+    gestor = cursor.fetchone()
+    if gestor:
+        print(f"   Encontrado: ID={gestor[0]}, Nombre={gestor[1]}, Centro={gestor[2]}, Segmento={gestor[3]}")
+    else:
+        print("   ❌ Gestor 18 NO encontrado")
+        return
+    
+    # 2. Verificar contratos del gestor 18
+    print("\n2. 📋 VERIFICANDO CONTRATOS EN MAESTRO_CONTRATOS")
+    cursor.execute("SELECT COUNT(*) FROM MAESTRO_CONTRATOS WHERE GESTOR_ID = 18")
+    contratos_count = cursor.fetchone()[0]
+    print(f"   Contratos encontrados: {contratos_count}")
+    
+    if contratos_count > 0:
+        cursor.execute("SELECT CONTRATO_ID, PRODUCTO_ID, FECHA_ALTA FROM MAESTRO_CONTRATOS WHERE GESTOR_ID = 18 LIMIT 5")
+        contratos = cursor.fetchall()
+        for contrato in contratos:
+            print(f"   - Contrato: {contrato[0]}, Producto: {contrato[1]}, Fecha: {contrato[2]}")
+    
+    # 3. Verificar períodos disponibles en PRECIO_POR_PRODUCTO_REAL
+    print("\n3. 📅 PERÍODOS DISPONIBLES EN PRECIO_POR_PRODUCTO_REAL")
+    cursor.execute("SELECT DISTINCT FECHA_CALCULO FROM PRECIO_POR_PRODUCTO_REAL ORDER BY FECHA_CALCULO DESC")
+    periodos = cursor.fetchall()
+    print(f"   Períodos encontrados: {len(periodos)}")
+    for periodo in periodos:
+        print(f"   - {periodo[0]}")
+    
+    # 4. Verificar datos para el segmento del gestor 18 (N10103)
+    print("\n4. 💰 DATOS KPI PARA SEGMENTO N10103 (Banca de Empresas)")
+    cursor.execute("SELECT * FROM PRECIO_POR_PRODUCTO_REAL WHERE SEGMENTO_ID = 'N10103'")
+    kpis = cursor.fetchall()
+    print(f"   Registros KPI para segmento N10103: {len(kpis)}")
+    for kpi in kpis[:3]:
+        print(f"   - Producto: {kpi[1]}, Precio: {kpi[2]}, Fecha: {kpi[3]}")
+    
+    conn.close()
+
+# Ejecutar diagnóstico
+check_gestor_18()

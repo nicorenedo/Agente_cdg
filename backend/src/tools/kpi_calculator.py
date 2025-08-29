@@ -4,6 +4,7 @@ kpi_calculator.py
 
 Biblioteca centralizada de cálculos de KPIs financieros para el Agente CDG.
 Fórmulas estandarizadas específicas para control de gestión bancario.
+VERSIÓN CORREGIDA - Soluciona inconsistencias en cálculo de ROE y otros KPIs.
 """
 
 import logging
@@ -40,6 +41,10 @@ class KPICalculator:
             Dict con margen_neto_pct, beneficio_neto, clasificacion
         """
         try:
+            # Asegurar que ingresos sea un número válido
+            ingresos = float(ingresos) if ingresos is not None else 0.0
+            gastos = float(gastos) if gastos is not None else 0.0
+            
             if not ingresos or ingresos <= 0:
                 return {
                     'margen_neto_pct': 0.0,
@@ -48,7 +53,7 @@ class KPICalculator:
                     'formula_aplicada': 'División por cero evitada'
                 }
             
-            beneficio_neto = ingresos - gastos
+            beneficio_neto = round(ingresos - gastos, 2)
             margen_neto_pct = round((beneficio_neto / ingresos) * 100, 2)
             
             # Clasificación según estándares bancarios CDG
@@ -65,7 +70,7 @@ class KPICalculator:
             
             return {
                 'margen_neto_pct': margen_neto_pct,
-                'beneficio_neto': round(beneficio_neto, 2),
+                'beneficio_neto': beneficio_neto,
                 'clasificacion': clasificacion,
                 'formula_aplicada': f'({ingresos} - {gastos}) / {ingresos} * 100'
             }
@@ -83,15 +88,23 @@ class KPICalculator:
         """
         Cálculo de ROE (Return on Equity) bancario
         Fórmula: Beneficio Neto / Patrimonio * 100
+        CORREGIDO: Maneja correctamente beneficio_neto de gestor_queries
         """
         try:
+            # Convertir valores a float y manejar None
+            beneficio_neto = float(beneficio_neto) if beneficio_neto is not None else 0.0
+            patrimonio = float(patrimonio) if patrimonio is not None else 0.0
+            
             if not patrimonio or patrimonio <= 0:
                 return {
                     'roe_pct': 0.0,
                     'clasificacion': 'SIN_PATRIMONIO',
-                    'benchmark_vs_sector': 'N/A'
+                    'benchmark_vs_sector': 'N/A',
+                    'formula_aplicada': f'{beneficio_neto} / {patrimonio} * 100 (patrimonio inválido)'
                 }
             
+            # CLAVE: No modificar beneficio_neto si es válido, incluso si es 0
+            # El problema era que se estaba recibiendo 0 cuando debería ser 10241.89
             roe_pct = round((beneficio_neto / patrimonio) * 100, 4)
             
             # Clasificación según benchmarks bancarios
@@ -120,7 +133,12 @@ class KPICalculator:
             
         except Exception as e:
             logger.error(f"Error calculando ROE: {e}")
-            return {'roe_pct': 0.0, 'clasificacion': 'ERROR'}
+            return {
+                'roe_pct': 0.0, 
+                'clasificacion': 'ERROR',
+                'benchmark_vs_sector': 'Error en cálculo',
+                'formula_aplicada': f'Error: {str(e)}'
+            }
     
     # =================================================================
     # 2. RATIOS DE EFICIENCIA OPERATIVA
@@ -132,6 +150,9 @@ class KPICalculator:
         Valores >1.5 considerados eficientes en banca
         """
         try:
+            ingresos = float(ingresos) if ingresos is not None else 0.0
+            gastos = float(gastos) if gastos is not None else 0.0
+            
             if not gastos or gastos <= 0:
                 return {
                     'ratio_eficiencia': 999999.99,
@@ -254,22 +275,53 @@ class KPICalculator:
             return {'desviacion_pct': 0.0, 'nivel_alerta': 'ERROR'}
     
     # =================================================================
-    # 5. FUNCIONES HELPER PARA INTEGRACIÓN
+    # 5. FUNCIONES HELPER PARA INTEGRACIÓN - CORREGIDAS
     # =================================================================
     
     def calculate_kpis_from_data(self, data_row: Dict[str, Any]) -> Dict[str, Any]:
         """
         Calcula múltiples KPIs desde una fila de datos unificada
-        Ideal para integrar con results de queries existentes
+        CORREGIDO: Mejor mapeo de campos y manejo de datos de entrada
         """
         try:
-            ingresos = data_row.get('ingresos_total', 0) or 0
-            gastos = data_row.get('gastos_total', 0) or 0
-            patrimonio = data_row.get('patrimonio_total', 0) or 0
+            # MEJORADO: Múltiples formas de obtener los datos críticos
+            # Prioridad: total_ingresos > ingresos_total > total_ingresos_gestor
+            ingresos = (
+                data_row.get('total_ingresos') or 
+                data_row.get('ingresos_total') or
+                data_row.get('total_ingresos_gestor') or
+                data_row.get('ingresos') or 0
+            )
+            
+            gastos = (
+                data_row.get('total_gastos') or 
+                data_row.get('gastos_total') or
+                data_row.get('total_gastos_gestor') or
+                data_row.get('gastos') or 0
+            )
+            
+            patrimonio = (
+                data_row.get('patrimonio_total') or 
+                data_row.get('patrimonio_gestionado') or
+                data_row.get('patrimonio') or 0
+            )
+            
+            # CLAVE: Si tenemos beneficio_neto directamente, usarlo
+            beneficio_neto_directo = (
+                data_row.get('beneficio_neto') or
+                data_row.get('total_beneficio_neto') or
+                data_row.get('margen_neto')
+            )
+            
+            # Log para debugging
+            logger.info(f"KPI Calculator inputs: ingresos={ingresos}, gastos={gastos}, patrimonio={patrimonio}, beneficio_directo={beneficio_neto_directo}")
             
             # Calcular KPIs principales
             margen_result = self.calculate_margen_neto(ingresos, gastos)
-            roe_result = self.calculate_roe(margen_result['beneficio_neto'], patrimonio)
+            
+            # CORREGIDO: Usar beneficio_neto directo si está disponible, sino el calculado
+            beneficio_para_roe = beneficio_neto_directo if beneficio_neto_directo is not None else margen_result['beneficio_neto']
+            roe_result = self.calculate_roe(beneficio_para_roe, patrimonio)
             eficiencia_result = self.calculate_ratio_eficiencia(ingresos, gastos)
             
             return {
@@ -288,6 +340,7 @@ class KPICalculator:
             
         except Exception as e:
             logger.error(f"Error calculando KPIs desde data: {e}")
+            logger.error(f"Data row recibida: {data_row}")
             return {'error': str(e)}
     
     def _get_clasificacion_global(self, margen_result: Dict, roe_result: Dict, eficiencia_result: Dict) -> str:
@@ -306,6 +359,50 @@ class KPICalculator:
             return 'AVERAGE_PERFORMER'
         else:
             return 'NEEDS_IMPROVEMENT'
+
+    # =================================================================
+    # 6. FUNCIÓN ESPECIAL PARA USAR DATOS DE GESTOR_QUERIES
+    # =================================================================
+    
+    def calculate_kpis_from_gestor_data(self, gestor_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calcula KPIs específicamente desde los datos de gestor_queries
+        Esto asegura consistencia con los cálculos del módulo gestor_queries
+        """
+        try:
+            # Usar exactamente los mismos campos que gestor_queries
+            ingresos = gestor_data.get('total_ingresos', 0) or 0
+            gastos = gestor_data.get('total_gastos', 0) or 0
+            patrimonio = gestor_data.get('patrimonio_total', 0) or 0
+            beneficio_neto = gestor_data.get('beneficio_neto', 0)
+            
+            # Si no tenemos beneficio_neto, calcularlo
+            if beneficio_neto is None or beneficio_neto == 0:
+                beneficio_neto = ingresos - gastos
+            
+            # Usar directamente el beneficio_neto de gestor_data para ROE
+            roe_result = self.calculate_roe(beneficio_neto, patrimonio)
+            margen_result = self.calculate_margen_neto(ingresos, gastos)
+            eficiencia_result = self.calculate_ratio_eficiencia(ingresos, gastos)
+            
+            return {
+                'kpis_calculados': {
+                    'margen_neto': margen_result,
+                    'roe': roe_result,
+                    'eficiencia': eficiencia_result
+                },
+                'resumen_performance': {
+                    'margen_neto_pct': margen_result['margen_neto_pct'],
+                    'roe_pct': roe_result['roe_pct'],
+                    'ratio_eficiencia': eficiencia_result['ratio_eficiencia'],
+                    'clasificacion_global': self._get_clasificacion_global(margen_result, roe_result, eficiencia_result)
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculando KPIs desde gestor_data: {e}")
+            return {'error': str(e)}
+
 
 # =================================================================
 # INSTANCIA GLOBAL Y FUNCIONES DE CONVENIENCIA
@@ -327,5 +424,9 @@ def get_kpis_from_data(data_row: Dict[str, Any]) -> Dict[str, Any]:
     """Función de conveniencia para calcular KPIs desde datos"""
     return kpi_calculator.calculate_kpis_from_data(data_row)
 
+def get_kpis_from_gestor_data(gestor_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Función de conveniencia para calcular KPIs desde gestor_queries"""
+    return kpi_calculator.calculate_kpis_from_gestor_data(gestor_data)
+
 FinancialKPICalculator = KPICalculator
-__all__ = ['KPICalculator', 'FinancialKPICalculator']
+__all__ = ['KPICalculator', 'FinancialKPICalculator', 'kpi_calculator']

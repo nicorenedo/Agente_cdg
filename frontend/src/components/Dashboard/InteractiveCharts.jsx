@@ -1,5 +1,5 @@
 // src/components/Dashboard/InteractiveCharts.jsx
-// Componente para gráficos interactivos - CORREGIDO para backend Banca March
+// Componente para gráficos interactivos - CORREGIDO: defaultProps + Card deprecated props
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Radio, Select, Tooltip, Row, Col, Spin, Alert, Button, Space } from 'antd';
@@ -35,14 +35,13 @@ const CHART_TYPES = {
   pie: 'Circular'
 };
 
-// ✅ CORREGIDO: Solo KPIs disponibles en tu backend con campos en mayúsculas
+// KPIs disponibles con formateo
 const KPI_FORMATS = {
   ROE: { suffix: '%', decimals: 2, label: 'ROE' },
   MARGEN_NETO: { suffix: '%', decimals: 2, label: 'Margen Neto' },
   TOTAL_INGRESOS: { prefix: '€', decimals: 0, thousands: true, label: 'Total Ingresos' },
   TOTAL_GASTOS: { prefix: '€', decimals: 0, thousands: true, label: 'Total Gastos' },
   BENEFICIO_NETO: { prefix: '€', decimals: 0, thousands: true, label: 'Beneficio Neto' }
-  // ✅ ELIMINADOS: eficiencia, volumen_gestionado, ratio_morosidad (no disponibles)
 };
 
 // Función para formatear valores según el KPI
@@ -107,12 +106,12 @@ CustomTooltip.propTypes = {
   selectedKpi: PropTypes.string
 };
 
-// Componente principal InteractiveCharts
+// ✅ CORRECCIÓN: Usar parámetros por defecto ES6 en lugar de defaultProps
 const InteractiveCharts = ({ 
-  data: propData, 
-  availableKpis: propAvailableKpis, 
-  title, 
-  description,
+  data = [], 
+  availableKpis = ['ROE', 'MARGEN_NETO', 'TOTAL_INGRESOS', 'TOTAL_GASTOS', 'BENEFICIO_NETO'], 
+  title = 'Análisis de KPIs', 
+  description = 'Visualización interactiva de indicadores clave de performance',
   onChartChange,
   gestorId,
   periodo,
@@ -122,16 +121,16 @@ const InteractiveCharts = ({
 }) => {
   // Estados principales
   const [chartType, setChartType] = useState('bar');
-  const [selectedKpi, setSelectedKpi] = useState(propAvailableKpis?.[0] || 'ROE');
-  const [selectedKpis, setSelectedKpis] = useState(propAvailableKpis?.slice(0, 3) || ['ROE']);
+  const [selectedKpi, setSelectedKpi] = useState(availableKpis?.[0] || 'ROE');
+  const [selectedKpis, setSelectedKpis] = useState(availableKpis?.slice(0, 3) || ['ROE']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
   // Estados de datos
-  const [chartData, setChartData] = useState(propData || []);
-  const [availableKpis, setAvailableKpis] = useState(propAvailableKpis || []);
+  const [chartData, setChartData] = useState(data || []);
+  const [availableKpisState, setAvailableKpisState] = useState(availableKpis || []);
 
-  // ✅ CORREGIDO: Cargar datos con campos en mayúsculas
+  // Cargar datos con campos en mayúsculas
   const fetchChartData = useCallback(async () => {
     if (!gestorId && !periodo) return;
 
@@ -151,10 +150,10 @@ const InteractiveCharts = ({
             ...response.data.kpis
           }];
           setChartData(gestorData);
-          setAvailableKpis(Object.keys(response.data.kpis));
+          setAvailableKpisState(Object.keys(response.data.kpis));
         }
       } else {
-        // ✅ CORREGIDO: Datos comparativos con endpoint correcto
+        // Datos comparativos
         try {
           response = await api.getComparativeRanking(periodo || '2025-10', 'MARGEN_NETO');
           
@@ -170,7 +169,7 @@ const InteractiveCharts = ({
             }));
             
             setChartData(rankingData);
-            setAvailableKpis(['ROE', 'MARGEN_NETO', 'TOTAL_INGRESOS', 'TOTAL_GASTOS', 'BENEFICIO_NETO']);
+            setAvailableKpisState(['ROE', 'MARGEN_NETO', 'TOTAL_INGRESOS', 'TOTAL_GASTOS', 'BENEFICIO_NETO']);
           }
         } catch (rankingError) {
           console.warn('Endpoint comparative/ranking no disponible, usando análisis comparativo:', rankingError);
@@ -189,7 +188,7 @@ const InteractiveCharts = ({
             }));
             
             setChartData(gestoresData);
-            setAvailableKpis(['ROE', 'MARGEN_NETO', 'TOTAL_INGRESOS', 'TOTAL_GASTOS', 'BENEFICIO_NETO']);
+            setAvailableKpisState(['ROE', 'MARGEN_NETO', 'TOTAL_INGRESOS', 'TOTAL_GASTOS', 'BENEFICIO_NETO']);
           }
         }
       }
@@ -199,24 +198,24 @@ const InteractiveCharts = ({
       setError('Error al cargar datos del gráfico');
       
       // Usar datos de props como fallback
-      if (propData && propData.length > 0) {
-        setChartData(propData);
-        setAvailableKpis(propAvailableKpis || []);
+      if (data && data.length > 0) {
+        setChartData(data);
+        setAvailableKpisState(availableKpis || []);
       }
     } finally {
       setLoading(false);
     }
-  }, [gestorId, periodo, propData, propAvailableKpis]);
+  }, [gestorId, periodo, data, availableKpis]);
 
   // Efectos
   useEffect(() => {
-    if (propData && propData.length > 0) {
-      setChartData(propData);
-      setAvailableKpis(propAvailableKpis || []);
+    if (data && data.length > 0) {
+      setChartData(data);
+      setAvailableKpisState(availableKpis || []);
     } else {
       fetchChartData();
     }
-  }, [propData, propAvailableKpis, fetchChartData]);
+  }, [data, availableKpis, fetchChartData]);
 
   useEffect(() => {
     if (autoRefresh) {
@@ -225,7 +224,7 @@ const InteractiveCharts = ({
     }
   }, [autoRefresh, fetchChartData]);
 
-  // Manejar cambio de tipo de gráfico
+  // Handlers
   const handleChartTypeChange = (e) => {
     const newType = e.target.value;
     setChartType(newType);
@@ -234,7 +233,6 @@ const InteractiveCharts = ({
     }
   };
 
-  // Manejar cambio de KPI seleccionado
   const handleKpiChange = (kpi) => {
     setSelectedKpi(kpi);
     if (onChartChange) {
@@ -242,7 +240,6 @@ const InteractiveCharts = ({
     }
   };
 
-  // Manejar cambio de múltiples KPIs
   const handleMultipleKpisChange = (kpis) => {
     setSelectedKpis(kpis);
     if (onChartChange) {
@@ -269,7 +266,7 @@ const InteractiveCharts = ({
 
   const filteredData = getFilteredData();
 
-  // ✅ CORREGIDO: Función para exportar datos con campos correctos
+  // Función para exportar datos
   const exportData = () => {
     const csvData = filteredData.map(item => {
       const row = { Gestor: item.DESC_GESTOR || item.nombre || 'N/A' };
@@ -483,7 +480,6 @@ const InteractiveCharts = ({
         );
 
       case 'pie':
-        // ✅ CORREGIDO: Para pie chart, usar campo correcto
         const pieData = filteredData.slice(0, 8).map((item, index) => ({
           name: item.DESC_GESTOR || `Item ${index + 1}`,
           value: item[selectedKpi] || 0,
@@ -526,7 +522,7 @@ const InteractiveCharts = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: theme.colors.textPrimary, fontSize: '16px', fontWeight: 600 }}>
-              {title || 'Gráfico Interactivo'}
+              {title}
             </span>
             {description && (
               <Tooltip title={description}>
@@ -556,7 +552,7 @@ const InteractiveCharts = ({
           </Space>
         </div>
       }
-      bordered={false}
+      variant="outlined"
       style={{
         borderRadius: '8px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
@@ -591,7 +587,7 @@ const InteractiveCharts = ({
               placeholder="Seleccionar KPIs"
               maxTagCount={2}
             >
-              {availableKpis.map(kpi => (
+              {availableKpisState.map(kpi => (
                 <Option key={kpi} value={kpi}>
                   {getKpiLabel(kpi)}
                 </Option>
@@ -604,7 +600,7 @@ const InteractiveCharts = ({
               style={{ width: 200 }}
               placeholder="Seleccionar KPI"
             >
-              {availableKpis.map(kpi => (
+              {availableKpisState.map(kpi => (
                 <Option key={kpi} value={kpi}>
                   {getKpiLabel(kpi)}
                 </Option>
@@ -644,14 +640,6 @@ InteractiveCharts.propTypes = {
   height: PropTypes.number
 };
 
-InteractiveCharts.defaultProps = {
-  data: [],
-  availableKpis: ['ROE', 'MARGEN_NETO', 'TOTAL_INGRESOS', 'TOTAL_GASTOS'],
-  title: 'Análisis de KPIs',
-  description: 'Visualización interactiva de indicadores clave de performance',
-  autoRefresh: false,
-  showMultipleKpis: false,
-  height: 350
-};
+// ✅ CORRECCIÓN: Eliminado InteractiveCharts.defaultProps completamente
 
 export default InteractiveCharts;

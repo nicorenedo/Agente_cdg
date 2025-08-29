@@ -20,44 +20,43 @@ const { Option } = Select;
 
 // Configuración de umbrales para análisis de desviaciones
 const DEVIATION_THRESHOLDS = {
-  CRITICAL: 25.0,    // Desviación crítica >25%
-  WARNING: 15.0,     // Alerta >15%
-  NORMAL: 5.0        // Normal <5%
+  CRITICAL: 25.0,
+  WARNING: 15.0,
+  NORMAL: 5.0,
 };
 
-// Tipos de desviaciones que el sistema puede detectar
+// Tipos de desviaciones
 const DEVIATION_TYPES = {
   PRECIO: 'precio',
   MARGEN: 'margen',
   VOLUMEN: 'volumen'
-  // ✅ ELIMINADO: eficiencia (no disponible en backend)
 };
 
 // Función para determinar severidad
 const getSeverityLevel = (deviation) => {
-  const absDeviation = Math.abs(deviation);
-  if (absDeviation >= DEVIATION_THRESHOLDS.CRITICAL) return 'critical';
-  if (absDeviation >= DEVIATION_THRESHOLDS.WARNING) return 'warning';
+  const absDev = Math.abs(deviation);
+  if (absDev >= DEVIATION_THRESHOLDS.CRITICAL) return 'critical';
+  if (absDev >= DEVIATION_THRESHOLDS.WARNING) return 'warning';
   return 'normal';
 };
 
 // Badge de estado según severidad
 const DeviationBadge = ({ deviation, type }) => {
-  const absDeviation = Math.abs(deviation);
+  const absDev = Math.abs(deviation);
   let status = 'success';
   let icon = <CheckCircleOutlined />;
   let text = 'Normal';
-
-  if (absDeviation >= DEVIATION_THRESHOLDS.CRITICAL) {
+  
+  if (absDev >= DEVIATION_THRESHOLDS.CRITICAL) {
     status = 'error';
     icon = <ExclamationCircleOutlined />;
     text = 'Crítico';
-  } else if (absDeviation >= DEVIATION_THRESHOLDS.WARNING) {
+  } else if (absDev >= DEVIATION_THRESHOLDS.WARNING) {
     status = 'warning';
     icon = <WarningOutlined />;
     text = 'Alerta';
   }
-
+  
   return (
     <Badge
       status={status}
@@ -78,14 +77,9 @@ DeviationBadge.propTypes = {
   type: PropTypes.string.isRequired
 };
 
-const DeviationAnalysis = ({ 
-  userId, 
-  gestorId = null, 
-  periodo, 
-  onDrillDown 
-}) => {
-  // Estados principales
-  const [loading, setLoading] = useState(true);
+// Componente principal
+const DeviationAnalysis = ({ userId, gestorId, periodo, onDrillDown }) => {
+  const [loading, setLoading] = useState(false);
   const [deviations, setDeviations] = useState([]);
   const [filteredDeviations, setFilteredDeviations] = useState([]);
   const [selectedType, setSelectedType] = useState('all');
@@ -93,70 +87,77 @@ const DeviationAnalysis = ({
   const [summary, setSummary] = useState({});
   const [chartData, setChartData] = useState([]);
 
-  // ✅ CORREGIDO: Cargar datos de desviaciones con campos en mayúsculas
+  // Cargar datos de desviaciones
   const fetchDeviationData = useCallback(async () => {
     setLoading(true);
     try {
       const currentPeriod = periodo || new Date().toISOString().slice(0, 7);
+      console.log('🔄 Cargando desviaciones para período:', currentPeriod);
       
-      // Obtener alertas de desviación del backend
-      const alertsResponse = await api.getDeviationAlerts(currentPeriod, DEVIATION_THRESHOLDS.WARNING);
+      const response = await api.getDeviationAlerts(currentPeriod, DEVIATION_THRESHOLDS.WARNING);
+      console.log('📦 Respuesta del backend:', response);
       
-      if (alertsResponse.data) {
+      if (response && response.data) {
         const allDeviations = [
-          ...(alertsResponse.data.precio_alerts || []).map(item => ({
+          // Alertas de precio
+          ...(response.data.precio_alerts || []).map(item => ({
             ...item,
             type: DEVIATION_TYPES.PRECIO,
-            deviation: item.PRECIO_DESVIACION || item.precio_desviacion || 0,
-            severity: getSeverityLevel(item.PRECIO_DESVIACION || item.precio_desviacion || 0),
-            // ✅ CORREGIDO: Usar campos en mayúsculas
-            desc_gestor: item.DESC_GESTOR || item.desc_gestor,
-            desc_centro: item.DESC_CENTRO || item.desc_centro,
-            gestor_id: item.GESTOR_ID || item.gestor_id,
-            centro_id: item.CENTRO_ID || item.centro_id,
-            valor_real: item.VALOR_REAL || item.valor_real,
-            valor_estandar: item.VALOR_ESTANDAR || item.valor_estandar
+            deviation: item.PRECIO_DESVIACION ?? item.precio_desviacion ?? 0,
+            severity: getSeverityLevel(item.PRECIO_DESVIACION ?? item.precio_desviacion ?? 0),
+            desc_gestor: item.DESC_GESTOR ?? item.desc_gestor ?? 'No especificado',
+            desc_centro: item.DESC_CENTRO ?? item.desc_centro ?? 'No especificado',
+            gestor_id: item.GESTOR_ID ?? item.gestor_id,
+            centro_id: item.CENTRO_ID ?? item.centro_id,
+            valor_real: item.VALOR_REAL ?? item.valor_real,
+            valor_estandar: item.VALOR_ESTANDAR ?? item.valor_estandar
           })),
-          ...(alertsResponse.data.margen_anomalies || []).map(item => ({
+          // Anomalías de margen
+          ...(response.data.margen_anomalies || []).map(item => ({
             ...item,
             type: DEVIATION_TYPES.MARGEN,
-            deviation: item.MARGEN_DESVIACION || item.margen_desviacion || 0,
-            severity: getSeverityLevel(item.MARGEN_DESVIACION || item.margen_desviacion || 0),
-            // ✅ CORREGIDO: Usar campos en mayúsculas
-            desc_gestor: item.DESC_GESTOR || item.desc_gestor,
-            desc_centro: item.DESC_CENTRO || item.desc_centro,
-            gestor_id: item.GESTOR_ID || item.gestor_id,
-            centro_id: item.CENTRO_ID || item.centro_id,
-            valor_real: item.VALOR_REAL || item.valor_real,
-            valor_estandar: item.VALOR_ESTANDAR || item.valor_estandar
+            deviation: item.MARGEN_DESVIACION ?? item.margen_desviacion ?? 0,
+            severity: getSeverityLevel(item.MARGEN_DESVIACION ?? item.margen_desviacion ?? 0),
+            desc_gestor: item.DESC_GESTOR ?? item.desc_gestor ?? 'No especificado',
+            desc_centro: item.DESC_CENTRO ?? item.desc_centro ?? 'No especificado',
+            gestor_id: item.GESTOR_ID ?? item.gestor_id,
+            centro_id: item.CENTRO_ID ?? item.centro_id,
+            valor_real: item.VALOR_REAL ?? item.valor_real,
+            valor_estandar: item.VALOR_ESTANDAR ?? item.valor_estandar
           })),
-          ...(alertsResponse.data.volumen_outliers || []).map(item => ({
+          // Outliers de volumen
+          ...(response.data.volumen_outliers || []).map(item => ({
             ...item,
             type: DEVIATION_TYPES.VOLUMEN,
-            deviation: item.VOLUMEN_DESVIACION || item.volumen_desviacion || 0,
-            severity: getSeverityLevel(item.VOLUMEN_DESVIACION || item.volumen_desviacion || 0),
-            // ✅ CORREGIDO: Usar campos en mayúsculas
-            desc_gestor: item.DESC_GESTOR || item.desc_gestor,
-            desc_centro: item.DESC_CENTRO || item.desc_centro,
-            gestor_id: item.GESTOR_ID || item.gestor_id,
-            centro_id: item.CENTRO_ID || item.centro_id,
-            valor_real: item.VALOR_REAL || item.valor_real,
-            valor_estandar: item.VALOR_ESTANDAR || item.valor_estandar
+            deviation: item.VOLUMEN_DESVIACION ?? item.volumen_desviacion ?? 0,
+            severity: getSeverityLevel(item.VOLUMEN_DESVIACION ?? item.volumen_desviacion ?? 0),
+            desc_gestor: item.DESC_GESTOR ?? item.desc_gestor ?? 'No especificado',
+            desc_centro: item.DESC_CENTRO ?? item.desc_centro ?? 'No especificado',
+            gestor_id: item.GESTOR_ID ?? item.gestor_id,
+            centro_id: item.CENTRO_ID ?? item.centro_id,
+            valor_real: item.VALOR_REAL ?? item.valor_real,
+            valor_estandar: item.VALOR_ESTANDAR ?? item.valor_estandar
           }))
         ];
 
+        console.log('✅ Desviaciones procesadas:', allDeviations.length);
         setDeviations(allDeviations);
         setFilteredDeviations(allDeviations);
-        
-        // Calcular resumen de desviaciones
         calculateSummary(allDeviations);
-        
-        // Preparar datos para gráficos
         prepareChartData(allDeviations);
+      } else {
+        console.warn('⚠️ No se recibieron datos del backend');
+        setDeviations([]);
+        setFilteredDeviations([]);
+        setSummary({});
+        setChartData([]);
       }
-
     } catch (error) {
-      console.error('Error cargando análisis de desviaciones:', error);
+      console.error('❌ Error cargando análisis de desviaciones:', error);
+      setDeviations([]);
+      setFilteredDeviations([]);
+      setSummary({});
+      setChartData([]);
     } finally {
       setLoading(false);
     }
@@ -176,39 +177,36 @@ const DeviationAnalysis = ({
 
   // Preparar datos para visualización
   const prepareChartData = (data) => {
-    // Agrupar por tipo de desviación para gráfico
-    const groupedData = data.reduce((acc, item) => {
-      const existingType = acc.find(group => group.type === item.type);
-      if (existingType) {
-        existingType.count += 1;
-        existingType.avgDeviation = (existingType.avgDeviation + Math.abs(item.deviation)) / 2;
+    const grouped = data.reduce((acc, item) => {
+      const existingGroup = acc.find(g => g.type === item.type);
+      if (existingGroup) {
+        existingGroup.count += 1;
+        existingGroup.avgDeviation = ((existingGroup.avgDeviation * (existingGroup.count - 1)) + Math.abs(item.deviation)) / existingGroup.count;
       } else {
         acc.push({
           type: item.type,
           count: 1,
           avgDeviation: Math.abs(item.deviation),
-          // ✅ CORREGIDO: Añadir campo para gráficos con formato esperado
           DESC_GESTOR: `Tipo ${item.type.toUpperCase()}`
         });
       }
       return acc;
     }, []);
-
-    setChartData(groupedData);
+    setChartData(grouped);
   };
 
-  // Filtrar desviaciones
+  // Aplicar filtros
   const applyFilters = useCallback(() => {
     let filtered = [...deviations];
-
+    
     if (selectedType !== 'all') {
       filtered = filtered.filter(d => d.type === selectedType);
     }
-
+    
     if (selectedSeverity !== 'all') {
       filtered = filtered.filter(d => d.severity === selectedSeverity);
     }
-
+    
     setFilteredDeviations(filtered);
     calculateSummary(filtered);
   }, [deviations, selectedType, selectedSeverity]);
@@ -222,7 +220,7 @@ const DeviationAnalysis = ({
     applyFilters();
   }, [applyFilters]);
 
-  // ✅ CORREGIDO: Configuración de columnas con campos corregidos
+  // Configuración de columnas para la tabla
   const columns = [
     {
       title: 'Gestor',
@@ -313,13 +311,12 @@ const DeviationAnalysis = ({
 
   return (
     <div style={{ padding: theme.spacing.md }}>
-      
       {/* Header con resumen ejecutivo */}
       <Card 
         title={
           <Space>
             <ExclamationCircleOutlined style={{ color: theme.colors.bmGreenPrimary }} />
-            <span style={{ color: theme.colors.bmGreenDark, fontSize: '18px', fontWeight: 600 }}>
+            <span style={{ color: theme.colors.bmDark, fontSize: 18, fontWeight: 600 }}>
               Análisis de Desviaciones - Sistema de Alertas
             </span>
           </Space>
@@ -478,7 +475,7 @@ const DeviationAnalysis = ({
         <Space direction="vertical" size="small">
           <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
             <Badge status="success" />
-            <span><strong>Normal:</strong> Desviación {'<'} {DEVIATION_THRESHOLDS.NORMAL}% - Dentro de parámetros aceptables</span>
+            <span><strong>Normal:</strong> Desviación &lt; {DEVIATION_THRESHOLDS.NORMAL}% - Dentro de parámetros aceptables</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
             <Badge status="warning" />
@@ -486,7 +483,7 @@ const DeviationAnalysis = ({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
             <Badge status="error" />
-            <span><strong>Crítico:</strong> Desviación {'>'} {DEVIATION_THRESHOLDS.CRITICAL}% - Acción inmediata requerida</span>
+            <span><strong>Crítico:</strong> Desviación &gt; {DEVIATION_THRESHOLDS.CRITICAL}% - Acción inmediata requerida</span>
           </div>
         </Space>
       </Card>

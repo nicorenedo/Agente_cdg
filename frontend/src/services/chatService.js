@@ -1,242 +1,510 @@
 // src/services/chatService.js
-// Servicio de chat completamente integrado con backend CDG - CORREGIDO
+// Servicio de chat profesional v2.1 - Totalmente integrado con main.py v2.0 y api.js v2.1
+// Compatible con Chat Agent v6.1 con System Prompts Profesionales + Reflection Pattern
 
-import axios from 'axios';
+import React, { useEffect, useCallback } from 'react';
+import api from './api.js';
 
-// ✅ CORREGIDO: Chat usa puerto 8000
-const CHAT_API_URL = process.env.REACT_APP_CHAT_API_URL || 'http://localhost:8000';
+// ========================================
+// 🌐 CONFIGURACIÓN Y CONSTANTES
+// ========================================
 
-// Cliente HTTP específico para chat
-const chatClient = axios.create({
-  baseURL: CHAT_API_URL,
-  timeout: 45000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+const CHAT_CONFIG = {
+  WEBSOCKET_URL: process.env.REACT_APP_CHAT_API_URL?.replace(/^http/, 'ws') || 'ws://localhost:8000',
+  RECONNECT_ATTEMPTS: 5,
+  RECONNECT_BASE_DELAY: 1000,
+  HEARTBEAT_INTERVAL: 30000,
+  REQUEST_TIMEOUT: 45000,
+  RETRY_ATTEMPTS: 3
+};
 
-// Interceptores para el cliente de chat
-chatClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`💬 Chat Request: ${config.method?.toUpperCase()} ${config.url}`);
-    }
-    
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+const CONNECTION_STATES = {
+  CONNECTING: 'CONNECTING',
+  OPEN: 'OPEN',
+  CLOSING: 'CLOSING',
+  CLOSED: 'CLOSED',
+  RECONNECTING: 'RECONNECTING'
+};
 
-chatClient.interceptors.response.use(
-  (response) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ Chat Response: ${response.config.method?.toUpperCase()} ${response.config.url}`);
-    }
-    return response;
-  },
-  (error) => {
-    console.error('❌ Chat API Error:', error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);
+// ========================================
+// 🎯 CLASE PRINCIPAL CHATSERVICE
+// ========================================
 
 class ChatService {
   constructor() {
+    // WebSocket management
     this.wsConnection = null;
-    this.messageHandlers = [];
+    this.connectionState = CONNECTION_STATES.CLOSED;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.reconnectDelay = 1000;
     this.heartbeatInterval = null;
     this.isConnecting = false;
-  }
-
-  async sendMessage(userId, message, options = {}) {
-    if (!userId || !message?.trim()) {
-      throw new Error('UserId y mensaje son requeridos');
-    }
-
-    const payload = {
-      user_id: userId,
-      message: message.trim(),
-      gestor_id: options.gestorId || null,
-      periodo: options.periodo || null,
-      include_charts: options.includeCharts !== false,
-      include_recommendations: options.includeRecommendations !== false,
-      context: options.context || {},
-      user_feedback: options.feedback || null,
-      conversation_id: options.conversationId || null,
-      timestamp: new Date().toISOString(),
-      ...(options.context?.conversationalPivot && {
-        pivot_request: true,
-        current_chart: options.context.currentChart,
-        requested_updates: options.context.requestedUpdates
-      }),
-      ...(options.ping && { ping: true })
+    
+    // Event handlers
+    this.messageHandlers = [];
+    this.stateChangeHandlers = [];
+    this.errorHandlers = [];
+    
+    // Chat features
+    this.sessionId = this.getSessionId();
+    this.currentUserId = 'frontend_user';
+    
+    // Performance tracking
+    this.lastMessageTime = null;
+    this.messageQueue = [];
+    
+    // Advanced features flags
+    this.features = {
+      professionalPrompts: true,
+      intentClassification: true,
+      personalizedSuggestions: true,
+      feedbackLearning: true,
+      reflectionPattern: true
     };
 
+    // Auto-cleanup on page unload
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => this.cleanup());
+    }
+  }
+
+  // ========================================
+  // 🔧 CONFIGURACIÓN Y INICIALIZACIÓN
+  // ========================================
+
+  /**
+   * Establece el ID del usuario actual
+   * @param {string} userId - ID único del usuario
+   */
+  setCurrentUserId(userId) {
+    this.currentUserId = userId;
+    api.setCurrentUserId(userId);
+    console.log(`🆔 Usuario actual establecido: ${userId}`);
+  }
+
+  /**
+   * Obtiene el ID del usuario actual
+   * @returns {string} ID del usuario
+   */
+  getCurrentUserId() {
+    return this.currentUserId;
+  }
+
+  /**
+   * Actualiza configuración del servicio
+   * @param {object} config - Nueva configuración
+   */
+  updateConfig(config) {
+    Object.assign(CHAT_CONFIG, config);
+    console.log('⚙️ Configuración actualizada:', config);
+  }
+
+  // ========================================
+  // 💬 FUNCIONALIDADES DE CHAT BÁSICO
+  // ========================================
+
+  /**
+   * Envía un mensaje de forma inteligente y escalable
+   * @param {string} message - Mensaje del usuario
+   * @param {object} options - Opciones adicionales
+   * @returns {Promise<Object>} Respuesta del agente
+   */
+  async sendMessage(message, options = {}) {
+    if (!message?.trim()) {
+      throw new Error('El mensaje no puede estar vacío');
+    }
+  
+    // 🎯 CONSTRUIR CONTEXTO ENRIQUECIDO SIN HARDCODEAR
+    const enhancedOptions = {
+      ...options,
+      gestorId: options.gestorId || options.gestor_id,
+      includeCharts: options.includeCharts !== false,
+      includeRecommendations: options.includeRecommendations !== false,
+      context: {
+        sessionId: this.sessionId,
+        timestamp: new Date().toISOString(),
+        features: this.features,
+        // 🚀 METADATOS GENÉRICOS PARA MEJORAR CLASIFICACIÓN
+        source: 'frontend_react',
+        user_agent: 'chatservice_v2.1',
+        interaction_type: 'user_query',
+        session_context: {
+          previous_messages: this.messageQueue.length,
+          user_id: this.currentUserId,
+          connection_state: this.connectionState
+        },
+        ...options.context
+      }
+    };
+  
+    console.log('💬 Enviando mensaje:', { message, options: enhancedOptions });
+  
     try {
-      const response = await this.retryRequest(
-        () => chatClient.post('/chat', payload),
-        3
-      );
-
-      return {
-        response: response.data.response || response.data.message || 'Respuesta procesada',
-        charts: response.data.charts || [],
-        recommendations: response.data.recommendations || [],
-        conversation_id: response.data.conversation_id,
-        timestamp: response.data.timestamp || new Date().toISOString(),
-        ...(response.data.chart_updates && { chart_updates: response.data.chart_updates })
-      };
-
-    } catch (error) {
-      console.error('Error enviando mensaje al chat:', error);
-      
-      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-        return {
-          response: 'Lo siento, el servicio de chat no está disponible en este momento. Por favor, verifica tu conexión e intenta nuevamente.',
-          charts: [],
-          recommendations: [
-            'Verifica tu conexión a internet',
-            'El servicio de chat puede estar temporalmente no disponible',
-            'Contacta al soporte técnico si el problema persiste'
-          ],
-          error: 'CHAT_SERVICE_UNAVAILABLE'
-        };
-      } else if (error.response?.status >= 500) {
-        return {
-          response: 'Ha ocurrido un error interno en el sistema de chat. Nuestro equipo técnico ha sido notificado.',
-          charts: [],
-          recommendations: [
-            'Intenta realizar la consulta nuevamente en unos minutos',
-            'Si el problema persiste, contacta al soporte técnico'
-          ],
-          error: 'INTERNAL_SERVER_ERROR'
-        };
-      } else if (error.response?.status === 400) {
-        return {
-          response: 'No he podido procesar tu consulta. Por favor, reformula tu pregunta de manera más específica.',
-          charts: [],
-          recommendations: [
-            'Intenta ser más específico en tu consulta',
-            'Usa términos relacionados con KPIs, gestores, o control de gestión',
-            'Ejemplo: "Muestra el ROE del gestor X" o "Compara los ingresos por centro"'
-          ],
-          error: 'BAD_REQUEST'
-        };
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  async retryRequest(requestFn, maxRetries = 3, baseDelay = 1000) {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await requestFn();
-      } catch (error) {
-        if (attempt === maxRetries) {
-          throw error;
+      // 🎯 INTENTAR SIEMPRE CON PROCESAMIENTO INTELIGENTE PRIMERO
+      // Si falla, automáticamente caerá al método estándar
+      if (api.sendIntelligentMessage) {
+        console.log('🧠 Intentando procesamiento inteligente...');
+        try {
+          const response = await api.sendIntelligentMessage(message, enhancedOptions.context);
+          
+          // ✅ Si el procesamiento inteligente funciona, usarlo
+          return {
+            ...response,
+            serviceMetadata: {
+              userId: this.currentUserId,
+              sessionId: this.sessionId,
+              timestamp: new Date().toISOString(),
+              processingType: 'intelligent_success',
+              features: this.features
+            }
+          };
+        } catch (intelligentError) {
+          console.warn('⚠️ Procesamiento inteligente falló, usando método estándar:', intelligentError.message);
+          // Continúa al método estándar como fallback
         }
-        
-        const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(`Reintentando request en ${delay}ms... (intento ${attempt}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
       }
+    
+      // 🔄 MÉTODO ESTÁNDAR COMO FALLBACK
+      const response = await api.sendChatMessage(message, enhancedOptions.gestorId, enhancedOptions);
+      
+      this.lastMessageTime = new Date();
+      
+      const processedResponse = {
+        ...response,
+        serviceMetadata: {
+          userId: this.currentUserId,
+          sessionId: this.sessionId,
+          timestamp: new Date().toISOString(),
+          processingType: 'standard_fallback',
+          features: this.features
+        }
+      };
+    
+      console.log('✅ Respuesta procesada:', processedResponse);
+      return processedResponse;
+    
+    } catch (error) {
+      console.error('❌ Error enviando mensaje:', error);
+      return this.handleChatError(error);
     }
   }
 
-  connectWebSocket(userId, onMessage, onError = null, onClose = null) {
-    if (this.isConnecting || (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN)) {
-      console.log('WebSocket ya está conectado o conectándose');
+  // ========================================
+  // 🚀 FUNCIONALIDADES AVANZADAS v6.1
+  // ========================================
+
+  /**
+   * Envía feedback específico usando System Prompts Profesionales
+   * @param {object} feedback - Datos del feedback
+   * @returns {Promise<Object>} Resultado del procesamiento
+   */
+  async sendChatFeedback(feedback) {
+    try {
+      console.log('📝 Enviando feedback de chat:', feedback);
+      const response = await api.sendChatFeedback(this.currentUserId, feedback);
+      
+      // Actualizar features basado en feedback
+      if (response.personalization_updated) {
+        await this.refreshUserPreferences();
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Error enviando feedback:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene sugerencias personalizadas dinámicas
+   * @returns {Promise<Array>} Lista de sugerencias
+   */
+  async getChatSuggestions() {
+    try {
+      console.log('💡 Obteniendo sugerencias personalizadas...');
+      const response = await api.getChatSuggestions(this.currentUserId);
+      
+      return {
+        suggestions: response.suggestions || [],
+        personalized: response.personalized || false,
+        total: response.total || 0,
+        timestamp: response.timestamp
+      };
+    } catch (error) {
+      console.error('❌ Error obteniendo sugerencias:', error);
+      // Fallback con sugerencias genéricas
+      return {
+        suggestions: [
+          "¿Cómo está mi rendimiento este mes?",
+          "Comparar con otros gestores",
+          "Detectar alertas automáticamente",
+          "Análisis de desviaciones",
+          "Generar Business Review"
+        ],
+        personalized: false,
+        total: 5,
+        source: 'fallback'
+      };
+    }
+  }
+
+  /**
+   * Obtiene preferencias de personalización
+   * @returns {Promise<Object>} Preferencias del usuario
+   */
+  async getChatPreferences() {
+    try {
+      console.log('⚙️ Obteniendo preferencias de chat...');
+      return await api.getChatPreferences(this.currentUserId);
+    } catch (error) {
+      console.error('❌ Error obteniendo preferencias:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza preferencias de personalización
+   * @param {object} preferences - Nuevas preferencias
+   * @returns {Promise<Object>} Confirmación de actualización
+   */
+  async updateChatPreferences(preferences) {
+    try {
+      console.log('🔧 Actualizando preferencias:', preferences);
+      const response = await api.updateChatPreferences(this.currentUserId, preferences);
+      
+      // Actualizar features locales
+      if (response.current_preferences) {
+        this.features = { ...this.features, ...response.current_preferences };
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Error actualizando preferencias:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clasifica intención de mensaje usando IA
+   * @param {string} message - Mensaje a clasificar
+   * @returns {Promise<Object>} Análisis de intención
+   */
+  async classifyIntent(message) {
+    try {
+      console.log('🧠 Clasificando intención:', message);
+      const response = await api.classifyChatIntent(message, this.currentUserId);
+      
+      return {
+        intent: response.intent_analysis?.intent || 'general_inquiry',
+        confidence: response.intent_analysis?.confidence || 0.5,
+        requiresCdgAgent: response.intent_analysis?.requires_cdg_agent || false,
+        recommendedApproach: response.intent_analysis?.recommended_approach || 'simple',
+        timestamp: response.timestamp
+      };
+    } catch (error) {
+      console.error('❌ Error clasificando intención:', error);
+      return {
+        intent: 'general_inquiry',
+        confidence: 0.5,
+        requiresCdgAgent: false,
+        recommendedApproach: 'simple',
+        source: 'fallback'
+      };
+    }
+  }
+
+  /**
+   * Refresca preferencias del usuario desde el servidor
+   */
+  async refreshUserPreferences() {
+    try {
+      const preferences = await this.getChatPreferences();
+      this.features = { ...this.features, ...preferences.preferences };
+      console.log('🔄 Preferencias actualizadas:', this.features);
+    } catch (error) {
+      console.warn('⚠️ No se pudieron actualizar las preferencias:', error);
+    }
+  }
+
+  // ========================================
+  // 🌐 GESTIÓN WEBSOCKET MEJORADA
+  // ========================================
+
+  /**
+   * Conecta WebSocket con manejo avanzado de estados
+   * @param {Function} onMessage - Callback para mensajes
+   * @param {Function} onError - Callback para errores
+   * @param {Function} onClose - Callback para cierre
+   * @returns {Promise<WebSocket>} Conexión WebSocket
+   */
+  async connectWebSocket(onMessage, onError = null, onClose = null) {
+    if (this.isConnecting || this.connectionState === CONNECTION_STATES.OPEN) {
+      console.log('🔗 WebSocket ya conectado o conectándose');
       return this.wsConnection;
     }
 
-    this.isConnecting = true;
-    // ✅ CORREGIDO: WebSocket usa puerto 8000
-    const wsUrl = `ws://localhost:8000/ws/${userId}`;
-    
-    try {
-      this.wsConnection = new WebSocket(wsUrl);
+    return new Promise((resolve, reject) => {
+      try {
+        this.isConnecting = true;
+        this.connectionState = CONNECTION_STATES.CONNECTING;
+        this.notifyStateChange(CONNECTION_STATES.CONNECTING);
 
-      this.wsConnection.onopen = () => {
-        console.log(`✅ WebSocket conectado para usuario ${userId}`);
-        this.isConnecting = false;
-        this.reconnectAttempts = 0;
-        this.startHeartbeat();
-      };
+        const wsUrl = `${CHAT_CONFIG.WEBSOCKET_URL}/ws/${this.currentUserId}`;
+        console.log(`🌐 Conectando WebSocket: ${wsUrl}`);
+        
+        this.wsConnection = new WebSocket(wsUrl);
 
-      this.wsConnection.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'heartbeat') {
-            this.sendWebSocketMessage({ type: 'heartbeat_response', timestamp: new Date().toISOString() });
-          } else if (data.type === 'chat_response') {
-            onMessage(data);
-          } else {
-            onMessage(data);
+        this.wsConnection.onopen = () => {
+          console.log('✅ WebSocket conectado exitosamente');
+          this.connectionState = CONNECTION_STATES.OPEN;
+          this.isConnecting = false;
+          this.reconnectAttempts = 0;
+          this.startHeartbeat();
+          this.notifyStateChange(CONNECTION_STATES.OPEN);
+          this.processMessageQueue();
+          resolve(this.wsConnection);
+        };
+
+        this.wsConnection.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'heartbeat') {
+              this.sendWebSocketMessage({ 
+                type: 'heartbeat_response', 
+                timestamp: new Date().toISOString() 
+              });
+            } else {
+              // Procesar mensaje y notificar handlers
+              const processedMessage = {
+                ...data,
+                receivedAt: new Date().toISOString(),
+                sessionId: this.sessionId
+              };
+              
+              this.notifyMessageHandlers(processedMessage);
+              if (onMessage) onMessage(processedMessage);
+            }
+          } catch (error) {
+            console.error('❌ Error parseando mensaje WebSocket:', error);
+            this.notifyErrorHandlers(error);
           }
-        } catch (error) {
-          console.error('Error parseando mensaje WebSocket:', error);
-        }
-      };
+        };
 
-      this.wsConnection.onerror = (error) => {
-        console.error('❌ Error WebSocket:', error);
+        this.wsConnection.onerror = (error) => {
+          console.error('❌ Error WebSocket:', error);
+          this.isConnecting = false;
+          this.notifyErrorHandlers(error);
+          if (onError) onError(error);
+          reject(error);
+        };
+
+        this.wsConnection.onclose = (event) => {
+          console.log(`🔌 WebSocket cerrado: ${event.code} - ${event.reason}`);
+          this.connectionState = CONNECTION_STATES.CLOSED;
+          this.isConnecting = false;
+          this.stopHeartbeat();
+          this.notifyStateChange(CONNECTION_STATES.CLOSED);
+          
+          if (onClose) onClose(event);
+          
+          // Auto-reconexión si no fue cierre limpio
+          if (event.code !== 1000 && this.reconnectAttempts < CHAT_CONFIG.RECONNECT_ATTEMPTS) {
+            this.scheduleReconnect(onMessage, onError, onClose);
+          }
+        };
+
+        // Timeout de conexión
+        setTimeout(() => {
+          if (this.connectionState === CONNECTION_STATES.CONNECTING) {
+            console.error('⏰ Timeout de conexión WebSocket');
+            this.wsConnection.close();
+            reject(new Error('WebSocket connection timeout'));
+          }
+        }, 10000);
+
+      } catch (error) {
+        console.error('❌ Error creando WebSocket:', error);
         this.isConnecting = false;
-        if (onError) onError(error);
-      };
-
-      this.wsConnection.onclose = (event) => {
-        console.log('WebSocket desconectado:', event.code, event.reason);
-        this.isConnecting = false;
-        this.stopHeartbeat();
-        
-        if (onClose) onClose(event);
-        
-        if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.scheduleReconnect(userId, onMessage, onError, onClose);
-        }
-      };
-
-    } catch (error) {
-      console.error('Error creando WebSocket:', error);
-      this.isConnecting = false;
-      if (onError) onError(error);
-    }
-
-    return this.wsConnection;
+        this.notifyErrorHandlers(error);
+        reject(error);
+      }
+    });
   }
 
-  scheduleReconnect(userId, onMessage, onError, onClose) {
+  /**
+   * Programa reconexión automática con backoff exponencial
+   */
+  scheduleReconnect(onMessage, onError, onClose) {
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    this.connectionState = CONNECTION_STATES.RECONNECTING;
+    this.notifyStateChange(CONNECTION_STATES.RECONNECTING);
     
-    console.log(`Reintentando conexión WebSocket en ${delay}ms... (intento ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    const delay = CHAT_CONFIG.RECONNECT_BASE_DELAY * Math.pow(2, this.reconnectAttempts - 1);
+    
+    console.log(`🔄 Reconectando WebSocket en ${delay}ms... (intento ${this.reconnectAttempts}/${CHAT_CONFIG.RECONNECT_ATTEMPTS})`);
     
     setTimeout(() => {
-      this.connectWebSocket(userId, onMessage, onError, onClose);
+      this.connectWebSocket(onMessage, onError, onClose);
     }, delay);
   }
 
+  /**
+   * Envía mensaje vía WebSocket con queue si no está conectado
+   * @param {object} message - Mensaje a enviar
+   * @returns {boolean} True si se envió exitosamente
+   */
+  sendWebSocketMessage(message) {
+    const messageWithMetadata = {
+      ...message,
+      userId: this.currentUserId,
+      sessionId: this.sessionId,
+      timestamp: new Date().toISOString()
+    };
+
+    if (this.wsConnection && this.connectionState === CONNECTION_STATES.OPEN) {
+      try {
+        this.wsConnection.send(JSON.stringify(messageWithMetadata));
+        console.log('📤 Mensaje WebSocket enviado:', messageWithMetadata);
+        return true;
+      } catch (error) {
+        console.error('❌ Error enviando mensaje WebSocket:', error);
+        this.messageQueue.push(messageWithMetadata);
+        return false;
+      }
+    } else {
+      console.warn('⚠️ WebSocket no conectado, añadiendo a cola');
+      this.messageQueue.push(messageWithMetadata);
+      return false;
+    }
+  }
+
+  /**
+   * Procesa cola de mensajes pendientes
+   */
+  processMessageQueue() {
+    while (this.messageQueue.length > 0 && this.connectionState === CONNECTION_STATES.OPEN) {
+      const message = this.messageQueue.shift();
+      this.sendWebSocketMessage(message);
+    }
+  }
+
+  /**
+   * Inicia heartbeat para mantener WebSocket vivo
+   */
   startHeartbeat() {
     this.heartbeatInterval = setInterval(() => {
-      if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
+      if (this.connectionState === CONNECTION_STATES.OPEN) {
         this.sendWebSocketMessage({ 
           type: 'heartbeat', 
           timestamp: new Date().toISOString() 
         });
       }
-    }, 30000);
+    }, CHAT_CONFIG.HEARTBEAT_INTERVAL);
   }
 
+  /**
+   * Detiene heartbeat
+   */
   stopHeartbeat() {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -244,117 +512,344 @@ class ChatService {
     }
   }
 
-  sendWebSocketMessage(message) {
-    if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
-      this.wsConnection.send(JSON.stringify(message));
-      return true;
-    } else {
-      console.warn('WebSocket no está conectado');
-      return false;
-    }
-  }
-
+  /**
+   * Desconecta WebSocket limpiamente
+   */
   disconnectWebSocket() {
     this.stopHeartbeat();
     if (this.wsConnection) {
+      this.connectionState = CONNECTION_STATES.CLOSING;
       this.wsConnection.close(1000, 'Cliente desconectando');
       this.wsConnection = null;
     }
+    this.connectionState = CONNECTION_STATES.CLOSED;
     this.reconnectAttempts = 0;
+    this.messageQueue = [];
   }
 
-  getWebSocketState() {
-    if (!this.wsConnection) return 'DISCONNECTED';
-    
-    switch (this.wsConnection.readyState) {
-      case WebSocket.CONNECTING: return 'CONNECTING';
-      case WebSocket.OPEN: return 'OPEN';
-      case WebSocket.CLOSING: return 'CLOSING';
-      case WebSocket.CLOSED: return 'CLOSED';
-      default: return 'UNKNOWN';
-    }
+  // ========================================
+  // 📊 HANDLERS Y EVENTOS
+  // ========================================
+
+  /**
+   * Registra handler para mensajes WebSocket
+   * @param {Function} handler - Función handler
+   */
+  onMessage(handler) {
+    this.messageHandlers.push(handler);
   }
 
-  async getChatHistory(userId, limit = 50) {
+  /**
+   * Registra handler para cambios de estado
+   * @param {Function} handler - Función handler
+   */
+  onStateChange(handler) {
+    this.stateChangeHandlers.push(handler);
+  }
+
+  /**
+   * Registra handler para errores
+   * @param {Function} handler - Función handler
+   */
+  onError(handler) {
+    this.errorHandlers.push(handler);
+  }
+
+  /**
+   * Notifica handlers de mensajes
+   */
+  notifyMessageHandlers(message) {
+    this.messageHandlers.forEach(handler => {
+      try {
+        handler(message);
+      } catch (error) {
+        console.error('❌ Error en message handler:', error);
+      }
+    });
+  }
+
+  /**
+   * Notifica handlers de cambio de estado
+   */
+  notifyStateChange(newState) {
+    this.stateChangeHandlers.forEach(handler => {
+      try {
+        handler(newState, this.connectionState);
+      } catch (error) {
+        console.error('❌ Error en state change handler:', error);
+      }
+    });
+  }
+
+  /**
+   * Notifica handlers de errores
+   */
+  notifyErrorHandlers(error) {
+    this.errorHandlers.forEach(handler => {
+      try {
+        handler(error);
+      } catch (error) {
+        console.error('❌ Error en error handler:', error);
+      }
+    });
+  }
+
+  // ========================================
+  // 🛠️ FUNCIONES DE UTILIDAD
+  // ========================================
+
+  /**
+   * Obtiene historial de chat usando api.js
+   * @param {number} limit - Límite de mensajes
+   * @returns {Promise<Object>} Historial
+   */
+  async getChatHistory(limit = 50) {
     try {
-      const response = await chatClient.get(`/chat/history/${userId}?limit=${limit}`);
-      return response.data;
+      return await api.getChatHistory(this.currentUserId);
     } catch (error) {
-      console.error('Error obteniendo historial de chat:', error);
+      console.error('❌ Error obteniendo historial:', error);
       return { messages: [] };
     }
   }
 
-  async resetChatSession(userId) {
+  /**
+   * Resetea sesión de chat usando api.js
+   * @returns {Promise<Object>} Resultado
+   */
+  async resetChatSession() {
     try {
-      const response = await chatClient.post(`/chat/reset/${userId}`);
-      return response.data;
+      const result = await api.resetChatSession(this.currentUserId);
+      this.sessionId = this.generateSessionId();
+      console.log('🔄 Sesión de chat reiniciada');
+      return result;
     } catch (error) {
-      console.error('Error reiniciando sesión de chat:', error);
+      console.error('❌ Error reiniciando sesión:', error);
       throw error;
     }
   }
 
+  /**
+   * Obtiene estado del servicio usando api.js
+   * @returns {Promise<Object>} Estado
+   */
   async getChatStatus() {
     try {
-      const response = await chatClient.get('/chat/status');
-      return response.data;
+      return await api.getChatStatus();
     } catch (error) {
-      console.error('Error obteniendo estado del chat:', error);
+      console.error('❌ Error obteniendo estado:', error);
       return { 
         status: 'unavailable', 
-        message: 'Servicio de chat no disponible' 
+        message: 'Servicio no disponible',
+        websocket_state: this.connectionState
       };
     }
   }
 
-  getSessionId() {
-    let sessionId = localStorage.getItem('chat_session_id');
-    if (!sessionId) {
-      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('chat_session_id', sessionId);
-    }
-    return sessionId;
-  }
-
-  clearSession() {
-    localStorage.removeItem('chat_session_id');
-  }
-
+  /**
+   * Verifica si el servicio está disponible
+   * @returns {Promise<boolean>} Disponibilidad
+   */
   async isServiceAvailable() {
     try {
-      await this.getChatStatus();
-      return true;
+      const status = await this.getChatStatus();
+      return status.status === 'active' || status.status === 'healthy';
     } catch {
       return false;
     }
   }
 
-  async sendPivotCommand(userId, command, chartConfig, options = {}) {
-    return this.sendMessage(userId, command, {
-      ...options,
-      context: {
-        conversationalPivot: true,
-        currentChart: chartConfig,
-        command: command
-      }
-    });
+  /**
+   * Obtiene ID de sesión
+   * @returns {string} Session ID
+   */
+  getSessionId() {
+    let sessionId = localStorage.getItem('cdg_chat_session_id');
+    if (!sessionId) {
+      sessionId = this.generateSessionId();
+      localStorage.setItem('cdg_chat_session_id', sessionId);
+    }
+    return sessionId;
   }
 
+  /**
+   * Genera nuevo ID de sesión
+   * @returns {string} Nuevo session ID
+   */
+  generateSessionId() {
+    return `cdg_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Obtiene estado actual de WebSocket
+   * @returns {string} Estado de conexión
+   */
+  getWebSocketState() {
+    return this.connectionState;
+  }
+
+  /**
+   * Maneja errores de chat con respuestas inteligentes
+   * @param {Error} error - Error capturado
+   * @returns {Object} Respuesta de error formateada
+   */
+  handleChatError(error) {
+    const errorResponses = {
+      'ECONNREFUSED': {
+        response: '🔌 El servicio de chat no está disponible. Verificando conexión...',
+        recommendations: [
+          'Verifica tu conexión a internet',
+          'El backend puede estar temporalmente caído',
+          'Reintentando automáticamente...'
+        ],
+        error: 'CHAT_SERVICE_UNAVAILABLE'
+      },
+      'ERR_NETWORK': {
+        response: '🌐 Problema de red detectado. Reintentando conexión...',
+        recommendations: [
+          'Verifica tu conexión a internet',
+          'Reintentando automáticamente...'
+        ],
+        error: 'NETWORK_ERROR'
+      },
+      'TIMEOUT': {
+        response: '⏰ La respuesta está tomando más tiempo del esperado...',
+        recommendations: [
+          'El sistema está procesando tu consulta',
+          'Por favor espera un momento'
+        ],
+        error: 'REQUEST_TIMEOUT'
+      }
+    };
+
+    const errorType = error.code || error.name || 'UNKNOWN';
+    const errorResponse = errorResponses[errorType] || {
+      response: '❌ Ha ocurrido un error inesperado. Nuestro equipo ha sido notificado.',
+      recommendations: [
+        'Intenta nuevamente en unos momentos',
+        'Si el problema persiste, contacta al soporte'
+      ],
+      error: 'UNKNOWN_ERROR'
+    };
+
+    return {
+      ...errorResponse,
+      charts: [],
+      timestamp: new Date().toISOString(),
+      serviceMetadata: {
+        userId: this.currentUserId,
+        sessionId: this.sessionId,
+        errorDetails: error.message
+      }
+    };
+  }
+
+  /**
+   * Limpia recursos del servicio
+   */
   cleanup() {
+    console.log('🧹 Limpiando recursos de ChatService...');
     this.disconnectWebSocket();
-    this.clearSession();
+    this.messageHandlers = [];
+    this.stateChangeHandlers = [];
+    this.errorHandlers = [];
+    this.messageQueue = [];
+    localStorage.removeItem('cdg_chat_session_id');
+  }
+
+  // ========================================
+  // 📈 MÉTRICAS Y MONITOREO
+  // ========================================
+
+  /**
+   * Obtiene métricas de performance del servicio
+   * @returns {Object} Métricas del servicio
+   */
+  getServiceMetrics() {
+    return {
+      connectionState: this.connectionState,
+      reconnectAttempts: this.reconnectAttempts,
+      messageQueueLength: this.messageQueue.length,
+      lastMessageTime: this.lastMessageTime,
+      sessionId: this.sessionId,
+      userId: this.currentUserId,
+      features: this.features,
+      handlersCount: {
+        message: this.messageHandlers.length,
+        stateChange: this.stateChangeHandlers.length,
+        error: this.errorHandlers.length
+      }
+    };
   }
 }
+
+// ========================================
+// 📤 EXPORTACIONES
+// ========================================
 
 // Instancia singleton del servicio de chat
 const chatService = new ChatService();
 
-// Limpiar recursos cuando la página se cierra
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
-    chatService.cleanup();
-  });
-}
-
 export default chatService;
+
+// Exportaciones adicionales para flexibilidad
+export { ChatService, CONNECTION_STATES, CHAT_CONFIG };
+
+// ========================================
+// 🎯 UTILIDADES PARA COMPONENTES REACT - SIN ERRORES ESLINT
+// ========================================
+
+/**
+ * Hook personalizado para usar ChatService en componentes React
+ * @param {object} options - Opciones del hook
+ */
+export const useChatService = (options = {}) => {
+  const {
+    autoConnect = false,
+    userId = 'frontend_user',
+    onMessage = null,
+    onError = null,
+    onStateChange = null
+  } = options;
+
+  // Memoizar handlers para evitar re-renders innecesarios
+  const memoizedOnMessage = useCallback(onMessage || (() => {}), [onMessage]);
+  const memoizedOnError = useCallback(onError || (() => {}), [onError]);
+  const memoizedOnStateChange = useCallback(onStateChange || (() => {}), [onStateChange]);
+
+  // Configurar usuario
+  useEffect(() => {
+    if (userId) {
+      chatService.setCurrentUserId(userId);
+    }
+  }, [userId]);
+
+  // Auto-conectar WebSocket si se solicita
+  useEffect(() => {
+    if (autoConnect) {
+      chatService.connectWebSocket(memoizedOnMessage, memoizedOnError, memoizedOnStateChange);
+    }
+    
+    return () => {
+      if (autoConnect) {
+        chatService.disconnectWebSocket();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect]); // Intencionalmente excluimos handlers para evitar reconexiones constantes
+
+  return {
+    service: chatService,
+    sendMessage: chatService.sendMessage.bind(chatService),
+    sendFeedback: chatService.sendChatFeedback.bind(chatService),
+    getSuggestions: chatService.getChatSuggestions.bind(chatService),
+    getPreferences: chatService.getChatPreferences.bind(chatService),
+    updatePreferences: chatService.updateChatPreferences.bind(chatService),
+    classifyIntent: chatService.classifyIntent.bind(chatService),
+    connectWebSocket: chatService.connectWebSocket.bind(chatService),
+    disconnectWebSocket: chatService.disconnectWebSocket.bind(chatService),
+    getMetrics: chatService.getServiceMetrics.bind(chatService),
+    connectionState: chatService.connectionState
+  };
+};
+
+console.log('🎉 ChatService v2.1 inicializado - ESLint errors corregidos');

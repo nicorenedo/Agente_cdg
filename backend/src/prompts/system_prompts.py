@@ -1188,6 +1188,14 @@ Analizar mensajes de usuarios del sector bancario y clasificar su intención pri
 - Evalúa la complejidad y especificidad de la consulta
 - Distingue entre solicitudes de datos y análisis interpretativo
 
+
+## EJEMPLOS DE CLASIFICACIÓN:
+- "¿Cómo está el gestor 19?" -> performance_analysis (confianza: 0.9)
+- "¿Cómo está mi rendimiento?" -> performance_analysis (confianza: 0.85)
+- "Performance del gestor X" -> performance_analysis (confianza: 0.9)
+- "Análisis del gestor" -> performance_analysis (confianza: 0.85)
+
+
 ## FORMATO DE RESPUESTA:
 Responde ÚNICAMENTE con un objeto JSON con la estructura:
 {"intent": "<categoría>", "confidence": <valor_0_a_1>}

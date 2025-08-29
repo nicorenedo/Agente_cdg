@@ -1,5 +1,5 @@
 // src/components/Analytics/DrillDownView.jsx
-// Análisis de drill-down jerárquico - CORREGIDO para backend Banca March
+// Análisis de drill-down jerárquico - CORREGIDO: Breadcrumb deprecated props
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Table, Breadcrumb, Button, Space, Tooltip, Tag, Descriptions, Row, Col, message } from 'antd';
@@ -27,53 +27,76 @@ const DRILL_LEVELS = {
   TRANSACTION: 'transaction'       // Transacción individual
 };
 
-// Configuración de breadcrumb según nivel
-const getBreadcrumbItems = (level, context) => {
-  const items = [
-    { title: 'Consolidado', key: DRILL_LEVELS.CONSOLIDATED }
+// ✅ CORRECCIÓN: Función para generar items de breadcrumb en nuevo formato
+const getBreadcrumbItems = (level, context, onNavigate) => {
+  const baseItems = [
+    { 
+      title: 'Consolidado', 
+      key: DRILL_LEVELS.CONSOLIDATED,
+      onClick: () => onNavigate && onNavigate(DRILL_LEVELS.CONSOLIDATED)
+    }
   ];
 
-  if (level === DRILL_LEVELS.CONSOLIDATED) return items;
+  if (level === DRILL_LEVELS.CONSOLIDATED) return baseItems;
 
   if (context.centroId) {
-    items.push({ 
+    baseItems.push({ 
       title: context.centroName || `Centro ${context.centroId}`, 
-      key: DRILL_LEVELS.CENTER 
+      key: DRILL_LEVELS.CENTER,
+      onClick: () => onNavigate && onNavigate(DRILL_LEVELS.CENTER)
     });
   }
 
-  if (level === DRILL_LEVELS.CENTER) return items;
+  if (level === DRILL_LEVELS.CENTER) return baseItems;
 
   if (context.gestorId) {
-    items.push({ 
+    baseItems.push({ 
       title: context.gestorName || `Gestor ${context.gestorId}`, 
-      key: DRILL_LEVELS.MANAGER 
+      key: DRILL_LEVELS.MANAGER,
+      onClick: () => onNavigate && onNavigate(DRILL_LEVELS.MANAGER)
     });
   }
 
-  if (level === DRILL_LEVELS.MANAGER) return items;
+  if (level === DRILL_LEVELS.MANAGER) return baseItems;
 
   if (context.clienteId) {
-    items.push({ 
+    baseItems.push({ 
       title: context.clienteName || `Cliente ${context.clienteId}`, 
-      key: DRILL_LEVELS.CLIENT 
+      key: DRILL_LEVELS.CLIENT,
+      onClick: () => onNavigate && onNavigate(DRILL_LEVELS.CLIENT)
     });
   }
 
-  if (level === DRILL_LEVELS.CLIENT) return items;
+  if (level === DRILL_LEVELS.CLIENT) return baseItems;
 
   if (context.contratoId) {
-    items.push({ 
+    baseItems.push({ 
       title: `Contrato ${context.contratoId}`, 
-      key: DRILL_LEVELS.CONTRACT 
+      key: DRILL_LEVELS.CONTRACT,
+      onClick: () => onNavigate && onNavigate(DRILL_LEVELS.CONTRACT)
     });
   }
 
-  if (level === DRILL_LEVELS.CONTRACT) return items;
+  if (level === DRILL_LEVELS.CONTRACT) return baseItems;
 
-  items.push({ title: 'Movimiento Individual', key: DRILL_LEVELS.TRANSACTION });
+  baseItems.push({ 
+    title: 'Movimiento Individual', 
+    key: DRILL_LEVELS.TRANSACTION 
+  });
   
-  return items;
+  // ✅ CORRECCIÓN: El último item (activo) no debe tener onClick y debe estar resaltado
+  const lastIndex = baseItems.length - 1;
+  baseItems[lastIndex] = {
+    ...baseItems[lastIndex],
+    title: (
+      <span style={{ fontWeight: 600, color: theme.colors.bmGreenPrimary }}>
+        {baseItems[lastIndex].title}
+      </span>
+    ),
+    onClick: undefined
+  };
+  
+  return baseItems;
 };
 
 const DrillDownView = ({ 
@@ -91,7 +114,7 @@ const DrillDownView = ({
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [chartData, setChartData] = useState([]);
 
-  // ✅ CORREGIDO: Cargar datos según el nivel actual con campos en mayúsculas
+  // Cargar datos según el nivel actual con campos en mayúsculas
   const loadLevelData = useCallback(async () => {
     setLoading(true);
     try {
@@ -126,7 +149,6 @@ const DrillDownView = ({
           if (context.gestorId) {
             response = await api.getGestorPerformance(context.gestorId, currentPeriod);
             if (response.data) {
-              // Para mostrar datos del gestor y sus clientes
               try {
                 const clientesResponse = await api.getClientesPorGestor(context.gestorId);
                 if (clientesResponse.data) {
@@ -187,7 +209,6 @@ const DrillDownView = ({
           break;
 
         default:
-          // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
           console.warn('Nivel de drill-down no reconocido:', currentLevel);
           setData([]);
           break;
@@ -206,7 +227,7 @@ const DrillDownView = ({
     loadLevelData();
   }, [loadLevelData]);
 
-  // ✅ CORREGIDO: Función para navegar a un nivel más profundo con campos correctos
+  // Función para navegar a un nivel más profundo con campos correctos
   const drillDown = (record) => {
     let newLevel;
     let newContext = { ...context };
@@ -257,7 +278,6 @@ const DrillDownView = ({
         break;
 
       default:
-        // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
         console.warn('No se puede hacer drill-down desde el nivel:', currentLevel);
         return;
     }
@@ -305,7 +325,6 @@ const DrillDownView = ({
         delete newContext.movimientoId;
         break;
       default:
-        // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
         console.warn('Nivel objetivo no reconocido:', targetLevel);
         break;
     }
@@ -319,7 +338,7 @@ const DrillDownView = ({
     }
   };
 
-  // ✅ CORREGIDO: Funciones para preparar datos de gráficos con campos correctos
+  // Funciones para preparar datos de gráficos con campos correctos
   const prepareConsolidatedChartData = (data) => {
     const chartData = data.slice(0, 10).map(item => ({
       DESC_GESTOR: item.DESC_GESTOR || item.desc_gestor || 'Gestor',
@@ -347,7 +366,7 @@ const DrillDownView = ({
     setChartData(chartData);
   };
 
-  // Funciones para generar datos mock (en producción serían endpoints reales)
+  // Funciones para generar datos mock
   const generateMockClientData = (gestorId) => {
     return [
       {
@@ -427,7 +446,7 @@ const DrillDownView = ({
     ];
   };
 
-  // ✅ CORREGIDO: Configuración de columnas según nivel con campos correctos
+  // Configuración de columnas según nivel con campos correctos
   const getTableColumns = () => {
     switch (currentLevel) {
       case DRILL_LEVELS.CONSOLIDATED:
@@ -736,7 +755,6 @@ const DrillDownView = ({
         ];
 
       default:
-        // ✅ SOLUCIÓN: Case default añadido para eliminar el warning ESLint
         console.warn('Configuración de columnas no disponible para el nivel:', currentLevel);
         return [];
     }
@@ -744,7 +762,7 @@ const DrillDownView = ({
 
   // Renderizar título según nivel
   const renderTitle = () => {
-    const icons = {
+    const titles = {
       [DRILL_LEVELS.CONSOLIDATED]: 'Vista Consolidada - Todos los Centros',
       [DRILL_LEVELS.CENTER]: `Centro: ${context.centroName || context.centroId}`,
       [DRILL_LEVELS.MANAGER]: `Gestor: ${context.gestorName || context.gestorId}`,
@@ -753,34 +771,18 @@ const DrillDownView = ({
       [DRILL_LEVELS.TRANSACTION]: `Movimientos del Contrato ${context.contratoId}`
     };
 
-    return icons[currentLevel] || 'Vista no definida';
+    return titles[currentLevel] || 'Vista no definida';
   };
 
   return (
     <div style={{ padding: theme.spacing.md }}>
       
-      {/* Breadcrumb de navegación */}
+      {/* ✅ CORRECCIÓN: Breadcrumb con nueva API usando items prop */}
       <Card size="small" style={{ marginBottom: theme.spacing.md }}>
-        <Breadcrumb separator=">">
-          {getBreadcrumbItems(currentLevel, context).map((item, index, array) => (
-            <Breadcrumb.Item key={item.key}>
-              {index === array.length - 1 ? (
-                <span style={{ fontWeight: 600, color: theme.colors.bmGreenPrimary }}>
-                  {item.title}
-                </span>
-              ) : (
-                <Button
-                  type="link"
-                  size="small"
-                  onClick={() => navigateBack(item.key)}
-                  style={{ color: theme.colors.textSecondary, padding: 0 }}
-                >
-                  {item.title}
-                </Button>
-              )}
-            </Breadcrumb.Item>
-          ))}
-        </Breadcrumb>
+        <Breadcrumb 
+          separator=">"
+          items={getBreadcrumbItems(currentLevel, context, navigateBack)}
+        />
       </Card>
 
       {/* Header con información contextual */}
@@ -869,7 +871,7 @@ const DrillDownView = ({
       >
         <Row gutter={[16, 8]}>
           <Col span={12}>
-            <strong>Ruta de navegación:</strong> {getBreadcrumbItems(currentLevel, context).map(item => item.title).join(' → ')}
+            <strong>Ruta de navegación:</strong> {getBreadcrumbItems(currentLevel, context).map(item => typeof item.title === 'string' ? item.title : 'Nivel actual').join(' → ')}
           </Col>
           <Col span={12}>
             <strong>Capacidad drill-down:</strong> {currentLevel !== DRILL_LEVELS.TRANSACTION ? 'Disponible' : 'Nivel máximo alcanzado'}

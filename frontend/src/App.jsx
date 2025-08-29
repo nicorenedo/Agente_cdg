@@ -1,9 +1,10 @@
 // src/App.jsx
 // Aplicación principal con routing y configuración completa integrada
+// CORREGIDO: Añadido App component de Ant Design para contexto de mensajes estáticos
 
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ConfigProvider, message, notification } from 'antd';
+import { ConfigProvider, App as AntdApp, message, notification } from 'antd'; // ✅ AÑADIDO: App as AntdApp
 import { ErrorBoundary } from 'react-error-boundary';
 import esES from 'antd/locale/es_ES';
 import theme from './styles/theme';
@@ -101,6 +102,13 @@ const antdThemeConfig = {
     },
     Tabs: {
       borderRadius: 6,
+    },
+    // ✅ AÑADIDO: Configuración específica para mensajes
+    Message: {
+      zIndexPopup: 2000,
+    },
+    Notification: {
+      zIndexPopup: 2000,
     }
   },
 };
@@ -297,8 +305,8 @@ const GlobalLoading = () => (
   </div>
 );
 
-const App = () => {
-  const [isInitializing, setIsInitializing] = useState(true);
+// ✅ NUEVO: Componente interno que contiene las rutas
+const AppContent = () => {
   const [systemHealth, setSystemHealth] = useState({
     api: false,
     chat: false
@@ -310,7 +318,7 @@ const App = () => {
       try {
         // Verificar estado de los servicios
         const [apiAvailable, chatAvailable] = await Promise.all([
-          api.getHealth().then(() => true).catch(() => false), // 
+          api.getHealth().then(() => true).catch(() => false),
           chatService.isServiceAvailable().catch(() => false)
         ]);
 
@@ -359,11 +367,6 @@ const App = () => {
           description: 'Error al inicializar la aplicación. Algunas funcionalidades pueden no estar disponibles.',
           duration: 0,
         });
-      } finally {
-        // Simular tiempo de carga mínimo para UX
-        setTimeout(() => {
-          setIsInitializing(false);
-        }, 1500);
       }
     };
 
@@ -373,6 +376,78 @@ const App = () => {
     return () => {
       chatService.cleanup();
     };
+  }, []);
+
+  return (
+    <Router>
+      <div 
+        className="App" 
+        style={{ 
+          fontFamily: theme.token.fontFamily,
+          minHeight: '100vh',
+          backgroundColor: theme.colors.backgroundLight
+        }}
+      >
+        <Routes>
+          {/* Página de selección de roles */}
+          <Route path="/" element={<LandingPage />} />
+          
+          {/* Dashboard de gestor comercial */}
+          <Route path="/gestor-dashboard" element={<GestorView />} />
+          <Route path="/gestor-dashboard/:gestorId" element={<GestorView />} />
+          
+          {/* Dashboard de dirección/control de gestión */}
+          <Route path="/direccion-dashboard" element={<DireccionView />} />
+          
+          {/* Redirecciones de compatibilidad */}
+          <Route path="/gestor" element={<Navigate to="/gestor-dashboard" replace />} />
+          <Route path="/direccion" element={<Navigate to="/direccion-dashboard" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          
+          {/* Ruta catch-all - redirige a landing page */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        
+        {/* Indicador de estado de servicios en desarrollo */}
+        {process.env.NODE_ENV === 'development' && (
+          <div style={{
+            position: 'fixed',
+            bottom: theme.spacing.sm,
+            right: theme.spacing.sm,
+            padding: theme.spacing.xs,
+            backgroundColor: theme.colors.background,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.token.borderRadiusSM,
+            fontSize: '10px',
+            color: theme.colors.textSecondary,
+            zIndex: theme.zIndex.toast,
+            boxShadow: theme.token.boxShadow
+          }}>
+            API: <span style={{ color: systemHealth.api ? theme.colors.success : theme.colors.error }}>
+              {systemHealth.api ? '🟢' : '🔴'}
+            </span>
+            {' '}
+            Chat: <span style={{ color: systemHealth.chat ? theme.colors.success : theme.colors.warning }}>
+              {systemHealth.chat ? '🟡' : '🟢'}
+            </span>
+          </div>
+        )}
+      </div>
+    </Router>
+  );
+};
+
+const App = () => {
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // Control de inicialización
+  useEffect(() => {
+    // Simular tiempo de carga mínimo para UX
+    const timer = setTimeout(() => {
+      setIsInitializing(false);
+    }, 1500);
+
+    return () => clearTimeout(timer);
   }, []);
 
   // Mostrar loading durante inicialización
@@ -390,70 +465,16 @@ const App = () => {
       onError={(error, errorInfo) => {
         // Log detallado para debugging
         console.error('ErrorBoundary caught an error:', error, errorInfo);
-        
-        // Aquí podrías enviar el error a un servicio de logging
-        // logErrorToService(error, errorInfo);
       }}
     >
       <ConfigProvider 
         theme={antdThemeConfig}
         locale={esES}
       >
-        <Router>
-          <div 
-            className="App" 
-            style={{ 
-              fontFamily: theme.token.fontFamily,
-              minHeight: '100vh',
-              backgroundColor: theme.colors.backgroundLight
-            }}
-          >
-            <Routes>
-              {/* Página de selección de roles */}
-              <Route path="/" element={<LandingPage />} />
-              
-              {/* Dashboard de gestor comercial */}
-              <Route path="/gestor-dashboard" element={<GestorView />} />
-              <Route path="/gestor-dashboard/:gestorId" element={<GestorView />} />
-              
-              {/* Dashboard de dirección/control de gestión */}
-              <Route path="/direccion-dashboard" element={<DireccionView />} />
-              
-              {/* Redirecciones de compatibilidad */}
-              <Route path="/gestor" element={<Navigate to="/gestor-dashboard" replace />} />
-              <Route path="/direccion" element={<Navigate to="/direccion-dashboard" replace />} />
-              <Route path="/dashboard" element={<Navigate to="/" replace />} />
-              
-              {/* Ruta catch-all - redirige a landing page */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-            
-            {/* Indicador de estado de servicios en desarrollo */}
-            {process.env.NODE_ENV === 'development' && (
-              <div style={{
-                position: 'fixed',
-                bottom: theme.spacing.sm,
-                right: theme.spacing.sm,
-                padding: theme.spacing.xs,
-                backgroundColor: theme.colors.background,
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: theme.token.borderRadiusSM,
-                fontSize: '10px',
-                color: theme.colors.textSecondary,
-                zIndex: theme.zIndex.toast,
-                boxShadow: theme.token.boxShadow
-              }}>
-                API: <span style={{ color: systemHealth.api ? theme.colors.success : theme.colors.error }}>
-                  {systemHealth.api ? '🟢' : '🔴'}
-                </span>
-                {' '}
-                Chat: <span style={{ color: systemHealth.chat ? theme.colors.success : theme.colors.warning }}>
-                  {systemHealth.chat ? '🟢' : '🟡'}
-                </span>
-              </div>
-            )}
-          </div>
-        </Router>
+        {/* ✅ CAMBIO PRINCIPAL: Envolver con App de Ant Design */}
+        <AntdApp>
+          <AppContent />
+        </AntdApp>
       </ConfigProvider>
     </ErrorBoundary>
   );
