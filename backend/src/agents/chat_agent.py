@@ -1,1766 +1,1537 @@
 """
-Chat Agent para CDG - Versión 6.1 Integrado con System Prompts Profesionales
-===========================================================================
+Chat Agent Universal v10.0 - Agente Conversacional CDG Completo
+===============================================================
 
-Integración completa con CDG Agent + System Prompts especializados
-Respuestas adaptativas con prompts profesionales de control de gestión bancario
-Personalización inteligente y gestión conversacional avanzada
+Agente completamente mejorado que maneja CUALQUIER consulta sobre control de gestión mediante:
+- Sistema de clasificación inteligente con prompts catalogados  
+- Búsqueda automática en queries predefinidas (6 catálogos)
+- Generación SQL dinámica con contexto bancario completo
+- Respuestas contextuales sin SQL para preguntas generales
+- Integración completa con CDG Agent para análisis complejos
+- Soporte completo para gráficos y visualizaciones
 
-Versión: 6.1 - Con System Prompts Profesionales Integrados
-Autor: Agente CDG Development Team  
-Fecha: 2025-08-28
+Versión: 10.0 - Integración Completa con Catálogos de Queries
+Autor: CDG Development Team  
+Fecha: 2025-09-11
 """
 
 import json
 import logging
-import uuid
-import os
-import re
+import sqlite3
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, field
+from pathlib import Path
+import asyncio
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from dotenv import load_dotenv
+# Configuración
+try:
+    from config import settings
+except ImportError:
+    class MockSettings:
+        DATABASE_PATH = "database/BM_CONTABILIDAD_CDG.db"
+        AZURE_OPENAI_DEPLOYMENT_ID = "gpt-4"
+        DATABASE_TIMEOUT = 30
+    settings = MockSettings()
 
-load_dotenv()
-MODEL_NAME = os.getenv('AZURE_OPENAI_DEPLOYMENT_ID', 'gpt-4')
-
-# ============================================================================
-# IMPORTACIONES INTEGRADAS CON SYSTEM PROMPTS PROFESIONALES
-# ============================================================================
-
+# Importaciones con fallbacks
 try:
     from utils.initial_agent import iniciar_agente_llm
-    
-    # 🚀 IMPORTACIÓN CRÍTICA: CDG Agent completo
-    from agents.cdg_agent import CDGAgent, CDGRequest, CDGResponse
-    
-    # 🎯 IMPORTACIÓN DE TUS PROMPTS PROFESIONALES
+    from agents.cdg_agent import create_cdg_agent, CDGRequest
+    from tools.sql_guard import is_query_safe
+    from tools.chart_generator import (
+        QueryIntegratedChartGenerator,
+        handle_chart_change_request
+    )
+    from database.db_connection import query_executor
     from prompts.system_prompts import (
         CHAT_CONVERSATIONAL_SYSTEM_PROMPT,
-        CHAT_FEEDBACK_SYSTEM_PROMPT,
         CHAT_INTENT_CLASSIFICATION_PROMPT,
-        CHAT_PERSONALIZATION_SYSTEM_PROMPT
+        CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT,
+        CHAT_FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
+        CHAT_SQL_GENERATION_SYSTEM_PROMPT,
+        # 🎯 NUEVOS CATÁLOGOS DE QUERIES INTEGRADOS
+        BASIC_QUERIES_CATALOG_PROMPT,
+        COMPARATIVE_QUERIES_CATALOG_PROMPT,
+        DEVIATION_QUERIES_CATALOG_PROMPT,
+        GESTOR_QUERIES_CATALOG_PROMPT,
+        INCENTIVE_QUERIES_CATALOG_PROMPT,
+        PERIOD_QUERIES_CATALOG_PROMPT
     )
-    
     from prompts.user_prompts import (
-        build_feedback_processing_prompt,
-        build_conversation_context_prompt,
-        build_personalization_learning_prompt,
-        build_intent_clarification_prompt,
-        build_dynamic_dashboard_prompt,
-        FEEDBACK_PROCESSING_USER_PROMPT,
-        CONVERSATION_CONTEXT_USER_PROMPT
+        build_intent_classification_prompt,
+        build_natural_response_prompt,
+        build_sql_generation_prompt,
+        build_financial_explanation_prompt
     )
-    
-    # Imports básicos de queries para consultas simples
-    from queries.gestor_queries import GestorQueries
+    # 🎯 IMPORTACIÓN DE TODAS LAS QUERIES PREDEFINIDAS
+    from queries.basic_queries import basic_queries
     from queries.comparative_queries import ComparativeQueries
     from queries.deviation_queries import DeviationQueries
+    from queries.gestor_queries import GestorQueries
     from queries.incentive_queries import IncentiveQueries
-    from queries.period_queries import PeriodQueries, get_available_periods_enhanced
+    from queries.period_queries import PeriodQueries
     
     IMPORTS_SUCCESSFUL = True
     logger = logging.getLogger(__name__)
-    logger.info("🚀 CDG Chat Agent v6.1 inicializado con System Prompts Profesionales - Modo: PRODUCTION")
+    mode = "PRODUCTION" if IMPORTS_SUCCESSFUL else "FALLBACK"
+    print(f"\n{'='*60}")
+    print(f"🚀 CHAT AGENT v10.0 INICIALIZADO")
+    print(f"   Modo: {mode}")
+    print(f"   Imports: {'✅ Exitosos' if IMPORTS_SUCCESSFUL else '⚠️ Fallback'}")
+    print(f"   Catálogos: {'✅ 6 catálogos cargados' if IMPORTS_SUCCESSFUL else '⚠️ Mock'}")
+    print(f"   Query Engines: {'✅ Disponibles' if IMPORTS_SUCCESSFUL else '⚠️ Mock'}")
+    print(f"{'='*60}\n")
+    logger.info(f"🚀 Chat Agent v10.0 inicializado - Modo: {mode}")
+
     
 except ImportError as e:
-    logger = logging.getLogger(__name__)
-    logger.error(f"⚠️ Error de importación: {e}")
+    logging.warning(f"Modo fallback activado: {e}")
+    IMPORTS_SUCCESSFUL = False
     
-    # Fallbacks para testing
+    # Fallbacks básicos necesarios...
     def iniciar_agente_llm():
-        class MockClient:
+        class MockLLM:
             class Chat:
                 class Completions:
                     def create(self, **kwargs):
-                        class Response:
-                            choices = [type('Choice', (), {'message': type('Message', (), {'content': 'Mock response'})()})]
-                        return Response()
+                        return type('Response', (), {
+                            'choices': [type('Choice', (), {
+                                'message': type('Message', (), {
+                                    'content': '{"intent": "general_query", "requires_sql": true, "confidence": 0.8}'
+                                })()
+                            })()]
+                        })()
                 completions = Completions()
             chat = Chat()
-        return MockClient()
+        return MockLLM()
     
-    class MockCDGAgent:
-        async def process_request(self, request):
-            return type('MockResponse', (), {
-                'content': {'response': 'Mock CDG response'},
-                'charts': [],
-                'recommendations': ['Mock recommendation'],
-                'metadata': {'analysis_type': 'mock'},
-                'confidence_score': 0.5,
-                'response_type': type('ResponseType', (), {'value': 'mock'})()
-            })()
+    def create_cdg_agent():
+        class MockCDGAgent:
+            async def process_request(self, req):
+                return type('Response', (), {
+                    'content': 'Mock CDG response',
+                    'charts': [],
+                    'recommendations': []
+                })()
+        return MockCDGAgent()
     
-    CDGAgent = MockCDGAgent
-    GestorQueries = ComparativeQueries = DeviationQueries = IncentiveQueries = PeriodQueries = type('MockQueries', (), {'__getattr__': lambda s, n: lambda *a, **k: type('MockResult', (), {'data': [], 'row_count': 0})()})
+    class MockQueryExecutor:
+        def execute_query(self, query, params=None, fetch_type="all"):
+            return [{"mock": "data"}]
+        def get_table_info(self, table_name):
+            return [{'name': 'ID', 'type': 'INTEGER'}]
+        def get_table_count(self, table_name):
+            return 100
     
-    # Fallback prompts
-    CHAT_CONVERSATIONAL_SYSTEM_PROMPT = "Eres un asistente financiero especializado en análisis bancario."
-    CHAT_FEEDBACK_SYSTEM_PROMPT = "Analiza feedback para mejorar respuestas."
-    CHAT_INTENT_CLASSIFICATION_PROMPT = "Clasifica la intención del usuario."
-    CHAT_PERSONALIZATION_SYSTEM_PROMPT = "Personaliza respuestas según el usuario."
+    query_executor = MockQueryExecutor()
     
-    def build_feedback_processing_prompt(*args, **kwargs): return "Mock feedback prompt"
-    def build_conversation_context_prompt(*args, **kwargs): return "Mock context prompt"
+    # Mock prompts y catálogos básicos
+    CHAT_CONVERSATIONAL_SYSTEM_PROMPT = "Eres un asistente financiero especializado en Control de Gestión bancario."
+    CHAT_INTENT_CLASSIFICATION_PROMPT = "Clasifica la intención del usuario en formato JSON."
+    CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT = "Genera respuestas naturales y profesionales."
+    CHAT_SQL_GENERATION_SYSTEM_PROMPT = "Genera consultas SQL seguras para base de datos financiera."
     
-    IMPORTS_SUCCESSFUL = False
+    # Mock catálogos
+    BASIC_QUERIES_CATALOG_PROMPT = "Catálogo básico de queries"
+    COMPARATIVE_QUERIES_CATALOG_PROMPT = "Catálogo comparativo de queries"
+    DEVIATION_QUERIES_CATALOG_PROMPT = "Catálogo de desviaciones"
+    GESTOR_QUERIES_CATALOG_PROMPT = "Catálogo de gestores"
+    INCENTIVE_QUERIES_CATALOG_PROMPT = "Catálogo de incentivos"
+    PERIOD_QUERIES_CATALOG_PROMPT = "Catálogo de períodos"
+    
+    # Mock functions
+    def build_intent_classification_prompt(message, context):
+        return f"Clasifica: {message}"
+    
+    def build_natural_response_prompt(data, query, context):
+        return f"Respuesta para: {query} con datos: {data}"
+    
+    def build_sql_generation_prompt(message, context):
+        return f"SQL para: {message}"
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
-# MODELOS DE DATOS SIMPLIFICADOS
+# 🎯 CLASIFICADOR INTELIGENTE CON CATÁLOGOS INTEGRADOS
 # ============================================================================
 
-class ChatMessage(BaseModel):
+class IntelligentQueryClassifier:
+    """
+    🎯 CLASIFICADOR MEJORADO que decide el flujo óptimo:
+    1. ¿Necesita SQL? 
+    2. ¿Existe query predefinida?
+    3. ¿Requiere análisis CDG?
+    4. ¿Es respuesta contextual?
+    """
+    
+    def __init__(self):
+        self.llm_client = iniciar_agente_llm()
+        # 🎯 CATÁLOGOS DE QUERIES INTEGRADOS
+        self.query_catalogs = {
+            'basic': BASIC_QUERIES_CATALOG_PROMPT,
+            'comparative': COMPARATIVE_QUERIES_CATALOG_PROMPT,
+            'deviation': DEVIATION_QUERIES_CATALOG_PROMPT,
+            'gestor': GESTOR_QUERIES_CATALOG_PROMPT,
+            'incentive': INCENTIVE_QUERIES_CATALOG_PROMPT,
+            'period': PERIOD_QUERIES_CATALOG_PROMPT
+        }
+        
+        # 🎯 INSTANCIAS DE QUERIES PREDEFINIDAS
+        self.query_engines = {
+            'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
+            'comparative': ComparativeQueries if IMPORTS_SUCCESSFUL else None,
+            'deviation': DeviationQueries if IMPORTS_SUCCESSFUL else None,
+            'gestor': GestorQueries if IMPORTS_SUCCESSFUL else None,
+            'incentive': IncentiveQueries if IMPORTS_SUCCESSFUL else None,
+            'period': PeriodQueries if IMPORTS_SUCCESSFUL else None
+        }
+    
+    async def classify_and_route(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE
+        """
+        try:
+            # 1️⃣ CLASIFICACIÓN INICIAL: ¿Qué tipo de consulta es?
+            initial_classification = await self._classify_query_type(user_message, context)
+            
+            if initial_classification['requires_sql']:
+                # 2️⃣ BÚSQUEDA EN QUERIES PREDEFINIDAS
+                predefined_match = await self._find_predefined_query(user_message, context)
+                
+                if predefined_match['found']:
+                    return {
+                        'flow_type': 'PREDEFINED_QUERY',
+                        'classification': initial_classification,
+                        'predefined_match': predefined_match,
+                        'confidence': predefined_match['confidence']
+                    }
+                else:
+                    return {
+                        'flow_type': 'DYNAMIC_SQL',
+                        'classification': initial_classification,
+                        'confidence': initial_classification['confidence']
+                    }
+            
+            elif initial_classification['requires_cdg_agent']:
+                return {
+                    'flow_type': 'CDG_AGENT',
+                    'classification': initial_classification,
+                    'confidence': initial_classification['confidence']
+                }
+            
+            else:
+                return {
+                    'flow_type': 'CONTEXTUAL_RESPONSE',
+                    'classification': initial_classification,
+                    'confidence': initial_classification['confidence']
+                }
+                
+        except Exception as e:
+            logger.error(f"Error en clasificación: {e}")
+            return {
+                'flow_type': 'DYNAMIC_SQL',
+                'classification': {'intent': 'fallback', 'requires_sql': True},
+                'confidence': 0.3
+            }
+    
+    async def _classify_query_type(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 CLASIFICACIÓN INICIAL: Determina si necesita SQL, CDG Agent o respuesta contextual
+        """
+        try:
+            classification_prompt = f"""
+            Analiza esta consulta de control de gestión bancario y clasifícala:
+
+            CONSULTA: "{user_message}"
+
+            Responde en JSON con esta estructura:
+            {{
+                "intent": "tipo_de_consulta",
+                "requires_sql": true/false,
+                "requires_cdg_agent": true/false,
+                "complexity": "simple/medium/complex",
+                "confidence": 0.0-1.0,
+                "reasoning": "explicación"
+            }}
+
+            CRITERIOS:
+            - requires_sql: true si necesita datos específicos de la BD
+            - requires_cdg_agent: true si requiere análisis complejo/comparativo/explicativo
+            - Si es pregunta conceptual/general → requires_sql: false
+
+            EJEMPLOS:
+            - "¿Cuántos gestores hay?" → requires_sql: true, requires_cdg_agent: false
+            - "Analiza el performance del gestor 5" → requires_sql: true, requires_cdg_agent: true  
+            - "¿Qué es el margen neto?" → requires_sql: false, requires_cdg_agent: false
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_INTENT_CLASSIFICATION_PROMPT},
+                        {"role": "user", "content": classification_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=200
+                )
+                
+                result_text = response.choices[0].message.content.strip()
+                return self._parse_classification_response(result_text)
+            else:
+                return self._fallback_classification(user_message)
+                
+        except Exception as e:
+            logger.error(f"Error en clasificación inicial: {e}")
+            return self._fallback_classification(user_message)
+    
+    async def _find_predefined_query(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 BÚSQUEDA INTELIGENTE EN QUERIES PREDEFINIDAS
+        Busca en los 6 catálogos para encontrar la query más apropiada
+        """
+        try:
+            # Construir prompt con todos los catálogos
+            all_catalogs = "\n\n".join([
+                f"=== {catalog_name.upper()} ===\n{catalog_content}"
+                for catalog_name, catalog_content in self.query_catalogs.items()
+            ])
+            
+            search_prompt = f"""
+            Busca en estos catálogos la función más apropiada para esta consulta:
+
+            CONSULTA: "{user_message}"
+
+            CATÁLOGOS DISPONIBLES:
+            {all_catalogs}
+
+            Responde en JSON:
+            {{
+                "found": true/false,
+                "catalog": "nombre_del_catalogo",
+                "function_name": "nombre_funcion_exacto",
+                "parameters": {{}},
+                "confidence": 0.0-1.0,
+                "reasoning": "explicación"
+            }}
+
+            IMPORTANTE:
+            - Si encuentras una función que coincida ≥70%, found: true
+            - Usa el nombre EXACTO de la función del catálogo
+            - Si no hay coincidencia clara, found: false
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": "Eres un experto buscador de funciones en catálogos de queries."},
+                        {"role": "user", "content": search_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=300
+                )
+                
+                result_text = response.choices[0].message.content.strip()
+                return self._parse_predefined_search_response(result_text)
+            else:
+                return {'found': False, 'confidence': 0.0}
+                
+        except Exception as e:
+            logger.error(f"Error buscando query predefinida: {e}")
+            return {'found': False, 'confidence': 0.0}
+    
+    def _parse_classification_response(self, response_text: str) -> Dict[str, Any]:
+        """Parsea respuesta de clasificación inicial"""
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                return {
+                    'intent': result.get('intent', 'general_query'),
+                    'requires_sql': result.get('requires_sql', True),
+                    'requires_cdg_agent': result.get('requires_cdg_agent', False),
+                    'complexity': result.get('complexity', 'medium'),
+                    'confidence': float(result.get('confidence', 0.5)),
+                    'reasoning': result.get('reasoning', 'Clasificación automática')
+                }
+        except:
+            pass
+        
+        return self._fallback_classification("")
+    
+    def _parse_predefined_search_response(self, response_text: str) -> Dict[str, Any]:
+        """Parsea respuesta de búsqueda en catálogos"""
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                return {
+                    'found': result.get('found', False),
+                    'catalog': result.get('catalog', ''),
+                    'function_name': result.get('function_name', ''),
+                    'parameters': result.get('parameters', {}),
+                    'confidence': float(result.get('confidence', 0.0)),
+                    'reasoning': result.get('reasoning', '')
+                }
+        except:
+            pass
+        
+        return {'found': False, 'confidence': 0.0}
+    
+    def _fallback_classification(self, user_message: str) -> Dict[str, Any]:
+        """Clasificación fallback básica por palabras clave"""
+        message_lower = user_message.lower() if user_message else ""
+        
+        if any(word in message_lower for word in ['gráfico', 'chart', 'cambia', 'modifica']):
+            return {
+                'intent': 'chart_modification',
+                'requires_sql': False,
+                'requires_cdg_agent': False,
+                'complexity': 'simple',
+                'confidence': 0.8,
+                'reasoning': 'Modificación de gráfico detectada'
+            }
+        
+        elif any(word in message_lower for word in ['análisis', 'explica', 'por qué', 'compara']):
+            return {
+                'intent': 'analysis_request',
+                'requires_sql': True,
+                'requires_cdg_agent': True,
+                'complexity': 'complex',
+                'confidence': 0.7,
+                'reasoning': 'Análisis complejo detectado'
+            }
+        
+        elif any(word in message_lower for word in ['qué es', 'define', 'concepto', 'significa']):
+            return {
+                'intent': 'conceptual_query',
+                'requires_sql': False,
+                'requires_cdg_agent': False,
+                'complexity': 'simple',
+                'confidence': 0.8,
+                'reasoning': 'Pregunta conceptual detectada'
+            }
+        
+        else:
+            return {
+                'intent': 'data_query',
+                'requires_sql': True,
+                'requires_cdg_agent': False,
+                'complexity': 'medium',
+                'confidence': 0.6,
+                'reasoning': 'Consulta de datos general'
+            }
+
+# ============================================================================
+# 🎯 EJECUTOR DE QUERIES PREDEFINIDAS
+# ============================================================================
+
+class PredefinedQueryExecutor:
+    """
+    🎯 EJECUTOR que puede llamar a CUALQUIER función de los 6 catálogos de queries
+    """
+    
+    def __init__(self):
+        self.query_engines = {
+            'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
+            'comparative': ComparativeQueries if IMPORTS_SUCCESSFUL else None,
+            'deviation': DeviationQueries if IMPORTS_SUCCESSFUL else None,
+            'gestor': GestorQueries if IMPORTS_SUCCESSFUL else None,
+            'incentive': IncentiveQueries if IMPORTS_SUCCESSFUL else None,
+            'period': PeriodQueries if IMPORTS_SUCCESSFUL else None
+        }
+    
+    async def execute_predefined_query(self, match_info: Dict[str, Any], user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 EJECUTA la query predefinida identificada por el clasificador
+        """
+        try:
+            catalog = match_info.get('catalog', '')
+            function_name = match_info.get('function_name', '')
+            parameters = match_info.get('parameters', {})
+            
+            logger.info(f"🎯 Ejecutando query predefinida: {catalog}.{function_name}")
+            
+            # Obtener el engine correcto
+            engine = self.query_engines.get(catalog)
+            if not engine:
+                logger.error(f"Engine no encontrado para catálogo: {catalog}")
+                return {
+                    'success': False,
+                    'error': f'Catálogo {catalog} no disponible',
+                    'data': None
+                }
+            
+            # Obtener la función
+            if not hasattr(engine, function_name):
+                logger.error(f"Función no encontrada: {function_name} en {catalog}")
+                return {
+                    'success': False,
+                    'error': f'Función {function_name} no existe en {catalog}',
+                    'data': None
+                }
+            
+            query_function = getattr(engine, function_name)
+            
+            # 🎯 PARÁMETROS INTELIGENTES basados en contexto
+            enhanced_params = self._enhance_parameters(parameters, context, user_message)
+            
+            # Ejecutar la función
+            if callable(query_function):
+                if enhanced_params:
+                    result = query_function(**enhanced_params)
+                else:
+                    result = query_function()
+                
+                return {
+                    'success': True,
+                    'data': result.data if hasattr(result, 'data') else result,
+                    'metadata': {
+                        'catalog': catalog,
+                        'function': function_name,
+                        'parameters_used': enhanced_params,
+                        'execution_time': getattr(result, 'execution_time', 0),
+                        'row_count': getattr(result, 'row_count', 0)
+                    }
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'{function_name} no es ejecutable',
+                    'data': None
+                }
+                
+        except Exception as e:
+            logger.error(f"Error ejecutando query predefinida: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'data': None
+            }
+    
+    def _enhance_parameters(self, base_params: Dict, context: Dict, user_message: str) -> Dict[str, Any]:
+        """
+        🎯 ENRIQUECE los parámetros con contexto inteligente
+        """
+        enhanced = base_params.copy()
+        
+        # Período inteligente
+        if 'periodo' not in enhanced and context:
+            enhanced['periodo'] = context.get('periodo') or self._extract_period_from_message(user_message)
+        
+        # Gestor ID
+        if 'gestor_id' not in enhanced and context:
+            enhanced['gestor_id'] = context.get('gestor_id')
+        
+        # Umbrales por defecto
+        if 'umbral' not in enhanced and any(word in user_message.lower() for word in ['desviación', 'threshold']):
+            enhanced['umbral'] = 15.0
+        
+        # Limpiar parámetros None
+        return {k: v for k, v in enhanced.items() if v is not None}
+    
+    def _extract_period_from_message(self, user_message: str) -> Optional[str]:
+        """Extrae período del mensaje del usuario"""
+        import re
+        
+        # Buscar patrones YYYY-MM
+        period_pattern = r'20\d{2}-\d{2}'
+        match = re.search(period_pattern, user_message)
+        if match:
+            return match.group(0)
+        
+        # Palabras clave para períodos
+        if 'octubre' in user_message.lower():
+            return '2025-10'
+        elif 'septiembre' in user_message.lower():
+            return '2025-09'
+        
+        return '2025-10'  # Default actual
+
+# ============================================================================
+# INSPECTOR DINÁMICO DE ESQUEMA DE BASE DE DATOS (HEREDADO DEL V9.0)
+# ============================================================================
+
+class DatabaseSchemaInspector:
+    """Inspector dinámico de esquema - heredado del v9.0"""
+    
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or settings.DATABASE_PATH
+        self.schema_cache = {}
+        self.cache_timestamp = None
+        self.cache_duration = 300  # 5 minutos
+    
+    def get_database_schema(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """Obtiene el esquema completo de la base de datos dinámicamente"""
+        try:
+            current_time = datetime.now()
+            if (not force_refresh and 
+                self.schema_cache and 
+                self.cache_timestamp and 
+                (current_time - self.cache_timestamp).seconds < self.cache_duration):
+                return self.schema_cache
+            
+            logger.info("🔍 Inspeccionando esquema de base de datos...")
+            
+            schema = {
+                'tables': {},
+                'metadata': {
+                    'last_updated': current_time.isoformat(),
+                    'total_tables': 0,
+                    'total_records': 0
+                }
+            }
+            
+            # Obtener todas las tablas
+            tables_query = """
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                tables = query_executor.execute_query(tables_query)
+            else:
+                tables = [
+                    {'name': 'MAESTRO_GESTORES'},
+                    {'name': 'MAESTRO_CONTRATOS'},
+                    {'name': 'PRECIO_POR_PRODUCTO_REAL'},
+                    {'name': 'PRECIO_POR_PRODUCTO_STD'}
+                ]
+            
+            total_records = 0
+            
+            for table_info in tables:
+                table_name = table_info['name']
+                table_schema = self._get_table_schema(table_name)
+                record_count = self._get_table_count(table_name)
+                total_records += record_count
+                
+                schema['tables'][table_name] = {
+                    'columns': table_schema,
+                    'record_count': record_count,
+                    'description': self._get_table_description(table_name)
+                }
+            
+            schema['metadata']['total_tables'] = len(tables)
+            schema['metadata']['total_records'] = total_records
+            
+            self.schema_cache = schema
+            self.cache_timestamp = current_time
+            
+            logger.info(f"✅ Esquema cargado: {len(tables)} tablas, {total_records} registros totales")
+            return schema
+            
+        except Exception as e:
+            logger.error(f"❌ Error inspeccionando esquema: {e}")
+            return self._get_fallback_schema()
+    
+    def _get_table_schema(self, table_name: str) -> List[Dict[str, Any]]:
+        try:
+            if IMPORTS_SUCCESSFUL:
+                return query_executor.get_table_info(table_name)
+            else:
+                return [{'name': 'ID', 'type': 'INTEGER'}, {'name': 'DESC', 'type': 'TEXT'}]
+        except Exception as e:
+            logger.warning(f"Error obteniendo esquema de {table_name}: {e}")
+            return []
+    
+    def _get_table_count(self, table_name: str) -> int:
+        try:
+            if IMPORTS_SUCCESSFUL:
+                return query_executor.get_table_count(table_name)
+            else:
+                return 100
+        except Exception as e:
+            logger.warning(f"Error contando registros en {table_name}: {e}")
+            return 0
+    
+    def _get_table_description(self, table_name: str) -> str:
+        descriptions = {
+            'MAESTRO_GESTORES': 'Catálogo del equipo comercial con especialización por segmento y ubicación',
+            'MAESTRO_CONTRATOS': 'Registro central de contratos activos - núcleo del sistema de costes',
+            'MAESTRO_CLIENTES': 'Base de datos de clientes activos con asignación comercial',
+            'MAESTRO_PRODUCTOS': 'Catálogo de productos financieros con modelo de negocio',
+            'MAESTRO_SEGMENTOS': 'Clasificación estratégica de cartera por tipología cliente',
+            'MAESTRO_CENTROS': 'Estructura organizativa de centros operativos y de soporte',
+            'PRECIO_POR_PRODUCTO_REAL': 'Precios reales mensuales calculados - núcleo control de gestión',
+            'PRECIO_POR_PRODUCTO_STD': 'Precios estándar presupuestarios - referencia objetivos',
+            'MOVIMIENTOS_CONTRATOS': 'Motor transaccional - registra operaciones financieras en tiempo real',
+            'GASTOS_CENTRO': 'Registro mensual gastos directos por centro - base cálculo precios reales',
+            'MAESTRO_CUENTAS': 'Plan contable específico para productos financieros',
+            'MAESTRO_LINEA_CDR': 'Estructura del Cuadro de Resultados para reporting ejecutivo'
+        }
+        return descriptions.get(table_name, f'Tabla del sistema de control de gestión: {table_name}')
+    
+    def _get_fallback_schema(self) -> Dict[str, Any]:
+        return {
+            'tables': {
+                'MAESTRO_GESTORES': {
+                    'columns': [{'name': 'GESTOR_ID'}, {'name': 'DESC_GESTOR'}],
+                    'record_count': 30,
+                    'description': 'Gestores comerciales'
+                }
+            },
+            'metadata': {
+                'last_updated': datetime.now().isoformat(),
+                'total_tables': 1,
+                'total_records': 30
+            }
+        }
+
+# ============================================================================
+# QUERY BUILDER DINÁMICO (HEREDADO DEL V9.0 CON MEJORAS)
+# ============================================================================
+
+class EnhancedQueryBuilder:
+    """Query Builder mejorado con contexto bancario completo"""
+    
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or settings.DATABASE_PATH
+        self.schema_inspector = DatabaseSchemaInspector(self.db_path)
+        self.llm_client = iniciar_agente_llm()
+    
+    async def build_sql_for_any_query(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """Construye SQL para CUALQUIER consulta con contexto bancario completo"""
+        try:
+            database_schema = self.schema_inspector.get_database_schema()
+            schema_context = self._build_banking_schema_context(database_schema)
+            
+            sql_generation_prompt = f"""
+            Genera una consulta SQL para esta pregunta de Control de Gestión:
+
+            PREGUNTA: "{user_message}"
+
+            {schema_context}
+
+            CONTEXTO BANCARIO BANCA MARCH:
+            - Sistema de Control de Gestión para análisis de rentabilidad
+            - Códigos CDR: Ingresos ('CR0001','CR0008','CR0012'), Gastos ('CR0014','CR0016','CR0017')  
+            - KPIs clave: Margen neto, ROE, eficiencia operativa
+            - Segmentos: Banca Privada, Banca Personal, Empresas
+            - Productos: Fondos, Depósitos, Créditos, Seguros
+            
+            RESPONDE SOLO EN JSON:
+            {{
+                "sql": "SELECT...",
+                "explanation": "explicación clara",
+                "tables_used": ["TABLA1", "TABLA2"],
+                "intent": "data_query",
+                "confidence": 0.8
+            }}
+            
+            IMPORTANTE:
+            - SQL válido y ejecutable
+            - Usa JOIN apropiados entre tablas relacionadas
+            - LIMIT 20 por defecto para consultas exploratorias
+            - Maneja casos NULL con COALESCE
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_SQL_GENERATION_SYSTEM_PROMPT},
+                        {"role": "user", "content": sql_generation_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=600
+                )
+                
+                result_text = response.choices[0].message.content.strip()
+                result = self._parse_llm_sql_response(result_text)
+            else:
+                result = self._generate_fallback_sql(user_message, database_schema)
+            
+            # Validar seguridad
+            sql = result.get('sql', '')
+            is_safe = is_query_safe(sql) if IMPORTS_SUCCESSFUL else True
+            
+            result.update({
+                'is_safe': is_safe,
+                'generated_at': datetime.now().isoformat(),
+                'schema_version': database_schema['metadata']['last_updated']
+            })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error construyendo SQL: {e}")
+            return {
+                'sql': 'SELECT "Error en construcción de query" as message',
+                'explanation': f'Error: {str(e)}',
+                'tables_used': [],
+                'intent': 'error',
+                'confidence': 0.0,
+                'is_safe': True
+            }
+    
+    def _build_banking_schema_context(self, schema: Dict[str, Any]) -> str:
+        """Construye contexto completo del esquema con enfoque bancario"""
+        context_lines = []
+        context_lines.append("BASE DE DATOS BM_CONTABILIDAD_CDG - ESQUEMA BANCARIO:")
+        context_lines.append(f"Total tablas: {schema['metadata']['total_tables']}")
+        context_lines.append(f"Total registros: {schema['metadata']['total_records']}")
+        context_lines.append("")
+        
+        for table_name, table_info in schema['tables'].items():
+            columns = table_info.get('columns', [])
+            record_count = table_info.get('record_count', 0)
+            description = table_info.get('description', '')
+            
+            context_lines.append(f"TABLA: {table_name}")
+            context_lines.append(f"Propósito: {description}")
+            context_lines.append(f"Registros: {record_count:,}")
+            
+            col_info = [f"{col.get('name', 'unknown')} ({col.get('type', 'unknown')})" 
+                       for col in columns[:8]]  # Limitar columnas mostradas
+            context_lines.append(f"Columnas: {', '.join(col_info)}")
+            context_lines.append("")
+        
+        return '\n'.join(context_lines)
+    
+    def _parse_llm_sql_response(self, llm_response: str) -> Dict[str, Any]:
+        """Parsea respuesta del LLM extrayendo SQL válido"""
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                sql = result.get('sql', '').strip()
+                
+                if self._is_complete_sql(sql):
+                    return {
+                        'sql': sql,
+                        'explanation': result.get('explanation', ''),
+                        'tables_used': result.get('tables_used', []),
+                        'intent': result.get('intent', 'data_query'),
+                        'confidence': float(result.get('confidence', 0.8))
+                    }
+        except:
+            pass
+        
+        return self._generate_fallback_sql("consulta general", {})
+    
+    def _is_complete_sql(self, sql: str) -> bool:
+        """Valida que el SQL sea completo y ejecutable"""
+        if not sql or len(sql.strip()) < 10:
+            return False
+        
+        sql_upper = sql.upper().strip()
+        if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
+            return False
+        
+        if sql_upper.startswith('SELECT') and 'FROM' not in sql_upper:
+            return False
+        
+        return True
+    
+    def _generate_fallback_sql(self, user_message: str, schema: Dict) -> Dict[str, Any]:
+        """SQL fallback inteligente"""
+        message_lower = user_message.lower()
+        
+        if any(word in message_lower for word in ['gestor', 'comercial']):
+            return {
+                'sql': 'SELECT GESTOR_ID, DESC_GESTOR, CENTRO FROM MAESTRO_GESTORES LIMIT 10',
+                'explanation': 'Consulta básica de gestores',
+                'tables_used': ['MAESTRO_GESTORES'],
+                'intent': 'data_query',
+                'confidence': 0.6
+            }
+        
+        return {
+            'sql': 'SELECT "Consulta no procesable" as mensaje',
+            'explanation': 'No se pudo generar SQL válido',
+            'tables_used': [],
+            'intent': 'error',
+            'confidence': 0.2
+        }
+
+# ============================================================================
+# FORMATEADOR DE RESPUESTAS NATURALES
+# ============================================================================
+
+class BankingResponseFormatter:
+    """Formateador especializado en contexto bancario"""
+    
+    def __init__(self):
+        self.llm_client = iniciar_agente_llm()
+    
+    async def format_response(self, data: Any, query: str, context: Dict = None) -> str:
+        """Convierte datos en respuesta natural con contexto bancario"""
+        try:
+            if not data:
+                return "No se encontraron datos para su consulta. ¿Podría proporcionar más detalles específicos sobre el período o gestor de interés?"
+    
+            # Preparar contexto de forma segura
+            safe_data = data if data is not None else []
+            safe_query = str(query) if query else "consulta"
+            
+            banking_prompt = f"""
+            Genera una respuesta profesional para esta consulta de Control de Gestión:
+
+            CONSULTA: "{safe_query}"
+            DATOS: {safe_data}
+
+            CONTEXTO BANCARIO:
+            - Banca March - Departamento de Control de Gestión
+            - Enfoque en rentabilidad y eficiencia operativa
+            - Audiencia: Directivos y gestores comerciales
+            - Estilo: Profesional, directo, con insights accionables
+
+            FORMATO REQUERIDO:
+            - Respuesta directa al inicio
+            - Datos estructurados con bullets
+            - Insights o recomendaciones al final
+            - Números con formato bancario (€, %, separadores de miles)
+            
+            EJEMPLO:
+            "📊 **Análisis de Gestores - Octubre 2025**
+            
+            Se identificaron 25 gestores activos:
+            • **Banca Privada:** 8 gestores (32%)
+            • **Banca Personal:** 12 gestores (48%)  
+            • **Empresas:** 5 gestores (20%)
+            
+            💡 **Insights:** La concentración en Banca Personal sugiere oportunidades de crecimiento en segmentos premium."
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT},
+                        {"role": "user", "content": banking_prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=800
+                )
+                return response.choices[0].message.content.strip()
+            else:
+                return self._format_fallback(data, query)
+    
+        except Exception as e:
+            logger.error(f"Error formateando respuesta: {e}")
+            return f"Se procesaron los datos para '{query}', pero hubo un error en el formateo de la respuesta."
+    
+    def _format_fallback(self, data: Any, query: str) -> str:
+        """Formateo fallback con contexto bancario"""
+        if isinstance(data, list) and len(data) > 0:
+            return f"📊 **Resultados para:** {query}\n\nSe encontraron **{len(data)} registros** en el sistema de Control de Gestión."
+        elif isinstance(data, dict):
+            formatted_items = []
+            for key, value in data.items():
+                if isinstance(value, (int, float)):
+                    if 'pct' in key.lower() or 'percent' in key.lower():
+                        formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value:.2f}%")
+                    elif 'eur' in key.lower() or 'euro' in key.lower():
+                        formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value:,.2f} €")
+                    else:
+                        formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value:,.2f}")
+                else:
+                    formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value}")
+            return f"📊 **Control de Gestión - {query.title()}**\n\n" + "\n".join(formatted_items)
+        else:
+            return f"📊 **Resultado:** {str(data)}"
+
+# ============================================================================
+# DATACLASSES PARA MENSAJES Y RESPUESTAS
+# ============================================================================
+
+@dataclass
+class ChatMessage:
     user_id: str
     message: str
     gestor_id: Optional[str] = None
     periodo: Optional[str] = None
-    include_charts: bool = True
-    include_recommendations: bool = True
-    context: Dict[str, Any] = {}
-    user_feedback: Optional[Dict[str, Any]] = None
+    context: Dict[str, Any] = field(default_factory=dict)
+    current_chart_config: Optional[Dict[str, Any]] = None
+    include_charts: Optional[bool] = True
+    include_recommendations: Optional[bool] = True
 
-class ChatResponse(BaseModel):
+@dataclass
+class ChatResponse:
     response: str
     response_type: str
-    charts: List[Dict[str, Any]] = []
-    recommendations: List[str] = []
-    metadata: Dict[str, Any] = {}
-    execution_time: float
-    confidence_score: float
-    timestamp: str
-    session_id: str
+    data: Optional[Any] = None
+    charts: List[Dict[str, Any]] = field(default_factory=list)
+    recommendations: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    execution_time: float = 0.0
+    confidence_score: float = 0.0
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    session_id: str = ""
 
-# ============================================================================
-# GESTIÓN DE SESIONES CON PERSONALIZACIÓN INTELIGENTE
-# ============================================================================
-
+@dataclass
 class ChatSession:
-    def __init__(self, user_id: str):
-        self.user_id = user_id
-        self.session_id = str(uuid.uuid4())
-        self.conversation_history = []
-        self.user_preferences = {
-            'communication_style': 'professional',  # professional, concise, detailed
-            'technical_level': 'intermediate',       # basic, intermediate, advanced
-            'preferred_format': 'combined',          # text, charts, combined
-            'response_length': 'medium'              # short, medium, detailed
-        }
-        self.personalization_data = {
-            'frequent_queries': [],
-            'successful_interactions': 0,
-            'feedback_history': [],
-            'usage_patterns': {}
-        }
-        self.created_at = datetime.now()
-        self.last_active = datetime.now()
-    
-    def add_interaction(self, user_msg: str, agent_resp: Dict, intent: str, satisfaction_rating: Optional[int] = None):
-        interaction = {
-            'timestamp': datetime.now().isoformat(),
-            'user_message': user_msg,
-            'agent_response': agent_resp,
-            'intent': intent,
-            'session_id': self.session_id,
-            'satisfaction_rating': satisfaction_rating
-        }
-        
-        self.conversation_history.append(interaction)
-        self.last_active = datetime.now()
-        
-        # Actualizar datos de personalización
-        self._update_personalization_data(user_msg, intent, satisfaction_rating)
-        
-        if len(self.conversation_history) > 50:
-            self.conversation_history = self.conversation_history[-50:]
-    
-    def _update_personalization_data(self, user_msg: str, intent: str, rating: Optional[int]):
-        """🧠 Actualiza datos de personalización inteligente"""
-        # Actualizar consultas frecuentes
-        if intent not in self.personalization_data['frequent_queries']:
-            self.personalization_data['frequent_queries'].append(intent)
-        
-        # Actualizar satisfacción
-        if rating and rating >= 4:
-            self.personalization_data['successful_interactions'] += 1
-        
-        # Detectar patrones de longitud de mensaje
-        msg_length = len(user_msg.split())
-        if msg_length < 5:
-            self.user_preferences['response_length'] = 'short'
-        elif msg_length > 15:
-            self.user_preferences['response_length'] = 'detailed'
-    
-    def get_recent_context(self, max_interactions: int = 5) -> List[Dict]:
-        return self.conversation_history[-max_interactions:]
-    
-    def get_personalization_context(self) -> Dict[str, Any]:
-        """📊 Obtiene contexto de personalización para prompts"""
-        return {
-            'user_preferences': self.user_preferences,
-            'personalization_data': self.personalization_data,
-            'total_interactions': len(self.conversation_history),
-            'last_activity': self.last_active.isoformat()
-        }
+    user_id: str
+    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    chart_configs: List[Dict[str, Any]] = field(default_factory=list)
+    preferences: Dict[str, Any] = field(default_factory=dict)
 
-class ChatSessionManager:
-    def __init__(self):
-        self.sessions: Dict[str, ChatSession] = {}
-        self.websocket_connections: Dict[str, WebSocket] = {}
+# ============================================================================
+# 🚀 AGENTE DE CHAT PRINCIPAL - VERSION 10.0 COMPLETA
+# ============================================================================
+
+class UniversalChatAgentV10:
+    """
+    🚀 Chat Agent Universal v10.0 - VERSIÓN COMPLETA DEFINITIVA
     
-    def get_or_create_session(self, user_id: str) -> ChatSession:
+    Flujo perfecto implementado:
+    consulta_usuario → ¿Necesita SQL?
+        ├── SÍ → ¿Existe query predefinida?
+        │    ├── SÍ → Usar query predefinida  
+        │    └── NO → Generar SQL dinámicamente
+        └── NO → Respuesta LLM con contexto bancario
+    """
+    
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or settings.DATABASE_PATH
+        self.sessions: Dict[str, ChatSession] = {}
+        
+        # 🎯 COMPONENTES PRINCIPALES V10.0
+        self.classifier = IntelligentQueryClassifier()
+        self.predefined_executor = PredefinedQueryExecutor()
+        self.query_builder = EnhancedQueryBuilder(self.db_path)
+        self.formatter = BankingResponseFormatter()
+        
+        # Integraciones externas
+        self.cdg_agent = create_cdg_agent() if IMPORTS_SUCCESSFUL else None
+        self.chart_generator = None
+        if IMPORTS_SUCCESSFUL:
+            try:
+                self.chart_generator = QueryIntegratedChartGenerator()
+            except:
+                logger.warning("Chart generator no disponible")
+        
+        mode = "PRODUCTION" if IMPORTS_SUCCESSFUL else "FALLBACK"
+        print(f"\n{'='*60}")
+        print(f"🚀 UNIVERSAL CHAT AGENT v10.0 COMPLETO")
+        print(f"   Estado: ✅ LISTO")
+        print(f"   Modo: {mode}")
+        print(f"   Componentes: {'✅ Todos activos' if IMPORTS_SUCCESSFUL else '⚠️ Modo fallback'}")
+        print(f"   CDG Integration: {'✅ Conectado' if self.cdg_agent else '❌ No disponible'}")
+        print(f"{'='*60}\n")
+        logger.info("🚀 Universal Chat Agent v10.0 COMPLETO inicializado exitosamente")
+
+    
+    def get_session(self, user_id: str) -> ChatSession:
+        """Obtiene o crea sesión de usuario"""
         if user_id not in self.sessions:
-            self.sessions[user_id] = ChatSession(user_id)
-            logger.info(f"🆕 Nueva sesión creada para usuario {user_id}")
-        self.sessions[user_id].last_active = datetime.now()
+            self.sessions[user_id] = ChatSession(
+                user_id=user_id,
+                preferences={
+                    "response_style": "professional",
+                    "detail_level": "medium",
+                    "include_banking_context": True
+                }
+            )
         return self.sessions[user_id]
     
-    def add_websocket_connection(self, user_id: str, websocket: WebSocket):
-        self.websocket_connections[user_id] = websocket
-    
-    def remove_websocket_connection(self, user_id: str):
-        self.websocket_connections.pop(user_id, None)
-    
-    def reset_session(self, user_id: str):
-        if user_id in self.sessions:
-            self.sessions[user_id].conversation_history.clear()
-
-# ============================================================================
-# AGENTE DE CHAT CON SYSTEM PROMPTS PROFESIONALES INTEGRADOS
-# ============================================================================
-
-class CDGChatAgent:
-    """
-    🚀 AGENTE DE CHAT v6.1 CON SYSTEM PROMPTS PROFESIONALES
-    
-    - Integración completa con tus System Prompts especializados
-    - Personalización inteligente basada en patrones de uso
-    - Gestión conversacional avanzada con contexto bancario
-    - Clasificación de intenciones y feedback processing
-    """
-    
-    def __init__(self):
-        self.session_manager = ChatSessionManager()
-        self.llm_client = iniciar_agente_llm()
-        self.start_time = datetime.now()
-        self.imports_successful = IMPORTS_SUCCESSFUL
-        
-        # 🚀 INICIALIZAR CDG AGENT COMPLETO
-        try:
-            self.cdg_agent = CDGAgent()
-            logger.info("🎯 CDG Agent integrado exitosamente en Chat Agent")
-        except Exception as e:
-            logger.error(f"❌ Error inicializando CDG Agent: {e}")
-            self.cdg_agent = MockCDGAgent() if not IMPORTS_SUCCESSFUL else None
-        
-        # Sistemas de queries para consultas simples
-        try:
-            self.gestor_queries = GestorQueries()
-            self.comparative_queries = ComparativeQueries()
-            self.deviation_queries = DeviationQueries()
-            self.incentive_queries = IncentiveQueries()
-            self.period_queries = PeriodQueries()
-        except Exception as e:
-            logger.warning(f"Error inicializando sistemas de queries: {e}")
-            self.gestor_queries = self.comparative_queries = self.deviation_queries = self.incentive_queries = self.period_queries = type('MockQueries', (), {})()
-        
-        logger.info(f"🚀 CDG Chat Agent v6.1 inicializado con System Prompts Profesionales - Modo: {'PRODUCTION' if IMPORTS_SUCCESSFUL else 'MOCK'}")
-    
-    async def _classify_user_intent(self, message: str, session: ChatSession) -> Dict[str, Any]:
+    async def process_chat_message(self, message: ChatMessage) -> ChatResponse:
         """
-        🧠 CLASIFICACIÓN DE INTENCIÓN CON TU PROMPT PROFESIONAL
-        
-        Usa CHAT_INTENT_CLASSIFICATION_PROMPT para determinar la intención del usuario
+        🎯 MÉTODO PRINCIPAL: Implementa el flujo perfecto de clasificación y enrutamiento
         """
+        start_time = datetime.now()
+        session = self.get_session(message.user_id)
+        
         try:
-            client = self.llm_client
+            if not message.message.strip():
+                return ChatResponse(
+                    response="Por favor, ingrese su consulta sobre control de gestión bancario.",
+                    response_type="validation_error",
+                    session_id=message.user_id,
+                    execution_time=0.0
+                )
             
-            # Construir contexto de clasificación
-            classification_context = {
-                'message': message,
-                'recent_history': [h.get('intent', 'general') for h in session.get_recent_context(3)],
-                'user_preferences': session.user_preferences,
-                'session_length': len(session.conversation_history)
-            }
-            
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": CHAT_INTENT_CLASSIFICATION_PROMPT
-                    },
-                    {
-                        "role": "user", 
-                        "content": f"Clasifica la siguiente consulta considerando el contexto bancario:\n\nMensaje: {message}\n\nContexto: {json.dumps(classification_context, ensure_ascii=False, indent=2)}"
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=200
+            # 🎯 PASO 1: CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE
+            routing_result = await self.classifier.classify_and_route(
+                message.message, 
+                {
+                    'history': session.conversation_history[-3:],
+                    'charts': session.chart_configs,
+                    'preferences': session.preferences,
+                    'gestor_id': message.gestor_id,
+                    'periodo': message.periodo
+                }
             )
             
-            result_text = response.choices[0].message.content.strip()
+            flow_type = routing_result['flow_type']
+            logger.info(f"🎯 Flujo determinado: {flow_type} (confianza: {routing_result['confidence']})")
             
-            # Parsear respuesta JSON
-            try:
-                result = json.loads(result_text)
-                intent = result.get('intent', 'general_inquiry')
-                confidence = result.get('confidence', 0.5)
-            except json.JSONDecodeError:
-                # Fallback si no es JSON válido
-                intent = 'general_inquiry'
-                confidence = 0.3
-            
-            logger.info(f"🎯 Intención clasificada: {intent} (confianza: {confidence:.2f})")
-            
-            return {
-                'intent': intent,
-                'confidence': confidence,
-                'requires_cdg_agent': self._intent_requires_cdg_agent(intent, message),
-                'recommended_approach': self._get_approach_for_intent(intent)
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error en clasificación de intención: {e}")
-            return {
-                'intent': 'general_inquiry',
-                'confidence': 0.3,
-                'requires_cdg_agent': self._requires_cdg_agent(message),
-                'recommended_approach': 'simple'
-            }
-    
-    def _should_request_clarification(self, intent_analysis: Dict) -> bool:
-        """🎯 Determina si se debe pedir clarificación por baja confianza"""
-        confidence = intent_analysis['confidence']
-        intent = intent_analysis['intent']
-
-        # Umbrales por tipo de intent
-        thresholds = {
-            'performance_analysis': 0.6,
-            'comparative_analysis': 0.65,
-            'deviation_detection': 0.7,
-            'incentive_analysis': 0.65,
-            'business_review': 0.7,
-            'executive_summary': 0.7,
-            'general_inquiry': 0.4
-        }
-
-        return confidence < thresholds.get(intent, 0.6)
-
-    async def _request_clarification(self, chat_message: ChatMessage, intent_analysis: Dict, session: ChatSession) -> ChatResponse:
-        """❓ Solicita aclaración al usuario por baja confianza"""
-        start_time = datetime.now()
-        
-        # Umbrales por tipo de intent (definir thresholds aquí)
-        thresholds = {
-            'performance_analysis': 0.6,
-            'comparative_analysis': 0.65,
-            'deviation_detection': 0.7,
-            'incentive_analysis': 0.65,
-            'business_review': 0.7,
-            'executive_summary': 0.7,
-            'general_inquiry': 0.4
-        }
-
-        # Mensaje personalizado según el tipo de intent detectado
-        intent = intent_analysis.get('intent', 'general_inquiry')
-        confidence = intent_analysis.get('confidence', 0)
-        
-        if intent == 'performance_analysis':
-            clarification_msg = f"💡 **Consulta sobre rendimiento detectada** (confianza: {confidence:.0%})\n\n" \
-                              "Parece que buscas información sobre el rendimiento de un gestor o centro. " \
-                              "¿Podrías especificar:\n" \
-                              "- ¿Qué gestor específico te interesa?\n" \
-                              "- ¿Para qué período?\n" \
-                              "- ¿Qué métricas en particular?\n\n" \
-                              "Ejemplo: *'Rendimiento del gestor 19 en octubre 2025'*"
-        
-        elif intent == 'comparative_analysis':
-            clarification_msg = f"💡 **Consulta comparativa detectada** (confianza: {confidence:.0%})\n\n" \
-                              "Parece que quieres comparar elementos. ¿Podrías aclarar:\n" \
-                              "- ¿Qué elementos comparar? (gestores, centros, segmentos)\n" \
-                              "- ¿Para qué período?\n" \
-                              "- ¿Qué métricas usar para la comparación?\n\n" \
-                              "Ejemplo: *'Comparar gestores 18 y 21 en ROE para 2025-10'*"
-        
-        else:
-            clarification_msg = f"💡 **Consulta detectada** (confianza: {confidence:.0%})\n\n" \
-                              "No estoy completamente seguro de haber entendido tu consulta. " \
-                              "¿Podrías proporcionar más detalles sobre:\n" \
-                              "- ¿Qué información específica necesitas?\n" \
-                              "- ¿Sobre qué gestor, centro o período?\n" \
-                              "- ¿Buscas análisis, comparaciones o reportes?\n\n" \
-                              "Esto me ayudará a ofrecerte un análisis más preciso."
-        
-        # Añadir sugerencias basadas en el historial del usuario
-        suggestions = self._get_clarification_suggestions(session, intent)
-        if suggestions:
-            clarification_msg += f"\n\n**💡 Sugerencias basadas en tus consultas anteriores:**\n" + \
-                               "\n".join([f"• {suggestion}" for suggestion in suggestions])
-        
-        return ChatResponse(
-            response=clarification_msg,
-            response_type="clarification_request",
-            charts=[],
-            recommendations=[
-                "Especifica más detalles en tu consulta",
-                "Usa ejemplos concretos (gestor, período, métricas)",
-                "Consulta las sugerencias personalizadas"
-            ],
-            metadata={
-                "source": "clarification_handler",
-                "original_intent": intent,
-                "original_confidence": confidence,
-                "requires_clarification": True,
-                "clarification_type": "low_confidence",
-                "threshold_used": thresholds.get(intent, 0.6),
-                "professional_prompts": True
-            },
-            execution_time=(datetime.now() - start_time).total_seconds(),
-            confidence_score=confidence,
-            timestamp=datetime.now().isoformat(),
-            session_id=session.session_id
-        )
-    
-    def _get_clarification_suggestions(self, session: ChatSession, current_intent: str) -> List[str]:
-        """💡 Genera sugerencias personalizadas para aclaración"""
-        suggestions = []
-
-        try:
-            # Basado en consultas frecuentes del usuario
-            frequent_queries = session.personalization_data.get('frequent_queries', [])
-            current_period = datetime.now().strftime('%Y-%m')
-
-            if 'performance_analysis' in frequent_queries:
-                suggestions.append(f"Análisis del gestor [ID] en {current_period}")
-
-            if 'comparative_analysis' in frequent_queries:
-                suggestions.append("Comparar rendimiento entre gestores")
-
-            if 'deviation_detection' in frequent_queries:
-                suggestions.append("Detectar alertas o desviaciones críticas")
-
-            # Sugerencias por defecto si no hay historial
-            if not suggestions:
-                suggestions.extend([
-                    f"¿Cómo está el gestor [ID] en {current_period}?",
-                    "Comparar gestores 18 y 21 en ROE",
-                    "¿Qué centros tienen mejor rendimiento?"
-                ])
-
-            return suggestions[:3]  # Máximo 3 sugerencias
-
-        except Exception as e:
-            logger.warning(f"Error generando sugerencias de aclaración: {e}")
-            return [f"Ejemplo: ¿Cómo está el gestor 19 en {datetime.now().strftime('%Y-%m')}?"]
-
-    
-    def _intent_requires_cdg_agent(self, intent: str, message: str) -> bool:
-        """🎯 Determina si la intención requiere CDG Agent basado en tu clasificación"""
-        cdg_intents = {
-            'performance_analysis',
-            'comparative_analysis', 
-            'deviation_detection',
-            'incentive_analysis',
-            'business_review',
-            'executive_summary'
-        }
-        
-        return intent in cdg_intents or self._requires_cdg_agent(message)
-    
-    def _get_approach_for_intent(self, intent: str) -> str:
-        """📋 Obtiene enfoque recomendado según intención"""
-        approach_map = {
-            'performance_analysis': 'cdg_detailed',
-            'comparative_analysis': 'cdg_detailed',
-            'deviation_detection': 'cdg_alerts',
-            'incentive_analysis': 'cdg_calculations',
-            'business_review': 'cdg_executive',
-            'executive_summary': 'cdg_executive',
-            'general_inquiry': 'simple_conversational'
-        }
-        return approach_map.get(intent, 'simple_conversational')
-    
-    def _extract_periodo_from_message(self, message: str) -> Optional[str]:
-        """🗓️ EXTRACCIÓN INTELIGENTE DE PERÍODO"""
-        periodo_patterns = [
-            r'(\d{4}-\d{2})',           # 2025-10
-            r'(\d{4}/\d{2})',           # 2025/10  
-            r'(\d{2}/\d{4})',           # 10/2025
-            r'(\d{2}-\d{4})',           # 10-2025
-            r'periodo\s+(\d{4}-\d{2})', # periodo 2025-10
-            r'mes\s+(\d{4}-\d{2})',     # mes 2025-10
-            r'en\s+(\d{4}-\d{2})',      # en 2025-10
-            r'del\s+(\d{4}-\d{2})',     # del 2025-10
-        ]
-        
-        message_lower = message.lower()
-        
-        for pattern in periodo_patterns:
-            match = re.search(pattern, message_lower)
-            if match:
-                periodo_found = match.group(1)
-                logger.info(f"🗓️ Período detectado: '{periodo_found}' usando patrón: {pattern}")
+            # 🎯 PASO 2: EJECUTAR FLUJO CORRESPONDIENTE
+            if flow_type == 'PREDEFINED_QUERY':
+                return await self._execute_predefined_flow(message, session, routing_result, start_time)
                 
-                # Normalizar formato
-                if re.match(r'\d{4}-\d{2}', periodo_found):
-                    return periodo_found
-                elif re.match(r'\d{4}/\d{2}', periodo_found):
-                    return periodo_found.replace('/', '-')
-                elif re.match(r'\d{2}/\d{4}', periodo_found):
-                    parts = periodo_found.split('/')
-                    return f"{parts[1]}-{parts[0]}"
-                elif re.match(r'\d{2}-\d{4}', periodo_found):
-                    parts = periodo_found.split('-')
-                    return f"{parts[1]}-{parts[0]}"
-        
-        # Fallback dinámico
-        current_period = datetime.now().strftime('%Y-%m')
-        logger.info(f"🗓️ No se detectó período, usando actual: {current_period}")
-        return current_period
-    
-    def _extract_gestor_id(self, chat_message: ChatMessage, session: ChatSession) -> Optional[str]:
-        """🧠 EXTRACCIÓN INTELIGENTE DE GESTOR_ID"""
-        
-        if chat_message.gestor_id:
-            return chat_message.gestor_id
-        
-        if 'gestor_id' in chat_message.context:
-            return chat_message.context['gestor_id']
-        
-        for interaction in reversed(session.get_recent_context(3)):
-            if 'gestor_id' in interaction.get('agent_response', {}).get('metadata', {}):
-                return interaction['agent_response']['metadata']['gestor_id']
-        
-        gestor_patterns = [
-            r'gestor\s+(\d+)', 
-            r'id\s+(\d+)', 
-            r'#(\d+)',
-            r'número\s+(\d+)',
-            r'num\s+(\d+)'
-        ]
-        
-        message_lower = chat_message.message.lower()
-        
-        for pattern in gestor_patterns:
-            match = re.search(pattern, message_lower)
-            if match:
-                potential_id = match.group(1)
-                if potential_id.isdigit() and 1 <= int(potential_id) <= 100:
-                    logger.info(f"🎯 Gestor ID extraído: {potential_id}")
-                    return potential_id
-        
-        return "1"
-    
-    def _requires_cdg_agent(self, message: str) -> bool:
-        """🧠 DETERMINA SI REQUIERE CDG AGENT - Versión mejorada"""
-        message_lower = message.lower()
-        
-        complex_patterns = [
-            # Consultas individuales de gestor (añadido)
-            r'gestor\s+\d+',
-            r'cómo\s+está.*gestor',
-            r'performance.*gestor',
-            r'rendimiento.*gestor',
-            
-            # Segmentos
-            r'segmento.*vs.*segmento',
-            r'empresas.*vs.*minorista',
-            r'minorista.*vs.*empresas',
-            r'comparar.*segmentos',
-            
-            # Centros
-            r'centro.*vs.*centro',
-            r'madrid.*vs.*barcelona',
-            r'barcelona.*vs.*madrid',
-            r'comparar.*centros',
-            
-            # Múltiples gestores
-            r'gestores?\s+\d+.*\d+',
-            r'comparar.*gestores',
-            
-            # Reportes complejos
-            r'business\s+review',
-            r'executive\s+summary',
-            r'informe\s+completo',
-            r'resumen\s+ejecutivo',
-        ]
-        
-        for pattern in complex_patterns:
-            if re.search(pattern, message_lower):
-                logger.info(f"🎯 Consulta compleja detectada: {pattern}")
-                return True
-        
-        return False
-    
-    async def process_chat_message(self, chat_message: ChatMessage) -> ChatResponse:
-        """🎯 PROCESAMIENTO PRINCIPAL CON SYSTEM PROMPTS PROFESIONALES"""
-        start_time = datetime.now()
-        session = self.session_manager.get_or_create_session(chat_message.user_id)
-        
-        try:
-            # 1. Sanitizar mensaje
-            message = self._sanitize_message(chat_message.message)
-            if not message:
-                return self._create_error_response("Mensaje vacío", session.session_id, start_time)
-            
-            # 2. 🧠 CLASIFICAR INTENCIÓN CON TU PROMPT PROFESIONAL
-            intent_analysis = await self._classify_user_intent(message, session)
-            intent = intent_analysis['intent']
-            confidence = intent_analysis['confidence']
-            
-            # 🆕 3. VERIFICAR SI NECESITA ACLARACIÓN POR BAJA CONFIANZA
-            if self._should_request_clarification(intent_analysis):
-                logger.info(f"🔍 Solicitando aclaración - Intent: {intent}, Confianza: {confidence:.2f}")
-                return await self._request_clarification(chat_message, intent_analysis, session)
-            
-            # 4. Extraer parámetros inteligentes (continúa con tu código existente)
-            gestor_id = self._extract_gestor_id(chat_message, session)
-            periodo_final = chat_message.periodo or self._extract_periodo_from_message(message)
-            
-            # 4. 🚀 DECISIÓN INTELIGENTE: ¿CDG AGENT O SIMPLE?
-            if intent_analysis['requires_cdg_agent']:
-                logger.info("🎯 DELEGANDO A CDG AGENT para análisis profesional")
-                return await self._process_with_cdg_agent_professional(
-                    chat_message, message, gestor_id, periodo_final, session, start_time, intent_analysis
-                )
+            elif flow_type == 'DYNAMIC_SQL':
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+                
+            elif flow_type == 'CDG_AGENT':
+                return await self._execute_cdg_agent_flow(message, session, routing_result, start_time)
+                
+            elif flow_type == 'CONTEXTUAL_RESPONSE':
+                return await self._execute_contextual_flow(message, session, routing_result, start_time)
+                
             else:
-                logger.info("💬 PROCESANDO CON CHAT PROFESIONAL para consulta conversacional")
-                return await self._process_simple_chat_professional(
-                    chat_message, message, gestor_id, periodo_final, session, start_time, intent_analysis
-                )
-            
+                # Fallback a SQL dinámico
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+        
         except Exception as e:
-            logger.error(f"❌ Error procesando chat: {e}")
-            return self._create_error_response(str(e), session.session_id, start_time)
-    
-    async def _process_with_cdg_agent_professional(self, chat_message: ChatMessage, message: str, gestor_id: str, periodo: str, session: ChatSession, start_time: datetime, intent_analysis: Dict) -> ChatResponse:
-        """
-        🚀 PROCESAMIENTO PROFESIONAL CON CDG AGENT + TUS PROMPTS
-        """
-        try:
-            # Crear CDGRequest
-            cdg_request = CDGRequest(
-                user_message=message,
-                user_id=chat_message.user_id,
-                gestor_id=gestor_id,
-                periodo=periodo,
-                context=chat_message.context,
-                include_charts=chat_message.include_charts,
-                include_recommendations=chat_message.include_recommendations
-            )
-            
-            # Procesar con CDG Agent
-            cdg_response = await self.cdg_agent.process_request(cdg_request)
-            
-            # 🎯 GENERAR RESPUESTA PROFESIONAL CON TUS PROMPTS
-            response_text = await self._generate_professional_response(
-                cdg_response.content, message, cdg_response, session, intent_analysis
-            )
-            
-            # Construir respuesta completa
-            chat_response = ChatResponse(
-                response=response_text,
-                response_type=intent_analysis['intent'],
-                charts=cdg_response.charts,
-                recommendations=cdg_response.recommendations,
-                metadata={
-                    'source': 'cdg_agent_professional',
-                    'analysis_type': intent_analysis['intent'],
-                    'confidence': intent_analysis['confidence'],
-                    'gestor_id': gestor_id,
-                    'periodo': periodo,
-                    'periodo_source': 'parameter' if chat_message.periodo else 'extracted_from_message',
-                    'imports_successful': self.imports_successful,
-                    'model_used': MODEL_NAME,
-                    'session_length': len(session.conversation_history),
-                    'cdg_agent_integration': True,
-                    'professional_prompts': True,
-                    'intent_classification': intent_analysis,
-                    'personalization_applied': True
-                },
-                execution_time=(datetime.now() - start_time).total_seconds(),
-                confidence_score=cdg_response.confidence_score * intent_analysis['confidence'],
-                timestamp=datetime.now().isoformat(),
-                session_id=session.session_id
-            )
-            
-            # Añadir a historial con personalización
-            session.add_interaction(
-                message, 
-                chat_response.dict(), 
-                intent_analysis['intent'],
-                satisfaction_rating=None  # Se puede añadir con feedback posterior
-            )
-            
-            # Procesar feedback si existe
-            if chat_message.user_feedback:
-                await self._process_user_feedback_professional(chat_message.user_id, chat_message.user_feedback, session)
-            
+            logger.error(f"❌ Error procesando mensaje: {e}")
             execution_time = (datetime.now() - start_time).total_seconds()
-            logger.info(f"✅ CDG Agent profesional procesó consulta en {execution_time:.2f}s")
             
-            return chat_response
-            
-        except Exception as e:
-            logger.error(f"❌ Error en procesamiento profesional CDG Agent: {e}")
-            return self._create_error_response(str(e), session.session_id, start_time)
+            return ChatResponse(
+                response=f"Disculpe, hubo un error procesando su consulta: {str(e)}. Por favor, intente reformularla.",
+                response_type="error",
+                metadata={"error": str(e)},
+                execution_time=execution_time,
+                session_id=message.user_id
+            )
     
-    async def _generate_professional_response(self, content: Dict[str, Any], original_message: str, cdg_response, session: ChatSession, intent_analysis: Dict) -> str:
-        """
-        💬 GENERADOR PROFESIONAL CON TUS SYSTEM PROMPTS
-        
-        Combina datos estructurados + explicación profesional usando tus prompts especializados
-        """
+    async def _execute_predefined_flow(self, message: ChatMessage, session: ChatSession, 
+                                     routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Query predefinida encontrada - ejecutarla directamente"""
         try:
-            # 1. Generar datos estructurados (formato dinámico)
-            structured_data = self._format_data_dynamically(content)
+            logger.info("🎯 Ejecutando FLUJO PREDEFINIDO")
             
-            # 2. 🎯 GENERAR EXPLICACIÓN PROFESIONAL CON TU PROMPT
-            professional_explanation = await self._generate_professional_explanation(
-                content, original_message, cdg_response, session, intent_analysis
+            predefined_match = routing_result['predefined_match']
+            
+            # Ejecutar query predefinida
+            execution_result = await self.predefined_executor.execute_predefined_query(
+                predefined_match, 
+                message.message,
+                {
+                    'gestor_id': message.gestor_id,
+                    'periodo': message.periodo,
+                    'context': message.context
+                }
             )
             
-            # 3. Combinar según preferencias del usuario
-            user_prefs = session.user_preferences
+            if not execution_result['success']:
+                logger.warning(f"Query predefinida falló: {execution_result['error']}")
+                # Fallback a SQL dinámico
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
             
-            if user_prefs['preferred_format'] == 'text':
-                # Solo explicación profesional
-                return professional_explanation
-            elif user_prefs['preferred_format'] == 'charts':
-                # Enfoque en datos estructurados
-                return f"📊 **Análisis:** {original_message}\n\n{structured_data}"
-            else:
-                # Formato combinado (default)
-                response_parts = [
-                    f"📊 **Análisis para:** {original_message}",
-                    "",
-                    "🧠 **Interpretación Profesional:**",
-                    professional_explanation,
-                ]
-                
-                # Añadir datos si el usuario prefiere detalle
-                if user_prefs['response_length'] in ['medium', 'detailed']:
-                    response_parts.extend([
-                        "",
-                        "📈 **Datos Detallados:**",
-                        structured_data
-                    ])
-                
-                return "\n".join(response_parts)
-            
-        except Exception as e:
-            logger.error(f"❌ Error generando respuesta profesional: {e}")
-            return self._generate_fallback_explanation(content, original_message)
-    
-    async def _generate_professional_explanation(self, content: Dict[str, Any], original_message: str, cdg_response, session: ChatSession, intent_analysis: Dict) -> str:
-        """
-        🗣️ GENERADOR PROFESIONAL CON TU CHAT_CONVERSATIONAL_SYSTEM_PROMPT
-        
-        Usa tu prompt especializado + contexto de personalización
-        """
-        try:
-            # 1. Extraer insights dinámicamente
-            key_insights = self._extract_key_insights(content)
-            
-            # 2. Construir contexto profesional
-            conversation_context = build_conversation_context_prompt(
-                user_id=session.user_id,
-                current_message=original_message,
-                conversation_history=session.get_recent_context(5),
-                user_context=session.get_personalization_context()
+            # Formatear respuesta
+            formatted_response = await self.formatter.format_response(
+                execution_result['data'],
+                message.message,
+                {
+                    'predefined_query': True,
+                    'metadata': execution_result['metadata'],
+                    'preferences': session.preferences
+                }
             )
             
-            # 3. 🎯 LLAMAR CON TU PROMPT PROFESIONAL
-            client = self.llm_client
-            
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": CHAT_CONVERSATIONAL_SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user", 
-                        "content": f"""
-{conversation_context}
-
-## DATOS PARA INTERPRETAR:
-{json.dumps(key_insights, ensure_ascii=False, indent=2)}
-
-## ANÁLISIS SOLICITADO:
-Proporciona una interpretación profesional de estos datos de control de gestión para la consulta: "{original_message}"
-
-Considera:
-- Intención clasificada: {intent_analysis['intent']}
-- Nivel técnico del usuario: {session.user_preferences['technical_level']}
-- Estilo de comunicación preferido: {session.user_preferences['communication_style']}
-- Contexto bancario de Banca March
-- Terminología apropiada para control de gestión
-
-Estructura tu respuesta de manera profesional, clara y accionable.
-"""
-                    }
-                ],
-                temperature=0.4,
-                max_tokens=1200
-            )
-            
-            explanation = response.choices[0].message.content.strip()
-            
-            return self._clean_explanation(explanation)
-            
-        except Exception as e:
-            logger.error(f"❌ Error generando explicación profesional: {e}")
-            return self._generate_fallback_explanation(content, original_message)
-    
-    async def _process_user_feedback_professional(self, user_id: str, feedback: Dict[str, Any], session: ChatSession):
-        """
-        📝 PROCESAMIENTO PROFESIONAL DE FEEDBACK CON TUS PROMPTS
-        
-        Usa tu CHAT_FEEDBACK_SYSTEM_PROMPT para aprendizaje avanzado
-        """
-        try:
-            if not feedback:
-                return
-            
-            # Construir prompt de feedback profesional
-            feedback_prompt = build_feedback_processing_prompt(
-                user_id=user_id,
-                original_query=session.conversation_history[-1]['user_message'] if session.conversation_history else "N/A",
-                agent_response=session.conversation_history[-1]['agent_response'] if session.conversation_history else {},
-                feedback_data=feedback
-            )
-            
-            client = self.llm_client
-            
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": CHAT_FEEDBACK_SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user", 
-                        "content": feedback_prompt
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=800
-            )
-            
-            feedback_analysis = response.choices[0].message.content.strip()
-            
-            # Actualizar preferencias basado en análisis
-            self._update_preferences_from_feedback(session, feedback, feedback_analysis)
-            
-            logger.info(f"📝 Feedback profesional procesado para usuario {user_id}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error procesando feedback profesional: {e}")
-    
-    def _update_preferences_from_feedback(self, session: ChatSession, feedback: Dict, analysis: str):
-        """🔧 Actualiza preferencias basado en análisis de feedback"""
-        try:
-            rating = feedback.get('rating', 0)
-            
-            # Añadir a historial
-            session.personalization_data['feedback_history'].append({
-                'timestamp': datetime.now().isoformat(),
-                'rating': rating,
-                'feedback': feedback,
-                'analysis': analysis
+            # Actualizar historial
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': formatted_response,
+                'flow_type': 'PREDEFINED_QUERY',
+                'timestamp': datetime.now().isoformat()
             })
             
-            # Ajustar preferencias basado en rating y comentarios
-            if rating >= 4:
-                session.personalization_data['successful_interactions'] += 1
-            elif rating <= 2:
-                # Ajustar según comentarios negativos
-                comments = feedback.get('comment', '').lower()
-                if 'muy largo' in comments or 'demasiado detalle' in comments:
-                    session.user_preferences['response_length'] = 'short'
-                elif 'muy corto' in comments or 'más detalle' in comments:
-                    session.user_preferences['response_length'] = 'detailed'
-                elif 'técnico' in comments:
-                    session.user_preferences['technical_level'] = 'basic'
-                elif 'simple' in comments:
-                    session.user_preferences['technical_level'] = 'advanced'
-        
-        except Exception as e:
-            logger.warning(f"Error actualizando preferencias: {e}")
-    
-    # ============================================================================
-    # MÉTODOS DE SOPORTE Y UTILIDAD (Heredados del código anterior)
-    # ============================================================================
-    
-    async def _process_simple_chat_professional(self, chat_message: ChatMessage, message: str, gestor_id: str, periodo: str, session: ChatSession, start_time: datetime, intent_analysis: Dict) -> ChatResponse:
-        """💬 PROCESAMIENTO SIMPLE CON ENFOQUE PROFESIONAL"""
-        try:
-            domain = intent_analysis['intent']
-            analysis_result = await self._call_simple_query_system(domain, message, gestor_id, periodo)
+            execution_time = (datetime.now() - start_time).total_seconds()
             
-            # Generar respuesta profesional simple
-            response_text = await self._generate_simple_professional_response(
-                analysis_result, message, domain, session
-            )
-            
-            chat_response = ChatResponse(
-                response=response_text,
-                response_type=domain,
-                charts=analysis_result.get('charts', []),
-                recommendations=self._get_simple_recommendations(analysis_result, domain),
+            return ChatResponse(
+                response=formatted_response,
+                response_type="predefined_query",
+                data=execution_result['data'],
                 metadata={
-                    'source': 'chat_simple_professional',
-                    'domain': domain,
-                    'intent': intent_analysis['intent'],
-                    'confidence': intent_analysis['confidence'],
-                    'gestor_id': gestor_id,
-                    'periodo': periodo,
-                    'imports_successful': self.imports_successful,
-                    'professional_prompts': True,
-                    'personalization_applied': True
+                    'flow_type': 'PREDEFINED_QUERY',
+                    'predefined_function': f"{predefined_match.get('catalog')}.{predefined_match.get('function_name')}",
+                    'execution_metadata': execution_result['metadata'],
+                    'routing_confidence': routing_result['confidence']
                 },
-                execution_time=(datetime.now() - start_time).total_seconds(),
-                confidence_score=intent_analysis['confidence'],
-                timestamp=datetime.now().isoformat(),
-                session_id=session.session_id
+                execution_time=execution_time,
+                confidence_score=routing_result['confidence'],
+                session_id=message.user_id
             )
             
-            session.add_interaction(message, chat_response.dict(), domain)
-            
-            return chat_response
-            
         except Exception as e:
-            logger.error(f"❌ Error en procesamiento simple profesional: {e}")
-            return self._create_error_response(str(e), session.session_id, start_time)
+            logger.error(f"Error en flujo predefinido: {e}")
+            # Fallback a SQL dinámico
+            return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
     
-    async def _generate_simple_professional_response(self, analysis_result: Dict[str, Any], message: str, domain: str, session: ChatSession) -> str:
-        """💬 RESPUESTA SIMPLE CON TUS PROMPTS PROFESIONALES"""
+    async def _execute_dynamic_sql_flow(self, message: ChatMessage, session: ChatSession,
+                                      routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Generar SQL dinámicamente"""
         try:
-            data = analysis_result.get('data', [])
-            row_count = analysis_result.get('row_count', 0)
+            logger.info("🎯 Ejecutando FLUJO SQL DINÁMICO")
             
-            if row_count == 0:
-                return f"📊 He procesado tu consulta '{message}' pero no encontré datos específicos para los criterios solicitados. Te sugiero verificar los parámetros o contactar con el equipo de Control de Gestión para más información."
-            
-            # Usar preferencias del usuario
-            user_prefs = session.user_preferences
-            
-            if user_prefs['communication_style'] == 'concise':
-                response_parts = [
-                    f"📊 **{message}**",
-                    f"Encontrados: {row_count} registros"
-                ]
-            else:
-                response_parts = [
-                    f"📊 **Consulta procesada:** {message}",
-                    f"**Registros encontrados:** {row_count}",
-                    ""
-                ]
-                
-                # Añadir muestra de datos si corresponde
-                if data and len(data) > 0 and user_prefs['response_length'] != 'short':
-                    first_record = data[0]
-                    if isinstance(first_record, dict):
-                        key_fields = []
-                        for key, value in list(first_record.items())[:3]:
-                            if isinstance(value, (int, float)):
-                                if isinstance(value, float):
-                                    key_fields.append(f"**{key}:** {value:.2f}")
-                                else:
-                                    key_fields.append(f"**{key}:** {value:,}")
-                            else:
-                                key_fields.append(f"**{key}:** {value}")
-                        
-                        if key_fields:
-                            response_parts.extend([
-                                "**Datos destacados:**",
-                                " | ".join(key_fields)
-                            ])
-            
-            return "\n".join(response_parts)
-            
-        except Exception as e:
-            logger.error(f"❌ Error generando respuesta simple profesional: {e}")
-            return f"✅ He procesado tu consulta: {message}"
-    
-    # [Métodos de soporte heredados del código anterior - mantenidos igual]
-    def _format_data_dynamically(self, data: Any, max_depth: int = 3, current_depth: int = 0) -> str:
-        """🔧 FORMATEADOR DINÁMICO (heredado)"""
-        if current_depth >= max_depth:
-            return "📊 Datos adicionales disponibles..."
-        
-        lines = []
-        
-        try:
-            if isinstance(data, dict):
-                for key, value in data.items():
-                    formatted_key = self._beautify_key(key)
-                    formatted_value = self._format_value_by_type(value, current_depth)
-                    
-                    if formatted_value:
-                        lines.append(f"- **{formatted_key}:** {formatted_value}")
-            
-            elif isinstance(data, list) and data:
-                if len(data) == 1:
-                    single_item_formatted = self._format_data_dynamically(data[0], max_depth, current_depth + 1)
-                    if single_item_formatted:
-                        lines.append(single_item_formatted)
-                elif len(data) <= 5:
-                    for i, item in enumerate(data, 1):
-                        item_formatted = self._format_data_dynamically(item, max_depth, current_depth + 1)
-                        if item_formatted:
-                            lines.append(f"**Elemento {i}:**\n{item_formatted}")
-                else:
-                    lines.append(f"📋 **Total de elementos:** {len(data)}")
-                    for i, item in enumerate(data[:3], 1):
-                        item_formatted = self._format_data_dynamically(item, max_depth, current_depth + 1)
-                        if item_formatted:
-                            lines.append(f"**Top {i}:**\n{item_formatted}")
-                    if len(data) > 3:
-                        lines.append(f"... y {len(data) - 3} elementos más")
-            
-            else:
-                formatted_value = self._format_value_by_type(data, current_depth)
-                if formatted_value:
-                    lines.append(formatted_value)
-        
-        except Exception as e:
-            logger.warning(f"Error formateando datos dinámicamente: {e}")
-            lines.append("📊 Datos procesados (formato no disponible)")
-        
-        return "\n".join(lines) if lines else ""
-    
-    def _format_value_by_type(self, value: Any, current_depth: int) -> str:
-        """🎨 FORMATEA VALORES POR TIPO (heredado)"""
-        try:
-            if value is None:
-                return "N/A"
-            elif isinstance(value, bool):
-                return "✅ Sí" if value else "❌ No"
-            elif isinstance(value, (int, float)):
-                if isinstance(value, float):
-                    if abs(value) >= 1000000:
-                        return f"{value:,.0f}"
-                    elif abs(value) >= 1000:
-                        return f"{value:,.2f}"
-                    else:
-                        return f"{value:.2f}"
-                else:
-                    return f"{value:,}"
-            elif isinstance(value, str):
-                clean_value = value.strip()
-                if len(clean_value) > 100:
-                    return f"{clean_value[:97]}..."
-                return clean_value
-            elif isinstance(value, list):
-                if not value:
-                    return "Lista vacía"
-                elif len(value) <= 3:
-                    return f"Lista con {len(value)} elementos"
-                else:
-                    return f"Lista con {len(value)} elementos (mostrando primeros 3)"
-            elif isinstance(value, dict):
-                if not value:
-                    return "Datos vacíos"
-                else:
-                    if current_depth < 2:
-                        nested_formatted = self._format_data_dynamically(value, 2, current_depth + 1)
-                        return nested_formatted if nested_formatted else f"Objeto con {len(value)} campos"
-                    else:
-                        return f"Objeto con {len(value)} campos"
-            else:
-                str_value = str(value)
-                return str_value[:50] + "..." if len(str_value) > 50 else str_value
-        
-        except Exception as e:
-            logger.warning(f"Error formateando valor {type(value)}: {e}")
-            return "Valor no disponible"
-    
-    def _beautify_key(self, key: str) -> str:
-        """✨ EMBELLECE NOMBRES DE CAMPOS (heredado)"""
-        try:
-            replacements = {
-                '_': ' ',
-                'desc': 'Descripción',
-                'id': 'ID',
-                'pct': '%',
-                'total': 'Total',
-                'num': 'Número',
-                'count': 'Cantidad',
-                'avg': 'Promedio',
-                'max': 'Máximo', 
-                'min': 'Mínimo'
-            }
-            
-            beautified = key.lower()
-            
-            for old, new in replacements.items():
-                beautified = beautified.replace(old, new)
-            
-            return ' '.join(word.capitalize() for word in beautified.split())
-            
-        except Exception as e:
-            logger.warning(f"Error embelleciendo clave {key}: {e}")
-            return key.replace('_', ' ').title()
-    
-    def _extract_key_insights(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """🔍 EXTRACTOR DINÁMICO DE INSIGHTS (heredado)"""
-        insights = {}
-        
-        try:
-            def extract_from_dict(data_dict, prefix=""):
-                for key, value in data_dict.items():
-                    clean_key = f"{prefix}_{key}" if prefix else key
-                    
-                    if isinstance(value, (int, float)):
-                        if any(indicator in key.lower() for indicator in ['pct', 'percent', '%', 'porcentaje']):
-                            insights[f"percentage_{clean_key}"] = value
-                        elif any(indicator in key.lower() for indicator in ['total', 'ingresos', 'gastos', 'beneficio']):
-                            insights[f"financial_{clean_key}"] = value
-                        elif any(indicator in key.lower() for indicator in ['roe', 'margen', 'eficiencia', 'ratio']):
-                            insights[f"kpi_{clean_key}"] = value
-                        else:
-                            insights[f"metric_{clean_key}"] = value
-                    
-                    elif isinstance(value, str):
-                        if any(indicator in key.lower() for indicator in ['clasificacion', 'clase', 'nivel', 'categoria']):
-                            insights[f"classification_{clean_key}"] = value
-                        elif any(indicator in key.lower() for indicator in ['desc', 'descripcion', 'nombre']):
-                            insights[f"description_{clean_key}"] = value
-                        elif len(value) < 50:
-                            insights[f"text_{clean_key}"] = value
-                    
-                    elif isinstance(value, dict) and len(str(value)) < 1000:
-                        extract_from_dict(value, clean_key)
-                    
-                    elif isinstance(value, list):
-                        insights[f"list_{clean_key}_count"] = len(value)
-                        if value and isinstance(value[0], dict):
-                            extract_from_dict(value[0], f"{clean_key}_sample")
-            
-            if isinstance(content, dict):
-                extract_from_dict(content)
-            
-            return insights
-            
-        except Exception as e:
-            logger.warning(f"Error extrayendo insights: {e}")
-            return {"error": "No se pudieron extraer insights automáticamente"}
-    
-    def _clean_explanation(self, explanation: str) -> str:
-        """🧹 LIMPIA EXPLICACIONES (heredado)"""
-        try:
-            cleaned = explanation.strip()
-            
-            if len(cleaned) > 2000:
-                sentences = cleaned.split('. ')
-                truncated_sentences = sentences[:10]
-                cleaned = '. '.join(truncated_sentences)
-                if not cleaned.endswith('.'):
-                    cleaned += '.'
-                cleaned += "\n\n📊 *Análisis completo disponible en los datos detallados.*"
-            
-            if len(cleaned.strip()) < 20:
-                return "Los datos han sido procesados correctamente. Consulta la sección de datos detallados para más información."
-            
-            return cleaned
-            
-        except Exception as e:
-            logger.warning(f"Error limpiando explicación: {e}")
-            return "Análisis completado. Los datos están disponibles en la sección detallada."
-    
-    def _generate_fallback_explanation(self, content: Dict[str, Any], original_message: str) -> str:
-        """🔄 EXPLICACIÓN FALLBACK (heredado)"""
-        try:
-            explanation_parts = [
-                f"He procesado tu consulta sobre: {original_message}",
-                ""
-            ]
-            
-            if isinstance(content, dict):
-                data_count = len([v for v in content.values() if v is not None])
-                explanation_parts.append(f"✅ Se han analizado {data_count} elementos de datos.")
-                
-                numeric_values = []
-                for key, value in content.items():
-                    if isinstance(value, (int, float)) and value != 0:
-                        clean_key = key.replace('_', ' ').title()
-                        if isinstance(value, float):
-                            numeric_values.append(f"{clean_key}: {value:.2f}")
-                        else:
-                            numeric_values.append(f"{clean_key}: {value:,}")
-                
-                if numeric_values:
-                    explanation_parts.extend([
-                        "",
-                        "📊 Valores destacados identificados:",
-                        "\n".join([f"• {nv}" for nv in numeric_values[:5]])
-                    ])
-            
-            explanation_parts.extend([
-                "",
-                "Los datos completos están disponibles en la sección detallada para tu revisión."
-            ])
-            
-            return "\n".join(explanation_parts)
-            
-        except Exception as e:
-            logger.warning(f"Error en explicación fallback: {e}")
-            return f"He procesado tu consulta: {original_message}. Los resultados están disponibles en los datos detallados."
-    
-    async def _call_simple_query_system(self, domain: str, message: str, gestor_id: str, periodo: str) -> Dict[str, Any]:
-        """🔍 LLAMADAS SIMPLES A QUERIES (heredado)"""
-        try:
-            if domain in ['performance_analysis', 'gestor']:
-                result = self.gestor_queries.get_gestor_performance_enhanced(gestor_id, periodo)
-                return {
-                    'type': 'gestor_simple',
-                    'data': result.data if result and hasattr(result, 'data') else [],
-                    'row_count': result.row_count if result and hasattr(result, 'row_count') else 0,
-                    'query_method': 'get_gestor_performance_enhanced'
+            # Construir SQL dinámicamente
+            sql_result = await self.query_builder.build_sql_for_any_query(
+                message.message,
+                {
+                    'classification': routing_result['classification'],
+                    'gestor_id': message.gestor_id,
+                    'periodo': message.periodo,
+                    'context': message.context
                 }
-            elif domain in ['comparative_analysis', 'ranking', 'general']:
-                result = self.comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
-                return {
-                    'type': 'ranking_simple',
-                    'data': result.data if result and hasattr(result, 'data') else [],
-                    'row_count': result.row_count if result and hasattr(result, 'row_count') else 0,
-                    'query_method': 'ranking_gestores_por_margen_enhanced'
+            )
+            
+            if not sql_result['is_safe']:
+                logger.warning(f"❌ SQL bloqueado por seguridad: {sql_result.get('sql', '')}")
+                return ChatResponse(
+                    response="Por seguridad, no puedo ejecutar esa consulta. ¿Podría reformularla de manera más específica?",
+                    response_type="security_block",
+                    session_id=message.user_id,
+                    execution_time=(datetime.now() - start_time).total_seconds()
+                )
+            
+            # Ejecutar SQL
+            query_data = self._execute_query_safely(sql_result['sql'])
+            
+            # Formatear respuesta
+            formatted_response = await self.formatter.format_response(
+                query_data,
+                message.message,
+                {
+                    'sql_explanation': sql_result['explanation'],
+                    'tables_used': sql_result['tables_used'],
+                    'preferences': session.preferences
                 }
-            else:
-                return {
-                    'type': 'general_simple',
-                    'data': [],
-                    'row_count': 0,
-                    'query_method': 'general_response'
-                }
+            )
+            
+            # Actualizar historial
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': formatted_response,
+                'flow_type': 'DYNAMIC_SQL',
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=formatted_response,
+                response_type="dynamic_sql",
+                data=query_data,
+                metadata={
+                    'flow_type': 'DYNAMIC_SQL',
+                    'sql_executed': sql_result['sql'],
+                    'explanation': sql_result['explanation'],
+                    'tables_used': sql_result['tables_used'],
+                    'routing_confidence': routing_result['confidence']
+                },
+                execution_time=execution_time,
+                confidence_score=routing_result['confidence'],
+                session_id=message.user_id
+            )
+            
         except Exception as e:
-            logger.error(f"Error en query simple: {e}")
-            return {'type': 'error', 'data': [], 'row_count': 0, 'error': str(e)}
+            logger.error(f"Error en flujo SQL dinámico: {e}")
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=f"Hubo un problema ejecutando su consulta SQL: {str(e)}",
+                response_type="sql_error",
+                execution_time=execution_time,
+                session_id=message.user_id
+            )
     
-    def _get_simple_recommendations(self, analysis_result: Dict[str, Any], domain: str) -> List[str]:
-        """💡 RECOMENDACIONES SIMPLES (heredado)"""
-        base_recommendations = {
-            'performance_analysis': [
-                "Consulta métricas específicas para análisis detallado",
-                "Compara con otros gestores para contexto"
-            ],
-            'comparative_analysis': [
-                "Analiza las mejores prácticas de los top performers",
-                "Identifica oportunidades de mejora"
-            ],
-            'deviation_detection': [
-                "Prioriza atención a desviaciones críticas",
-                "Investiga causas raíz de anomalías"
-            ],
-            'incentive_analysis': [
-                "Revisa cumplimiento de objetivos",
-                "Evalúa impacto de incentivos"
-            ]
-        }
-        
-        return base_recommendations.get(domain, [
-            "Consulta información más específica para análisis detallado",
-            "Considera análisis comparativos para mayor contexto"
-        ])
+    async def _execute_cdg_agent_flow(self, message: ChatMessage, session: ChatSession,
+                                    routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Delegar al CDG Agent para análisis complejo"""
+        try:
+            logger.info("🎯 Ejecutando FLUJO CDG AGENT")
+            
+            if not self.cdg_agent:
+                # Fallback a SQL dinámico si CDG no disponible
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+            
+            cdg_request = CDGRequest(
+                user_message=message.message,
+                user_id=message.user_id,
+                gestor_id=message.gestor_id,
+                periodo=message.periodo,
+                context=message.context,
+                include_charts=True,
+                include_recommendations=True
+            )
+            
+            cdg_response = await self.cdg_agent.process_request(cdg_request)
+            
+            # Formatear respuesta del CDG Agent
+            if hasattr(cdg_response, 'content') and cdg_response.content:
+                formatted_response = await self.formatter.format_response(
+                    cdg_response.content,
+                    message.message,
+                    {
+                        'cdg_analysis': True,
+                        'preferences': session.preferences
+                    }
+                )
+            else:
+                formatted_response = "El análisis avanzado ha sido procesado exitosamente por el sistema CDG."
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=formatted_response,
+                response_type="cdg_analysis",
+                data=getattr(cdg_response, 'content', None),
+                charts=getattr(cdg_response, 'charts', []),
+                recommendations=getattr(cdg_response, 'recommendations', []),
+                metadata={
+                    'flow_type': 'CDG_AGENT',
+                    'cdg_agent_used': True,
+                    'cdg_confidence': getattr(cdg_response, 'confidence_score', 0.8),
+                    'routing_confidence': routing_result['confidence']
+                },
+                execution_time=execution_time,
+                confidence_score=getattr(cdg_response, 'confidence_score', 0.8),
+                session_id=message.user_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Error en flujo CDG Agent: {e}")
+            # Fallback a SQL dinámico
+            return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
     
-    def _sanitize_message(self, message: str) -> str:
-        """🧹 SANITIZA MENSAJE (heredado)"""
-        if not message or not isinstance(message, str):
-            return ""
-        
-        sanitized = message.strip()
-        if len(sanitized) > 2000:
-            sanitized = sanitized[:2000] + "..."
-            logger.warning("Mensaje truncado por exceder longitud máxima")
-        
-        return sanitized
+    async def _execute_contextual_flow(self, message: ChatMessage, session: ChatSession,
+                                     routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Respuesta contextual sin SQL (preguntas generales/conceptuales)"""
+        try:
+            logger.info("🎯 Ejecutando FLUJO CONTEXTUAL")
+            
+            # Obtener información dinámica de la BD para contexto
+            schema_info = self.query_builder.schema_inspector.get_database_schema()
+            available_tables = list(schema_info['tables'].keys())
+            total_records = schema_info['metadata']['total_records']
+            
+            contextual_prompt = f"""
+            Responde esta pregunta sobre Control de Gestión bancario con contexto profesional:
+
+            PREGUNTA: "{message.message}"
+
+            CONTEXTO DISPONIBLE:
+            - Sistema: Banca March - Control de Gestión 
+            - Base de datos: {len(available_tables)} tablas, {total_records:,} registros
+            - Alcance: Análisis de rentabilidad, KPIs, gestores comerciales
+            - Productos: Fondos, Banca Privada, Empresas, Seguros
+            
+            TIPO DE RESPUESTA REQUERIDA:
+            - Profesional y clara
+            - Con ejemplos bancarios específicos
+            - Incluir sugerencias de consultas concretas si es apropiado
+            - Máximo 400 palabras
+            
+            Si es una pregunta conceptual (qué es X), explica con ejemplos de control de gestión.
+            Si es una pregunta general, orienta hacia consultas específicas disponibles.
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_CONVERSATIONAL_SYSTEM_PROMPT},
+                        {"role": "user", "content": contextual_prompt}
+                    ],
+                    temperature=0.4,
+                    max_tokens=600
+                )
+                contextual_response = response.choices[0].message.content.strip()
+            else:
+                contextual_response = self._generate_contextual_fallback(message.message, schema_info)
+            
+            # Generar sugerencias dinámicas
+            suggestions = self._generate_contextual_suggestions(message.message, schema_info)
+            
+            # Actualizar historial
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': contextual_response,
+                'flow_type': 'CONTEXTUAL_RESPONSE',
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=contextual_response,
+                response_type="contextual_response",
+                recommendations=suggestions,
+                metadata={
+                    'flow_type': 'CONTEXTUAL_RESPONSE',
+                    'database_info': {
+                        'tables_available': len(available_tables),
+                        'total_records': total_records,
+                        'last_updated': schema_info['metadata']['last_updated']
+                    },
+                    'routing_confidence': routing_result['confidence']
+                },
+                execution_time=execution_time,
+                confidence_score=routing_result['confidence'],
+                session_id=message.user_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Error en flujo contextual: {e}")
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=f"Error generando respuesta contextual: {str(e)}",
+                response_type="contextual_error",
+                execution_time=execution_time,
+                session_id=message.user_id
+            )
     
-    def _create_error_response(self, error_message: str, session_id: str, start_time: datetime) -> ChatResponse:
-        """❌ RESPUESTA DE ERROR PROFESIONAL"""
-        return ChatResponse(
-            response=f"❌ Lo siento, ha ocurrido un error procesando tu consulta: {error_message}\n\n💡 Por favor, intenta reformular tu pregunta o contacta con el equipo de Control de Gestión para asistencia especializada.",
-            response_type="error",
-            charts=[],
-            recommendations=[
-                "Intenta reformular tu pregunta de forma más específica",
-                "Verifica que los parámetros sean correctos",
-                "Contacta con el equipo de Control de Gestión si persiste el problema"
-            ],
-            metadata={
-                "error": True,
-                "error_message": error_message,
-                "imports_successful": self.imports_successful,
-                "model_used": MODEL_NAME,
-                "professional_prompts": True
-            },
-            execution_time=(datetime.now() - start_time).total_seconds(),
-            confidence_score=0.0,
-            timestamp=datetime.now().isoformat(),
-            session_id=session_id
-        )
+    def _execute_query_safely(self, sql: str) -> Any:
+        """Ejecuta consulta SQL de forma segura"""
+        try:
+            if IMPORTS_SUCCESSFUL:
+                return query_executor.execute_query(sql)
+            else:
+                return [{"mock": "data", "message": "Modo fallback activo"}]
+                
+        except Exception as e:
+            logger.error(f"Error ejecutando SQL: {e}")
+            return {"error": f"Error en consulta SQL: {str(e)}"}
+    
+    def _generate_contextual_fallback(self, user_message: str, schema_info: Dict) -> str:
+        """Genera respuesta contextual fallback"""
+        message_lower = user_message.lower()
+        
+        if any(word in message_lower for word in ['qué es', 'define', 'concepto']):
+            return f"""
+            📚 **Control de Gestión Bancario - Conceptos Clave**
+            
+            Su consulta sobre "{user_message}" se refiere a conceptos fundamentales de nuestro sistema de control de gestión.
+            
+            En Banca March utilizamos métricas clave como:
+            • **Margen Neto:** Diferencia entre ingresos y gastos operativos
+            • **ROE:** Rentabilidad sobre patrimonio  
+            • **Eficiencia Operativa:** Ratio ingresos/gastos
+            
+            💡 **Consultas específicas que puedo responder:**
+            • "¿Cuál es el margen neto del gestor 15?"
+            • "Muestra la eficiencia operativa por centro"  
+            • "Compara ROE entre segmentos"
+            """
+        
+        return f"""
+        👋 **Bienvenido al Sistema de Control de Gestión**
+        
+        He recibido su consulta: "{user_message}"
+        
+        📊 **Sistema disponible:**
+        • {schema_info['metadata']['total_tables']} tablas especializadas
+        • {schema_info['metadata']['total_records']:,} registros actualizados
+        • Cobertura completa de gestores, productos y KPIs
+        
+        💡 **Para mejores resultados, puede consultar:**
+        • Performance específico de gestores
+        • Análisis comparativos entre períodos  
+        • KPIs financieros y operativos
+        • Desviaciones de precios y márgenes
+        
+        ¿En qué aspecto específico le gustaría que le ayude?
+        """
+    
+    def _generate_contextual_suggestions(self, user_message: str, schema_info: Dict) -> List[str]:
+        """Genera sugerencias contextuales dinámicas"""
+        base_suggestions = [
+            "¿Cuántos gestores tenemos activos?",
+            "Muestra el ranking de gestores por margen neto",
+            "¿Cuál es la distribución de contratos por producto?",
+            "Analiza las desviaciones de precio del último período"
+        ]
+        
+        # Añadir sugerencias específicas según tablas disponibles
+        if 'MAESTRO_GESTORES' in schema_info['tables']:
+            count = schema_info['tables']['MAESTRO_GESTORES']['record_count']
+            base_suggestions.append(f"Analizar los {count} gestores disponibles")
+        
+        if 'PRECIO_POR_PRODUCTO_REAL' in schema_info['tables']:
+            base_suggestions.append("Detectar desviaciones críticas de precios")
+        
+        return base_suggestions[:5]  # Limitar a 5 sugerencias
     
     def get_agent_status(self) -> Dict[str, Any]:
-        """📊 ESTADO DEL AGENTE CON PROMPTS PROFESIONALES"""
+        """Estado completo del agente v10.0"""
+        schema_info = self.query_builder.schema_inspector.get_database_schema()
+        
         return {
             'status': 'active',
-            'version': '6.1',
-            'mode': 'PRODUCTION' if self.imports_successful else 'MOCK',
-            'uptime_seconds': (datetime.now() - self.start_time).total_seconds(),
-            'active_sessions': len(self.session_manager.sessions),
-            'websocket_connections': len(self.session_manager.websocket_connections),
-            'model_configured': MODEL_NAME,
-            'integrations': {
-                'cdg_agent': 'active' if self.cdg_agent else 'inactive',
-                'professional_prompts': 'active',
-                'personalization': 'active',
-                'intent_classification': 'active',
-                'feedback_processing': 'active'
+            'version': '10.0 - Integración Completa con Catálogos',
+            'capabilities': [
+                'Clasificación inteligente de consultas',
+                'Búsqueda automática en queries predefinidas (6 catálogos)',
+                'Generación SQL dinámica con contexto bancario',
+                'Respuestas contextuales sin SQL',
+                'Integración completa con CDG Agent',
+                'Flujo perfecto de enrutamiento'
+            ],
+            'query_catalogs': list(self.classifier.query_catalogs.keys()),
+            'database_info': {
+                'path': self.db_path,
+                'tables_available': len(schema_info['tables']),
+                'total_records': schema_info['metadata']['total_records'],
+                'last_schema_update': schema_info['metadata']['last_updated']
             },
-            'features': {
-                'intelligent_period_extraction': True,
-                'intelligent_gestor_extraction': True,
-                'cdg_agent_delegation': True,
-                'professional_system_prompts': True,
-                'intent_classification': True,
-                'personalization_engine': True,
-                'feedback_learning': True,
-                'conversation_memory': True,
-                'dynamic_formatting': True
-            },
-            'prompt_systems': {
-                'conversational': 'CHAT_CONVERSATIONAL_SYSTEM_PROMPT',
-                'feedback': 'CHAT_FEEDBACK_SYSTEM_PROMPT', 
-                'intent_classification': 'CHAT_INTENT_CLASSIFICATION_PROMPT',
-                'personalization': 'CHAT_PERSONALIZATION_SYSTEM_PROMPT'
-            },
-            'architecture': 'professional_v6.1'
+            'sessions_active': len(self.sessions),
+            'imports_successful': IMPORTS_SUCCESSFUL
         }
-    
-    def get_session_history(self, user_id: str):
-        """📚 HISTORIAL CON PERSONALIZACIÓN"""
-        if user_id in self.session_manager.sessions:
-            session = self.session_manager.sessions[user_id]
-            return {
-                'conversation_history': session.conversation_history,
-                'user_preferences': session.user_preferences,
-                'personalization_data': session.personalization_data
-            }
-        return {'conversation_history': [], 'user_preferences': {}, 'personalization_data': {}}
-    
-    def get_dynamic_suggestions(self, user_id: str) -> List[str]:
-        """💡 SUGERENCIAS INTELIGENTES PERSONALIZADAS"""
-        current_period = datetime.now().strftime('%Y-%m')
-        
-        # Obtener preferencias del usuario si existe
-        user_prefs = {}
-        if user_id in self.session_manager.sessions:
-            session = self.session_manager.sessions[user_id]
-            user_prefs = session.user_preferences
-            frequent_queries = session.personalization_data.get('frequent_queries', [])
-        else:
-            frequent_queries = []
-        
-        # Sugerencias base
-        base_suggestions = [
-            f"¿Cómo está mi rendimiento en {current_period}?",
-            "Comparar gestores 18 y 21 en ROE",
-            "Comparar segmentos Empresas vs Minorista",
-            "Análisis del centro de Madrid vs Barcelona",
-            f"¿Qué gestores tienen alertas críticas en {current_period}?",
-            f"¿Quién merece incentivos en {current_period}?",
-            "Business Review del gestor 19",
-            "Executive Summary del período actual"
-        ]
-        
-        # Personalizar según consultas frecuentes
-        if 'performance_analysis' in frequent_queries:
-            base_suggestions.insert(1, f"Performance detallado del gestor 19 en {current_period}")
-        if 'comparative_analysis' in frequent_queries:
-            base_suggestions.insert(2, "Ranking de eficiencia operativa por centro")
-        if 'deviation_detection' in frequent_queries:
-            base_suggestions.insert(3, "Detectar desviaciones críticas automáticamente")
-        
-        return base_suggestions[:8]  # Limitar a 8 sugerencias
 
 # ============================================================================
-# APLICACIÓN FASTAPI CON PROMPTS PROFESIONALES
+# FUNCIONES DE CONVENIENCIA Y EXPORTS
 # ============================================================================
 
-# Instancia global del agente
-try:
-    chat_agent = CDGChatAgent()
-    logger.info("✅ CDG Chat Agent v6.1 inicializado correctamente con System Prompts Profesionales")
-except Exception as e:
-    logger.error(f"❌ Error inicializando chat agent: {e}")
-    chat_agent = None
+def create_universal_chat_agent(db_path: str = None) -> UniversalChatAgentV10:
+    """Factory para crear agente v10.0 completo"""
+    return UniversalChatAgentV10(db_path)
 
-# Aplicación FastAPI
-app = FastAPI(
-    title="CDG Chat Agent v6.1 - Con System Prompts Profesionales",
-    description="API conversacional con prompts especializados para control de gestión bancario",
-    version="6.1.0"
-)
+# Instancia global
+_universal_agent = None
 
-# Configurar CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def get_universal_chat_agent() -> UniversalChatAgentV10:
+    """Obtiene instancia global del agente v10.0"""
+    global _universal_agent
+    if _universal_agent is None:
+        _universal_agent = create_universal_chat_agent()
+    return _universal_agent
 
-# ============================================================================
-# ENDPOINTS DE LA API CON FUNCIONALIDADES PROFESIONALES
-# ============================================================================
+# Para compatibilidad con código existente
+CDGChatAgent = UniversalChatAgentV10
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(chat_message: ChatMessage):
-    """🚀 Endpoint principal con System Prompts Profesionales"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no inicializado")
-    
-    return await chat_agent.process_chat_message(chat_message)
-
-@app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    """🔌 WebSocket con personalización avanzada"""
-    await websocket.accept()
-    
-    if chat_agent is None:
-        await websocket.send_json({"error": "Chat agent no disponible"})
-        await websocket.close()
-        return
-    
-    chat_agent.session_manager.add_websocket_connection(user_id, websocket)
-    
-    try:
-        while True:
-            data = await websocket.receive_json()
-            
-            chat_message = ChatMessage(
-                user_id=user_id,
-                message=data.get("message", ""),
-                gestor_id=data.get("gestor_id"),
-                periodo=data.get("periodo"),
-                include_charts=data.get("include_charts", True),
-                include_recommendations=data.get("include_recommendations", True),
-                context=data.get("context", {}),
-                user_feedback=data.get("user_feedback")
-            )
-            
-            response = await chat_agent.process_chat_message(chat_message)
-            await websocket.send_json(response.dict())
-            
-    except WebSocketDisconnect:
-        logger.info(f"🔌 WebSocket desconectado para usuario {user_id}")
-        if chat_agent:
-            chat_agent.session_manager.remove_websocket_connection(user_id)
-
-@app.get("/history/{user_id}")
-async def get_chat_history(user_id: str):
-    """📚 Historial conversacional con personalización"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no disponible")
-    
-    history_data = chat_agent.get_session_history(user_id)
-    return {
-        "user_id": user_id,
-        "conversation_history": history_data.get('conversation_history', []),
-        "user_preferences": history_data.get('user_preferences', {}),
-        "personalization_data": history_data.get('personalization_data', {}),
-        "total_interactions": len(history_data.get('conversation_history', []))
-    }
-
-@app.post("/reset/{user_id}")
-async def reset_session(user_id: str):
-    """🔄 Reinicia sesión con preservación de personalización"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no disponible")
-    
-    # Preservar preferencias del usuario antes del reset
-    preserved_prefs = {}
-    if user_id in chat_agent.session_manager.sessions:
-        session = chat_agent.session_manager.sessions[user_id]
-        preserved_prefs = {
-            'user_preferences': session.user_preferences.copy(),
-            'successful_interactions': session.personalization_data.get('successful_interactions', 0)
-        }
-    
-    chat_agent.session_manager.reset_session(user_id)
-    
-    # Restaurar preferencias aprendidas
-    if preserved_prefs and user_id in chat_agent.session_manager.sessions:
-        new_session = chat_agent.session_manager.sessions[user_id]
-        new_session.user_preferences.update(preserved_prefs['user_preferences'])
-        new_session.personalization_data['successful_interactions'] = preserved_prefs['successful_interactions']
-    
-    return {
-        "message": f"Sesión reiniciada para usuario {user_id}",
-        "preferences_preserved": bool(preserved_prefs),
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.get("/suggestions/{user_id}")
-async def get_dynamic_suggestions(user_id: str):
-    """💡 Sugerencias inteligentes personalizadas"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no disponible")
-    
-    suggestions = chat_agent.get_dynamic_suggestions(user_id)
-    
-    # Obtener contexto de personalización
-    personalization_context = {}
-    if user_id in chat_agent.session_manager.sessions:
-        session = chat_agent.session_manager.sessions[user_id]
-        personalization_context = {
-            'communication_style': session.user_preferences.get('communication_style', 'professional'),
-            'technical_level': session.user_preferences.get('technical_level', 'intermediate'),
-            'frequent_queries': session.personalization_data.get('frequent_queries', []),
-            'successful_interactions': session.personalization_data.get('successful_interactions', 0)
-        }
-    
-    return {
-        "user_id": user_id,
-        "suggestions": suggestions,
-        "personalization_context": personalization_context,
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.post("/feedback/{user_id}")
-async def submit_feedback(user_id: str, feedback: Dict[str, Any]):
-    """📝 Endpoint dedicado para feedback con procesamiento profesional"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no disponible")
-    
-    try:
-        # Obtener sesión
-        session = chat_agent.session_manager.get_or_create_session(user_id)
-        
-        # Procesar feedback con tus prompts profesionales
-        await chat_agent._process_user_feedback_professional(user_id, feedback, session)
-        
-        # Actualizar última interacción con rating si está disponible
-        if session.conversation_history and 'rating' in feedback:
-            session.conversation_history[-1]['satisfaction_rating'] = feedback['rating']
-        
-        return {
-            "message": "Feedback procesado correctamente",
-            "user_id": user_id,
-            "feedback_processed": True,
-            "personalization_updated": True,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error procesando feedback: {e}")
-        raise HTTPException(status_code=500, detail=f"Error procesando feedback: {str(e)}")
-
-@app.get("/preferences/{user_id}")
-async def get_user_preferences(user_id: str):
-    """⚙️ Obtener preferencias de personalización del usuario"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no disponible")
-    
-    if user_id not in chat_agent.session_manager.sessions:
-        # Crear sesión nueva con preferencias por defecto
-        session = chat_agent.session_manager.get_or_create_session(user_id)
-    else:
-        session = chat_agent.session_manager.sessions[user_id]
-    
-    return {
-        "user_id": user_id,
-        "preferences": session.user_preferences,
-        "personalization_data": {
-            "total_interactions": len(session.conversation_history),
-            "successful_interactions": session.personalization_data.get('successful_interactions', 0),
-            "frequent_queries": session.personalization_data.get('frequent_queries', []),
-            "last_active": session.last_active.isoformat(),
-            "created_at": session.created_at.isoformat()
-        }
-    }
-
-@app.put("/preferences/{user_id}")
-async def update_user_preferences(user_id: str, preferences: Dict[str, str]):
-    """⚙️ Actualizar preferencias de personalización"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no disponible")
-    
-    try:
-        session = chat_agent.session_manager.get_or_create_session(user_id)
-        
-        # Validar y actualizar preferencias
-        valid_preferences = {
-            'communication_style': ['professional', 'concise', 'detailed'],
-            'technical_level': ['basic', 'intermediate', 'advanced'],
-            'preferred_format': ['text', 'charts', 'combined'],
-            'response_length': ['short', 'medium', 'detailed']
-        }
-        
-        updated_prefs = {}
-        for key, value in preferences.items():
-            if key in valid_preferences and value in valid_preferences[key]:
-                session.user_preferences[key] = value
-                updated_prefs[key] = value
-        
-        return {
-            "message": "Preferencias actualizadas correctamente",
-            "user_id": user_id,
-            "updated_preferences": updated_prefs,
-            "current_preferences": session.user_preferences,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error actualizando preferencias: {e}")
-        raise HTTPException(status_code=500, detail=f"Error actualizando preferencias: {str(e)}")
-
-@app.get("/intent/classify")
-async def classify_intent_endpoint(message: str, user_id: Optional[str] = None):
-    """🧠 Endpoint para clasificación de intenciones (útil para testing)"""
-    if chat_agent is None:
-        raise HTTPException(status_code=500, detail="Chat agent no disponible")
-    
-    try:
-        # Crear sesión temporal si no se proporciona user_id
-        if user_id:
-            session = chat_agent.session_manager.get_or_create_session(user_id)
-        else:
-            session = ChatSession("temp_user")
-        
-        # Clasificar intención
-        intent_analysis = await chat_agent._classify_user_intent(message, session)
-        
-        return {
-            "message": message,
-            "intent_analysis": intent_analysis,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error clasificando intención: {e}")
-        raise HTTPException(status_code=500, detail=f"Error clasificando intención: {str(e)}")
-
-@app.get("/status")
-async def get_status():
-    """📊 Estado completo del agente con información profesional"""
-    if chat_agent is None:
-        return {"status": "error", "message": "Chat agent no inicializado"}
-    
-    status = chat_agent.get_agent_status()
-    
-    # Añadir estadísticas de sesiones activas
-    session_stats = {
-        'total_sessions': len(chat_agent.session_manager.sessions),
-        'active_websockets': len(chat_agent.session_manager.websocket_connections),
-        'personalized_users': len([s for s in chat_agent.session_manager.sessions.values() 
-                                 if s.personalization_data.get('successful_interactions', 0) > 0])
-    }
-    
-    status['session_statistics'] = session_stats
-    return status
-
-@app.get("/health")
-async def health_check():
-    """🏥 Health check completo del servicio"""
-    health_status = "healthy" if chat_agent is not None else "degraded"
-    
-    # Verificar componentes críticos
-    component_status = {
-        'chat_agent': chat_agent is not None,
-        'cdg_agent_integration': chat_agent.cdg_agent is not None if chat_agent else False,
-        'professional_prompts': IMPORTS_SUCCESSFUL,
-        'database_connection': True,  # Asumir OK si no hay errores
-        'llm_client': chat_agent.llm_client is not None if chat_agent else False
-    }
-    
-    all_components_healthy = all(component_status.values())
-    if not all_components_healthy:
-        health_status = "degraded"
-    
-    return {
-        "status": health_status,
-        "timestamp": datetime.now().isoformat(),
-        "version": "6.1.0",
-        "service": "CDG Chat Agent - Con System Prompts Profesionales",
-        "components": component_status,
-        "features": {
-            "professional_system_prompts": True,
-            "intent_classification": True,
-            "personalization_engine": True,
-            "feedback_learning": True,
-            "cdg_agent_integration": True,
-            "conversation_memory": True,
-            "websocket_support": True
-        },
-        "model_configured": MODEL_NAME,
-        "imports_successful": IMPORTS_SUCCESSFUL
-    }
-
-@app.get("/")
-async def root():
-    """🏠 Endpoint raíz con información del servicio"""
-    return {
-        "service": "CDG Chat Agent v6.1",
-        "description": "API conversacional profesional para Control de Gestión bancario con System Prompts especializados",
-        "version": "6.1.0",
-        "features": [
-            "Integración completa con CDG Agent",
-            "System Prompts profesionales especializados",
-            "Clasificación inteligente de intenciones",
-            "Personalización adaptativa por usuario",
-            "Procesamiento avanzado de feedback",
-            "Gestión conversacional con memoria",
-            "Respuestas adaptativas según contexto bancario"
-        ],
-        "endpoints": {
-            "chat": "POST /chat - Procesamiento principal de mensajes",
-            "websocket": "WS /ws/{user_id} - Comunicación en tiempo real",
-            "history": "GET /history/{user_id} - Historial conversacional",
-            "suggestions": "GET /suggestions/{user_id} - Sugerencias personalizadas",
-            "feedback": "POST /feedback/{user_id} - Envío de feedback",
-            "preferences": "GET/PUT /preferences/{user_id} - Gestión de preferencias",
-            "intent": "GET /intent/classify - Clasificación de intenciones",
-            "status": "GET /status - Estado del agente",
-            "health": "GET /health - Verificación de salud"
-        },
-        "documentation": "/docs",
-        "timestamp": datetime.now().isoformat()
-    }
-
-# ============================================================================
-# PUNTO DE ENTRADA
-# ============================================================================
+__all__ = [
+    'UniversalChatAgentV10',
+    'CDGChatAgent', 
+    'ChatMessage',
+    'ChatResponse',
+    'IntelligentQueryClassifier',
+    'PredefinedQueryExecutor',
+    'BankingResponseFormatter',
+    'create_universal_chat_agent',
+    'get_universal_chat_agent'
+]
 
 if __name__ == "__main__":
-    import uvicorn
-    
-    # Configuración de logging mejorada
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler('chat_agent.log', mode='a', encoding='utf-8')
-        ]
-    )
-    
-    logger.info("🚀 Iniciando CDG Chat Agent v6.1 con System Prompts Profesionales...")
-    logger.info(f"📊 Modo: {'PRODUCTION' if IMPORTS_SUCCESSFUL else 'MOCK'}")
-    logger.info(f"🤖 Modelo configurado: {MODEL_NAME}")
-    
-    uvicorn.run(
-        "chat_agent:app",
-        host="0.0.0.0", 
-        port=8000,
-        reload=True,
-        log_level="info",
-        access_log=True
-    )
+    # Demo del agente v10.0 completo
+    async def demo():
+        print("🚀 Iniciando Universal Chat Agent v10.0 - VERSIÓN COMPLETA...")
+        
+        agent = create_universal_chat_agent()
+        status = agent.get_agent_status()
+        
+        print(f"Status: {status}")
+        
+        # Test con consulta
+        test_message = ChatMessage(
+            user_id="demo_user",
+            message="¿Cuántos gestores tenemos en total?"
+        )
+        
+        response = await agent.process_chat_message(test_message)
+        print(f"\nRespuesta: {response.response}")
+        print(f"Tipo: {response.response_type}")
+        print(f"Flujo usado: {response.metadata.get('flow_type', 'unknown')}")
+        print(f"Confianza: {response.confidence_score}")
+        
+    import asyncio
+    asyncio.run(demo())

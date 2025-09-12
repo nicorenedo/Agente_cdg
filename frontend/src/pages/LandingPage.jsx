@@ -1,16 +1,18 @@
 // src/pages/LandingPage.jsx
-// Landing page mejorada con selector de gestor integrado con backend
+// Landing Page v5.1 – Selector limpio e integrado (FIX: usa api.agent.gestores)
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Row, Col, Select, Typography, Space, Spin, message, Card } from 'antd';
-import { 
-  ArrowRightOutlined, 
-  UserOutlined, 
-  TeamOutlined, 
-  DashboardOutlined,
-  ReloadOutlined 
+import {
+  Button, Row, Col, Select, Typography, Space, Spin, Card,
+  Badge, Tooltip, Divider, Alert, App
+} from 'antd';
+import {
+  ArrowRightOutlined, UserOutlined, TeamOutlined, DashboardOutlined,
+  ReloadOutlined, SearchOutlined, CrownOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
+
 import api from '../services/api';
 import theme from '../styles/theme';
 import BancaMarchLogo from '../assets/BancaMarchlogo.png';
@@ -19,439 +21,348 @@ import FondoInterfaz from '../assets/FondoInterfazBM.png';
 const { Option } = Select;
 const { Title, Text } = Typography;
 
-const LandingPage = () => {
+/* ───────────────────────────────────────────── */
+/* 🔧 Landing Page Content                       */
+/* ───────────────────────────────────────────── */
+const LandingPageContent = () => {
   const navigate = useNavigate();
-  
-  // Estados
+  const { message, notification } = App.useApp();
+
   const [gestores, setGestores] = useState([]);
   const [selectedGestor, setSelectedGestor] = useState(null);
   const [selectedGestorInfo, setSelectedGestorInfo] = useState(null);
   const [loadingGestores, setLoadingGestores] = useState(false);
   const [error, setError] = useState(null);
+  const [systemStatus, setSystemStatus] = useState('checking');
 
-  // ✅ MEJORADO: Cargar lista de gestores con múltiples fallbacks
+// LandingPage.jsx - LÍNEA CORREGIDA (~41)
+
+  /* ───── ✅ FIX: usar api.basic.allGestores() - Endpoint específico para gestores ───── */
   const fetchGestores = useCallback(async () => {
     setLoadingGestores(true);
+    setSystemStatus('loading');
     setError(null);
-    
+
     try {
-      console.log('🔍 DEBUG: Iniciando carga de gestores...');
-      let gestoresData = [];
+      // ✅ CORRECCIÓN: Usar el nuevo endpoint específico para gestores
+      const rows = await api.basic.allGestores(); // ✅ Endpoint: /basic/gestores
+      const list = Array.isArray(rows) ? rows : [];
 
-      // Intento 1: Endpoint dedicado de gestores
-      try {
-        console.log('📡 DEBUG: Intentando api.getGestores()...');
-        const response = await api.getGestores();
-        console.log('📦 DEBUG: Respuesta getGestores:', response);
-        
-        // Múltiples formatos de respuesta soportados
-        const rawData = response?.data?.gestores || response?.data || response || [];
-        
-        if (Array.isArray(rawData) && rawData.length > 0) {
-          gestoresData = rawData.map(g => ({
-            id: g.gestor_id || g.GESTORID || g.id || g.gestorId,
-            nombre: g.nombre || g.desc_gestor || g.DESC_GESTOR || g.name || g.gestorName,
-            centro: g.centro || g.desc_centro || g.DESC_CENTRO || g.center || g.centroName,
-            segmento: g.segmento || g.desc_segmento || g.SEGMENTO || g.DESC_SEGMENTO || g.segment || 'No especificado'
-          }));
-          console.log('✅ DEBUG: Gestores mapeados desde getGestores:', gestoresData);
-        }
-      } catch (innerErr) {
-        console.warn('⚠️ DEBUG: Endpoint getGestores falló, intentando fallback:', innerErr.message);
-        
-        // Intento 2: Fallback usando endpoint de ranking
-        try {
-          console.log('📡 DEBUG: Intentando fallback con getComparativeRanking...');
-          const rankingResponse = await api.getComparativeRanking('2025-10', 'margen_neto');
-          console.log('📦 DEBUG: Respuesta ranking:', rankingResponse);
-          
-          const rankingData = rankingResponse?.data?.ranking || rankingResponse?.ranking || [];
-          
-          if (Array.isArray(rankingData) && rankingData.length > 0) {
-            gestoresData = rankingData.map(g => ({
-              id: g.gestor_id || g.GESTORID || g.id,
-              nombre: g.desc_gestor || g.DESC_GESTOR || g.nombre,
-              centro: g.desc_centro || g.DESC_CENTRO || g.centro,
-              segmento: g.segmento || g.desc_segmento || g.SEGMENTO || g.DESC_SEGMENTO || 'No especificado'
-            }));
-            console.log('✅ DEBUG: Gestores mapeados desde ranking:', gestoresData);
-          }
-        } catch (rankingErr) {
-          console.warn('⚠️ DEBUG: Fallback de ranking también falló:', rankingErr.message);
-        }
+
+      const mapped = list
+        .map((g) => {
+          // ✅ CORREGIR: usar las claves exactas que devuelve el backend
+          const id = g.GESTOR_ID || g.gestor_id || g.id || null;           // ✅ GESTOR_ID (no GESTORID)
+          const nombre = g.DESC_GESTOR || g.nombre || g.desc_gestor || null; // ✅ DESC_GESTOR (no DESCGESTOR)
+
+          if (!id || !nombre) return null;
+
+          // ✅ Usar las claves correctas del response del backend
+          const centro = g.DESC_CENTRO || g.centro || g.CENTRO || 'Centro no especificado';
+          const segmento = g.DESC_SEGMENTO || g.segmento || g.SEGMENTO_ID || 'Segmento no especificado';
+
+          return {
+            id: String(id),
+            nombre: String(nombre),
+            centro: String(centro),
+            segmento: String(segmento),
+            performance: 'Regular',
+            displayName: `${String(nombre)} - ${String(centro)}`,
+          };
+        })
+
+        .filter(Boolean)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+      if (!mapped.length) {
+        throw new Error('Sin gestores disponibles');
       }
 
-      if (gestoresData.length > 0) {
-        // Eliminar duplicados basados en ID y ordenar alfabéticamente
-        const gestoresUnicos = gestoresData.reduce((acc, current) => {
-          const exists = acc.find(gestor => gestor.id === current.id);
-          if (!exists && current.id && current.nombre) {
-            acc.push(current);
-          }
-          return acc;
-        }, []).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      setGestores(mapped);
+      setSelectedGestor(mapped[0].id);
+      setSelectedGestorInfo(mapped[0]);
+      setSystemStatus('healthy');
+      message.success(`${mapped.length} gestores cargados correctamente`);
 
-        console.log(`✅ DEBUG: ${gestoresUnicos.length} gestores únicos procesados`);
-        setGestores(gestoresUnicos);
-        
-        // Seleccionar primer gestor por defecto si no hay selección previa
-        if (gestoresUnicos.length > 0 && !selectedGestor) {
-          setSelectedGestor(gestoresUnicos[0].id);
-          setSelectedGestorInfo(gestoresUnicos[0]);
-          console.log('🎯 DEBUG: Gestor por defecto seleccionado:', gestoresUnicos[0]);
-        }
-        
-        setError(null);
-      } else {
-        throw new Error('No se encontraron gestores en ningún endpoint');
-      }
-
-    } catch (error) {
-      console.error('❌ DEBUG: Error general cargando gestores:', error);
-      setError('Error al cargar gestores del backend');
-      
-      // Datos fallback para desarrollo/demo
-      const fallbackGestores = [
-        { id: 'G001', nombre: 'García Martínez, José', centro: 'Madrid Centro', segmento: 'Banca Personal' },
-        { id: 'G002', nombre: 'López Fernández, María', centro: 'Barcelona Norte', segmento: 'Banca Empresas' },
-        { id: 'G003', nombre: 'Rodríguez Sánchez, Carlos', centro: 'Valencia Sur', segmento: 'Banca Privada' },
-        { id: 'G004', nombre: 'Fernández Ruiz, Ana', centro: 'Sevilla Este', segmento: 'Fondos' },
-        { id: 'G005', nombre: 'Martín González, Pedro', centro: 'Bilbao Centro', segmento: 'Banca Minorista' }
+    } catch (err) {
+      // ✅ El fallback existing está bien
+      const fallback = [
+        {
+          id: '18',
+          nombre: 'Laia Vila Costa',
+          centro: 'BARCELONA-BALMES',
+          segmento: 'Banca Personal',
+          performance: 'Excelente',
+          displayName: 'Laia Vila Costa - BARCELONA-BALMES',
+        },
+        {
+          id: '1',
+          nombre: 'Antonio Rodríguez García',
+          centro: 'MADRID-OFICINA PRINCIPAL',
+          segmento: 'Banca Minorista',
+          performance: 'Bueno',
+          displayName: 'Antonio Rodríguez García - MADRID-OFICINA PRINCIPAL',
+        },
       ];
-      
-      setGestores(fallbackGestores);
-      if (!selectedGestor) {
-        setSelectedGestor(fallbackGestores[0].id);
-        setSelectedGestorInfo(fallbackGestores[0]);
-      }
-      
-      message.warning('Usando datos de ejemplo. Verifica la conexión con el backend.');
-      console.log('🔄 DEBUG: Usando gestores fallback:', fallbackGestores);
+
+      setGestores(fallback);
+      setSelectedGestor(fallback[0].id);
+      setSelectedGestorInfo(fallback[0]);
+      setError('Conexión limitada – datos de demostración');
+      setSystemStatus('error');
+
+      message.warning('Usando datos de demostración');
+      notification.error({
+        message: 'API no disponible',
+        description: `Error: ${err?.message || 'Desconocido'}. Usando datos de demostración.`,
+        duration: 4,
+      });
     } finally {
       setLoadingGestores(false);
     }
-  }, [selectedGestor]);
+  }, [message, notification]);
+
 
   useEffect(() => {
     fetchGestores();
   }, [fetchGestores]);
 
-  // ✅ MEJORADO: Manejar cambio de gestor con validación
-  const handleGestorChange = (gestorId) => {
-    console.log('👤 DEBUG: Cambiando gestor a ID:', gestorId);
-    const gestorInfo = gestores.find(g => g.id === gestorId);
-    setSelectedGestor(gestorId);
-    setSelectedGestorInfo(gestorInfo);
-    console.log('👤 DEBUG: Información del gestor seleccionado:', gestorInfo);
+  /* ───── Handlers ───── */
+  const handleGestorChange = (id) => {
+    setSelectedGestor(id);
+    setSelectedGestorInfo(gestores.find((g) => g.id === id) || null);
   };
 
-  // ✅ MEJORADO: Navegar a dashboard de gestor con parámetros completos
   const handleNavigateGestor = () => {
     if (!selectedGestor) {
-      message.warning('Por favor selecciona un gestor para continuar');
+      message.warning('Selecciona un gestor');
       return;
     }
-    
-    console.log('🚀 DEBUG: Navegando a dashboard de gestor:', {
-      gestorId: selectedGestor,
-      gestorInfo: selectedGestorInfo
-    });
-    
-    // Navegar con query param y state para máxima compatibilidad
-    navigate(`/gestor-dashboard?gestor=${selectedGestor}`, {
-      state: {
-        gestorId: selectedGestor,
-        gestorName: selectedGestorInfo?.nombre,
-        gestorCenter: selectedGestorInfo?.centro,
-        gestorSegment: selectedGestorInfo?.segmento
-      }
-    });
+    navigate(`/gestor-dashboard?gestor=${encodeURIComponent(selectedGestor)}`);
   };
 
-  // Actualizar lista manualmente
-  const handleRefresh = () => {
-    console.log('🔄 DEBUG: Refrescando lista de gestores...');
-    fetchGestores();
-  };
+  const handleNavigateDireccion = () => navigate('/direccion-dashboard');
+  const handleRefresh = () => fetchGestores();
 
-  // ✅ CONSERVADO: Estilos originales con pequeñas mejoras
+  /* ───── Estilos básicos ───── */
   const containerStyle = {
     height: '100vh',
-    background: `linear-gradient(rgba(27, 94, 85, 0.7), rgba(18, 59, 54, 0.8)), url(${FondoInterfaz})`,
+    background: `linear-gradient(135deg, rgba(27, 94, 85, 0.85), rgba(18, 59, 54, 0.9)), url(${FondoInterfaz})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
     padding: '2rem',
+    position: 'relative',
   };
 
-  const logoStyle = {
-    maxWidth: '280px',
-    height: 'auto',
-    marginBottom: '3rem',
-    filter: 'brightness(1.1)',
-  };
-
-  const titleStyle = {
-    color: '#FFFFFF',
-    fontSize: '2.8rem',
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: '2rem',
-    textShadow: '2px 2px 4px rgba(0, 0, 0, 0.3)',
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-  };
-
-  const buttonStyle = {
-    height: '70px',
-    fontSize: '20px',
-    fontWeight: '600',
-    padding: '0 3rem',
-    borderRadius: '8px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-    transition: 'all 0.3s ease',
-  };
-
+  /* ───────────────────────────────────────────── */
+  /* Render                                       */
+  /* ───────────────────────────────────────────── */
   return (
     <div style={containerStyle}>
-      {/* Logo corporativo */}
-      <img 
-        src={BancaMarchLogo} 
-        alt="Banca March" 
-        style={logoStyle}
-      />
-      
-      {/* Título principal */}
-      <h1 style={titleStyle}>
+      {systemStatus !== 'healthy' && (
+        <Badge
+          status={
+            systemStatus === 'loading'
+              ? 'processing'
+              : systemStatus === 'error'
+              ? 'error'
+              : 'warning'
+          }
+          text={
+            <Text style={{ color: 'white' }}>
+              {systemStatus === 'loading'
+                ? 'Cargando…'
+                : systemStatus === 'error'
+                ? 'Conexión limitada'
+                : 'Verificando sistema'}
+            </Text>
+          }
+          style={{ position: 'absolute', top: 24, right: 24 }}
+        />
+      )}
+
+      <img src={BancaMarchLogo} alt="Banca March" style={{ maxWidth: 260, marginBottom: 32 }} />
+
+      <Title level={1} style={{ color: 'white', marginBottom: 8, textAlign: 'center' }}>
         Sistema de Control de Gestión
-      </h1>
-      
-      <Text style={{
-        color: 'rgba(255,255,255,0.9)',
-        fontSize: '18px',
-        textAlign: 'center',
-        marginBottom: '3rem',
-        textShadow: '1px 1px 2px rgba(0, 0, 0, 0.3)'
-      }}>
-        Selecciona tu panel de control
+      </Title>
+      <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 18, marginBottom: 48 }}>
+        Plataforma Inteligente de Análisis Financiero
       </Text>
 
-      {/* Selector de gestor y botones */}
-      <Row gutter={[24, 24]} justify="center" align="middle" style={{ width: '100%', maxWidth: '900px' }}>
-        
-        {/* ✅ CORREGIDO: Panel de Gestor con props actualizados */}
-        <Col xs={24} md={12}>
+      <Row gutter={[24, 32]} justify="center" style={{ width: '100%', maxWidth: 1200 }}>
+        {/* Panel Gestor */}
+        <Col xs={24} lg={13}>
           <Card
             style={{
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '12px',
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              backdropFilter: 'blur(15px)',
+              border: '2px solid rgba(255,255,255,0.2)',
+              borderRadius: 20,
               textAlign: 'center',
-              padding: '20px'
+              padding: 24,
+              minHeight: 480,
             }}
-            styles={{ body: { padding: 0 } }} 
           >
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <div>
-                <UserOutlined style={{ fontSize: '32px', color: '#fff', marginBottom: '8px' }} />
-                <Title level={4} style={{ color: '#fff', margin: 0 }}>
-                  Panel de Gestor
-                </Title>
-                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: '14px' }}>
-                  Dashboard personalizado por gestor
-                </Text>
-              </div>
+            <Space direction="vertical" size="large" style={{ width: '100%', height: '100%' }}>
+              <UserOutlined style={{ fontSize: 46, color: '#fff' }} />
+              <Title level={3} style={{ color: '#fff', margin: 0 }}>
+                Panel Personal
+              </Title>
 
+              {/* Selector limpio */}
               <div style={{ width: '100%' }}>
-                <Text style={{ color: '#fff', fontSize: '14px', fontWeight: 500, display: 'block', marginBottom: '8px' }}>
-                  Seleccionar Gestor:
+                <Text style={{ color: '#fff', marginBottom: 8, display: 'block' }}>
+                  Seleccionar Gestor Comercial
                 </Text>
-                
                 <Space.Compact style={{ width: '100%' }}>
                   <Select
-                    placeholder="Buscar gestor..."
+                    showSearch
+                    placeholder="🔍 Buscar gestor…"
                     value={selectedGestor}
                     onChange={handleGestorChange}
                     loading={loadingGestores}
-                    showSearch
-                    optionFilterProp="children"
-                    style={{ flex: 1 }}
                     size="large"
-                    disabled={loadingGestores}
+                    style={{ flex: 1 }}
+                    disabled={loadingGestores || gestores.length === 0}
+                    suffixIcon={<SearchOutlined />}
+                    optionFilterProp="children"
                     filterOption={(input, option) =>
-                      option.children.props.children[0].props.children.toLowerCase().includes(input.toLowerCase()) ||
-                      option.children.props.children[1].props.children.toLowerCase().includes(input.toLowerCase())
+                      option?.children?.toLowerCase().includes(input.toLowerCase())
                     }
-                    styles={{ popup: { root: { backgroundColor: '#fff' } } }}
-                    notFoundContent={loadingGestores ? <Spin size="small" /> : 'No se encontraron gestores'}
+                    notFoundContent={
+                      loadingGestores ? <Spin size="small" style={{ margin: 12 }} /> : 'Sin resultados'
+                    }
                   >
-                    {gestores.map((gestor) => (
-                      <Option key={gestor.id} value={gestor.id}>
-                        <div>
-                          <div style={{ fontWeight: 500 }}>{gestor.nombre}</div>
-                          <div style={{ fontSize: '12px', color: '#666' }}>
-                            {gestor.centro} • {gestor.segmento}
-                          </div>
-                        </div>
+                    {gestores.map((g) => (
+                      <Option key={g.id} value={g.id}>
+                        {g.displayName}
                       </Option>
                     ))}
                   </Select>
-                  
-                  <Button 
-                    icon={<ReloadOutlined />} 
-                    onClick={handleRefresh}
-                    loading={loadingGestores}
-                    size="large"
-                    style={{ borderColor: 'rgba(255,255,255,0.3)' }}
-                    title="Actualizar lista de gestores"
-                  />
+                  <Tooltip title="Actualizar">
+                    <Button
+                      icon={<ReloadOutlined />}
+                      onClick={handleRefresh}
+                      loading={loadingGestores}
+                      size="large"
+                      style={{
+                        borderColor: 'rgba(255,255,255,0.4)',
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                      }}
+                    />
+                  </Tooltip>
                 </Space.Compact>
               </div>
 
-              {/* ✅ MEJORADO: Información del gestor seleccionado */}
               {selectedGestorInfo && (
-                <div style={{
-                  padding: '8px 12px',
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.2)'
-                }}>
-                  <Text style={{ color: '#fff', fontSize: '12px' }}>
-                    <strong>✓ Seleccionado:</strong> {selectedGestorInfo.nombre}<br/>
-                    <strong>Centro:</strong> {selectedGestorInfo.centro}<br/>
-                    <strong>Segmento:</strong> {selectedGestorInfo.segmento}
-                  </Text>
-                </div>
+                <Alert
+                  type="success"
+                  showIcon
+                  description={
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{selectedGestorInfo.nombre}</Text>
+                      <Text>
+                        {selectedGestorInfo.centro} • {selectedGestorInfo.segmento}
+                      </Text>
+                    </Space>
+                  }
+                  style={{ background: 'rgba(0,0,0,0.2)', color: 'white' }}
+                />
               )}
 
               <Button
-                size="large"
                 type="primary"
-                style={{
-                  ...buttonStyle,
-                  background: theme.colors.bmGreenLight,
-                  borderColor: theme.colors.bmGreenLight,
-                  color: '#FFFFFF',
-                  width: '100%'
-                }}
-                onClick={handleNavigateGestor}
-                disabled={!selectedGestor || loadingGestores}
+                size="large"
                 icon={<ArrowRightOutlined />}
-                onMouseEnter={(e) => {
-                  if (selectedGestor && !loadingGestores) {
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.2)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                onClick={handleNavigateGestor}
+                disabled={!selectedGestor}
+                loading={loadingGestores}
+                style={{
+                  width: '100%',
+                  background: `linear-gradient(135deg, ${theme.colors.bmGreenLight}, ${theme.colors.bmGreenPrimary})`,
+                  border: 'none',
                 }}
               >
-                {loadingGestores ? 'CARGANDO...' : 'ACCEDER AL PANEL'}
+                {loadingGestores ? 'Cargando...' : 'Acceder a Mi Panel'}
               </Button>
             </Space>
           </Card>
         </Col>
 
-        {/* ✅ CORREGIDO: Panel de Dirección con props actualizados */}
-        <Col xs={24} md={12}>
+        {/* Panel Dirección */}
+        <Col xs={24} lg={13}>
           <Card
             style={{
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '12px',
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              backdropFilter: 'blur(15px)',
+              border: '2px solid rgba(255,255,255,0.2)',
+              borderRadius: 20,
               textAlign: 'center',
-              padding: '20px',
-              height: '100%'
+              padding: 24,
+              minHeight: 480,
             }}
-            styles={{ body: { padding: '16px', height: '100%' } }} 
           >
-            <Space direction="vertical" size="large" style={{ width: '100%', height: '100%', justifyContent: 'center' }}>
-              <div>
-                <DashboardOutlined style={{ fontSize: '32px', color: '#fff', marginBottom: '8px' }} />
-                <Title level={4} style={{ color: '#fff', margin: 0 }}>
-                  Panel de Dirección
-                </Title>
-                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: '14px' }}>
-                  Vista consolidada ejecutiva
-                </Text>
-              </div>
+            <Space direction="vertical" size="large" style={{ width: '100%', height: '100%' }}>
+              <DashboardOutlined style={{ fontSize: 46, color: '#fff' }} />
+              <Title level={3} style={{ color: '#fff', margin: 0 }}>
+                Panel Ejecutivo
+              </Title>
 
-              <div style={{ padding: '20px 0' }}>
-                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: '14px' }}>
-                  • Control consolidado de toda la red<br/>
-                  • KPIs ejecutivos en tiempo real<br/>
-                  • Análisis comparativo de centros<br/>
-                  • Sistema de alertas inteligente
-                </Text>
-              </div>
+              <Space direction="vertical" size="small">
+                <div>
+                  <TeamOutlined style={{ color: theme.colors.bmGreenLight }} /> Control consolidado
+                </div>
+                <div>
+                  <ThunderboltOutlined style={{ color: theme.colors.bmGreenLight }} /> KPIs en tiempo real
+                </div>
+              </Space>
 
               <Button
-                size="large"
                 type="primary"
+                size="large"
+                icon={<CrownOutlined />}
+                onClick={handleNavigateDireccion}
                 style={{
-                  ...buttonStyle,
-                  background: theme.colors.bmGreenPrimary,
-                  borderColor: theme.colors.bmGreenPrimary,
-                  color: '#FFFFFF',
-                  width: '100%'
-                }}
-                onClick={() => navigate('/direccion-dashboard')}
-                icon={<TeamOutlined />}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                  width: '100%',
+                  background: `linear-gradient(135deg, ${theme.colors.bmGreenDark}, ${theme.colors.bmGreenPrimary})`,
+                  border: 'none',
+                  marginTop: 16,
                 }}
               >
-                ACCEDER AL PANEL
+                Acceder al Panel Ejecutivo
               </Button>
             </Space>
           </Card>
         </Col>
       </Row>
-      
-      {/* ✅ MEJORADO: Información de estado con más detalles */}
-      {error && (
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          color: 'rgba(255,255,255,0.9)',
-          fontSize: '12px',
-          backgroundColor: 'rgba(255,165,0,0.2)',
-          padding: '8px 12px',
-          borderRadius: '4px',
-          border: '1px solid rgba(255,165,0,0.3)',
-          maxWidth: '300px'
-        }}>
-          ⚠️ {error}<br/>
-          <small>Gestores cargados: {gestores.length}</small>
-        </div>
-      )}
 
-      {/* ✅ CONSERVADO: Footer original */}
-      <div style={{
-        position: 'absolute',
-        bottom: '2rem',
-        color: 'rgba(255, 255, 255, 0.8)',
-        fontSize: '14px',
-        textAlign: 'center',
-      }}>
-        Agente CDG - Control de Gestión Inteligente<br />
-        Banca March © 2025 - Powered by Azure OpenAI
+      {/* Footer */}
+      <div style={{ position: 'absolute', bottom: 32, color: 'white', textAlign: 'center' }}>
+        <Space split={<Divider type="vertical" style={{ borderColor: 'rgba(255,255,255,0.4)' }} />}>
+          <span>Agente CDG ©2025 Banca March</span>
+          <span>{gestores.length} gestores disponibles</span>
+          <span style={{ color: systemStatus === 'healthy' ? '#52c41a' : '#fa8c16' }}>
+            {systemStatus === 'healthy' ? 'Datos reales' : 'Datos demo'}
+          </span>
+        </Space>
       </div>
     </div>
   );
 };
+
+/* ───────────────────────────────────────────── */
+/* ✅ Wrapper principal con App                  */
+/* ───────────────────────────────────────────── */
+const LandingPage = () => (
+  <App>
+    <LandingPageContent />
+  </App>
+);
 
 export default LandingPage;

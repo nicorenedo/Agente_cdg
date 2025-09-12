@@ -854,3 +854,189 @@ def _format_available_data_sources(data: dict) -> str:
         return "No hay datos adicionales disponibles."
     
     return "\n".join([f"- {k}: {len(v) if isinstance(v, list) else 'Disponible'}" for k, v in data.items()])
+
+
+# =================================================================
+# FUNCIONES DE PROMPTS PARA CHAT_AGENT.PY
+# =================================================================
+
+def build_intent_classification_prompt(user_message: str, context: dict = None) -> str:
+    """
+    Construye prompt para clasificar la intención del usuario en chat
+    
+    Args:
+        user_message: Mensaje del usuario
+        context: Contexto adicional (gestor_id, periodo, etc.)
+    """
+    
+    context_text = ""
+    if context:
+        context_text = f"""
+CONTEXTO ADICIONAL:
+- GESTOR_ID: {context.get('gestor_id', 'No especificado')}
+- PERIODO: {context.get('periodo', 'No especificado')}  
+- USUARIO_PREVIO: {context.get('user_history', 'Primera consulta')}
+"""
+    
+    return f"""
+Analiza este mensaje del usuario y clasifica su intención principal:
+
+MENSAJE: "{user_message}"
+
+{context_text}
+
+CATEGORÍAS DISPONIBLES:
+- performance_analysis: Análisis de rendimiento individual
+- comparative_analysis: Comparativas y benchmarking  
+- deviation_detection: Alertas y anomalías
+- incentive_analysis: Cálculos de incentivos
+- business_review: Reportes ejecutivos
+- executive_summary: Resúmenes para dirección
+- general_inquiry: Consultas generales
+
+RESPUESTA REQUERIDA:
+Formato JSON: {{"intent": "categoría", "confidence": 0.0-1.0}}
+"""
+
+def build_natural_response_prompt(data_analysis: dict, user_context: dict) -> str:
+    """
+    Construye prompt para generar respuesta natural conversacional
+    
+    Args:
+        data_analysis: Resultado del análisis de datos
+        user_context: Contexto del usuario y conversación
+    """
+    
+    user_level = user_context.get('user_level', 'intermedio')
+    conversation_history = user_context.get('conversation_history', [])
+    
+    history_text = ""
+    if conversation_history:
+        recent_history = conversation_history[-3:]  # Últimas 3 interacciones
+        history_text = f"""
+HISTORIAL RECIENTE:
+{chr(10).join([f"- {h.get('question', '')}: {h.get('summary', '')}" for h in recent_history])}
+"""
+    
+    return f"""
+Genera una respuesta conversacional natural basada en este análisis:
+
+DATOS ANALIZADOS:
+{data_analysis}
+
+CONTEXTO DEL USUARIO:
+- Nivel técnico: {user_level}
+- Gestor ID: {user_context.get('gestor_id', 'No especificado')}
+- Período de interés: {user_context.get('periodo', 'Actual')}
+
+{history_text}
+
+INSTRUCCIONES:
+1. Responde de forma conversacional y profesional
+2. Adapta el nivel técnico al usuario ({user_level})
+3. Include insights accionables específicos
+4. Mantén coherencia con el historial previo
+5. Si hay desviaciones >15%, marca como críticas
+6. Proporciona contexto bancario relevante
+
+ESTRUCTURA SUGERIDA:
+- Situación actual (qué está pasando)
+- Análisis contextual (por qué es importante) 
+- Recomendaciones específicas (qué hacer)
+
+La respuesta debe ser directa, útil y orientada a la acción.
+"""
+
+def build_sql_generation_prompt(user_question: str, context: dict = None) -> str:
+    """
+    Construye prompt para generar SQL desde pregunta en lenguaje natural
+    
+    Args:
+        user_question: Pregunta del usuario
+        context: Contexto adicional para la query
+    """
+    
+    context_filters = ""
+    if context:
+        if context.get('gestor_id'):
+            context_filters += f"- Filtrar por GESTOR_ID = {context['gestor_id']}\n"
+        if context.get('periodo'):
+            context_filters += f"- Filtrar por período = '{context['periodo']}'\n"
+        if context.get('centro'):
+            context_filters += f"- Filtrar por centro = {context['centro']}\n"
+    
+    return f"""
+Genera una consulta SQL para responder esta pregunta:
+
+PREGUNTA: "{user_question}"
+
+FILTROS DE CONTEXTO:
+{context_filters if context_filters else "- Sin filtros específicos"}
+
+ESQUEMA DE REFERENCIA:
+- MAESTRO_GESTORES: GESTOR_ID, DESC_GESTOR, CENTRO, SEGMENTO_ID
+- MAESTRO_CONTRATOS: CONTRATO_ID, GESTOR_ID, CLIENTE_ID, PRODUCTO_ID, FECHA_ALTA
+- MOVIMIENTOS_CONTRATOS: FECHA, CONTRATO_ID, CUENTA_ID, IMPORTE, LINEA_CDR
+- PRECIO_POR_PRODUCTO_REAL: SEGMENTO_ID, PRODUCTO_ID, PRECIO_MANTENIMIENTO_REAL
+- PRECIO_POR_PRODUCTO_STD: SEGMENTO_ID, PRODUCTO_ID, PRECIO_MANTENIMIENTO
+
+REGLAS IMPORTANTES:
+1. Solo SQLite válido
+2. Usar COALESCE() para valores NULL
+3. ROUND(valor, 2) para decimales
+4. Incluir campos descriptivos (DESC_GESTOR, DESC_CENTRO)
+5. Para centros comerciales: IND_CENTRO_FINALISTA = 1
+
+FORMATO DE RESPUESTA:
+Devuelve ÚNICAMENTE la consulta SQL, sin explicaciones.
+"""
+
+def build_financial_explanation_prompt(sql_results: list, original_question: str, context: dict = None) -> str:
+    """
+    Construye prompt para explicar resultados financieros
+    
+    Args:
+        sql_results: Resultados de la consulta SQL
+        original_question: Pregunta original del usuario
+        context: Contexto adicional
+    """
+    
+    results_summary = f"Datos obtenidos: {len(sql_results)} registros" if sql_results else "Sin datos"
+    
+    context_text = ""
+    if context:
+        context_text = f"""
+CONTEXTO DE NEGOCIO:
+- Período analizado: {context.get('periodo', 'No especificado')}
+- Alcance: {context.get('scope', 'General')}
+- Usuario: {context.get('user_type', 'Gestor comercial')}
+"""
+    
+    return f"""
+Explica estos resultados financieros de forma clara y contextualizada:
+
+PREGUNTA ORIGINAL: "{original_question}"
+
+DATOS OBTENIDOS:
+{sql_results}
+
+{results_summary}
+
+{context_text}
+
+INSTRUCCIONES PARA LA EXPLICACIÓN:
+1. **Interpretación**: Qué significan estos números
+2. **Contexto bancario**: Por qué son importantes para Banca March  
+3. **Comparación**: Cómo se sitúan vs objetivos/benchmarks
+4. **Tendencias**: Si hay patrones o evoluciones relevantes
+5. **Acciones**: Qué se puede hacer con esta información
+
+CONSIDERACIONES ESPECIALES:
+- ROE objetivo: 8-12% (sector bancario español)
+- Margen neto objetivo: >15% 
+- Desviaciones críticas: >15%
+- Centros finalistas: 1-5 (comerciales)
+- Segmentos prioritarios: Fondos (N20301), Personal (N10104)
+
+Proporciona una explicación que un gestor comercial pueda entender y usar.
+"""

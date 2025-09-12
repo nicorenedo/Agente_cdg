@@ -1,0 +1,1640 @@
+// frontend/src/services/analyticsService.js
+/* eslint-disable no-console */
+
+/**
+ * Analytics Service (CDG) - VERSIÓN COMPLETA CON SOPORTE PARA DASHBOARD DIRECCIÓN
+ * -------------------------------------------------------------------------------
+ * ✅ ELIMINADO: Mapeo hardcodeado GESTOR_TO_SEGMENT
+ * ✅ NUEVO: Obtención dinámica de segmentos desde backend
+ * ✅ CORREGIDO: Funciones async para manejo de segmentos
+ * ✅ AÑADIDO: Funciones completas para Dashboard de Dirección usando endpoints /charts/*
+ * ✅ AÑADIDO: Soporte para pivoteo conversacional y filtros dinámicos
+ * ✅ OPTIMIZADO: Cache inteligente y manejo de errores mejorado
+ */
+
+import api, {
+  analytics as analyticsAPI,
+  dataQueries as dataQueriesAPI,
+  charts as chartsAPI,
+  basic as basicAPI,
+  kpis as kpisAPI,
+  comparatives as comparativesAPI,
+  ApiClientError,
+} from "./api";
+
+/* =========================================
+ * Constantes y utilidades de validación
+ * ========================================= */
+
+const SCOPE = /** @type {const} */ ({
+  GESTOR: "gestor",
+  CENTRO: "centro",
+  SEGMENTO: "segmento",
+});
+
+const VS = /** @type {const} */ ({
+  BUDGET: "budget",
+  LAST_YEAR: "last_year",
+  LAST_PERIOD: "last_period",
+});
+
+const DEFAULTS = Object.freeze({
+  scope: SCOPE.GESTOR,
+  vs: VS.BUDGET,
+});
+
+/** Drivers admitidos típicamente en la variance bridge */
+const KNOWN_DRIVERS = ["precio", "volumen", "mix", "fx", "one_offs"];
+
+/** Paleta por semáforo (backend devuelve Verde/Amarillo/Rojo) */
+const SEMAPHORE_COLORS = Object.freeze({
+  Verde: "#22c55e",
+  Amarillo: "#f59e0b",
+  Rojo: "#ef4444",
+  Gris: "#6b7280",
+});
+
+/** ✅ COLORES consistentes para visualizaciones */
+const PRODUCT_COLORS = ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff",  "#339276ff", "#49a175ff"];
+const CLIENT_COLORS = ["#214239ff", "#2a634fff", "#1a9072ff", "#46d2a1ff", "#022e16ff", "#34a382ff", "#49a175ff"];
+
+/** ✅ COLORES ESPECÍFICOS PARA DASHBOARD DIRECCIÓN */
+const DIRECTION_COLORS = Object.freeze({
+  gestores: ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff",  "#339276ff", "#49a175ff", "#354d43ff"],
+  centros: ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff"],
+  productos: ["#214239ff", "#2a634fff", "#1a9072ff"],
+  general: ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff"]
+});
+
+/** ✅ OBTENCIÓN DINÁMICA DE SEGMENTOS desde /catalogs */
+let SEGMENT_INFO_CACHE = null;
+let SEGMENT_CACHE_EXPIRY = 0;
+const SEGMENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+/**
+ * ✅ FUNCIÓN DINÁMICA: Obtiene información de segmentos desde el backend
+ */
+async function getSegmentInfo() {
+  const now = Date.now();
+  
+  if (SEGMENT_INFO_CACHE && now < SEGMENT_CACHE_EXPIRY) {
+    return SEGMENT_INFO_CACHE;
+  }
+
+  try {
+    console.log('[Analytics] 🔄 Fetching segment info from backend...');
+    
+    // Intentar obtener catálogos desde el backend
+    const catalogsData = await api.catalogs.catalogs();
+    
+    if (catalogsData?.segmentos && Array.isArray(catalogsData.segmentos)) {
+      const segmentMap = {};
+      const colors = ['#1890ff', '#722ed1', '#13c2c2', '#52c41a', '#faad14'];
+      
+      catalogsData.segmentos.forEach((segment, index) => {
+        const segmentId = segment.SEGMENTO_ID || segment.segmento_id;
+        const segmentName = segment.DESC_SEGMENTO || segment.desc_segmento || segment.nombre;
+        
+        if (segmentId) {
+          segmentMap[segmentId] = {
+            nombre: segmentName || 'Segmento Desconocido',
+            color: colors[index % colors.length]
+          };
+        }
+      });
+      
+      SEGMENT_INFO_CACHE = segmentMap;
+      SEGMENT_CACHE_EXPIRY = now + SEGMENT_CACHE_TTL;
+      
+      console.log('[Analytics] ✅ Segment info loaded dynamically:', Object.keys(segmentMap).length, 'segments');
+      return segmentMap;
+    }
+    
+  } catch (error) {
+    console.warn('[Analytics] ⚠️ Error fetching dynamic segments, using fallback:', error.message);
+  }
+
+  // Fallback estático solo si falla la obtención dinámica
+  const fallbackSegments = {
+    'N10101': { nombre: 'Banca Minorista', color: '#1890ff' },
+    'N10102': { nombre: 'Banca Privada', color: '#722ed1' },
+    'N10103': { nombre: 'Banca de Empresas', color: '#13c2c2' },
+    'N10104': { nombre: 'Banca Personal', color: '#52c41a' },
+    'N20301': { nombre: 'Fondos', color: '#faad14' }
+  };
+  
+  SEGMENT_INFO_CACHE = fallbackSegments;
+  SEGMENT_CACHE_EXPIRY = now + SEGMENT_CACHE_TTL;
+  
+  console.log('[Analytics] 📋 Using fallback segment info');
+  return fallbackSegments;
+}
+
+/** Valida y sanea parámetros de variance */
+function validateVarianceParams({ scope, id, periodo, vs } = {}) {
+  const _scope = [SCOPE.GESTOR, SCOPE.CENTRO, SCOPE.SEGMENTO].includes(scope)
+    ? scope
+    : DEFAULTS.scope;
+  const _vs = [VS.BUDGET, VS.LAST_YEAR, VS.LAST_PERIOD].includes(vs)
+    ? vs
+    : DEFAULTS.vs;
+
+  if (!periodo || typeof periodo !== "string") {
+    throw new ApiClientError("Parametro 'periodo' es requerido (YYYY-MM)", {
+      status: 400,
+      code: 400,
+    });
+  }
+  return { scope: _scope, id: id || null, periodo, vs: _vs };
+}
+
+/* =========================================
+ * Cache in-memory (TTL) - MEJORADO
+ * ========================================= */
+
+const _cache = new Map();
+const DEFAULT_TTL_MS = 60 * 1000; // 60s
+
+const _now = () => Date.now();
+const _key = (name, params) => `${name}:${JSON.stringify(params || {})}`;
+
+function _getCached(name, params) {
+  const k = _key(name, params);
+  const hit = _cache.get(k);
+  if (!hit) return null;
+  if (hit.expireAt && hit.expireAt < _now()) {
+    _cache.delete(k);
+    return null;
+  }
+  return hit.value;
+}
+
+function _setCached(name, params, value, ttlMs = DEFAULT_TTL_MS) {
+  const k = _key(name, params);
+  _cache.set(k, { value, expireAt: ttlMs ? _now() + ttlMs : 0 });
+}
+
+/**
+ * ✅ OPTIMIZACIÓN: Limpia cache por período para asegurar frescura de datos
+ */
+function _clearCacheForPeriod(periodo) {
+  const keysToDelete = [];
+  for (let [key] of _cache) {
+    if (key.includes(`"periodo":"${periodo}"`)) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach(key => _cache.delete(key));
+  console.log(`[Analytics] ✅ Cleared cache for period ${periodo}: ${keysToDelete.length} entries`);
+}
+
+/**
+ * ✅ NUEVA FUNCIÓN: Limpia cache específico de un gestor
+ */
+function _clearCacheForGestor(gestorId) {
+  const keysToDelete = [];
+  for (let [key] of _cache) {
+    if (key.includes(`"gestorId":"${gestorId}"`) || key.includes(`"gestorId":${gestorId}`)) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach(key => _cache.delete(key));
+  console.log(`[Analytics] ✅ Cleared cache for gestor ${gestorId}: ${keysToDelete.length} entries`);
+}
+
+function clearAnalyticsCache() {
+  _cache.clear();
+  SEGMENT_INFO_CACHE = null;
+  SEGMENT_CACHE_EXPIRY = 0;
+  console.log('[Analytics] ✅ Cache cleared completely including segment info');
+}
+
+/* =========================================
+ * ✅ FUNCIONES DINÁMICAS PARA SEGMENTOS
+ * ========================================= */
+
+/**
+ * ✅ FUNCIÓN CORREGIDA - Obtiene el segmento de un gestor desde el backend
+ */
+async function getSegmentForGestor(gestorId) {
+  try {
+    if (!gestorId) return null;
+    
+    const numericId = parseInt(gestorId, 10);
+    if (isNaN(numericId)) return null;
+
+    console.log(`[Analytics] 🔍 Buscando segmento para gestor ${numericId}`);
+
+    const segmentInfo = await getSegmentInfo();
+
+    // Buscar el gestor en todos los segmentos
+    for (const segmentoId of Object.keys(segmentInfo)) {
+      try {
+        const gestoresEnSegmento = await basicAPI.gestoresBySegmento(segmentoId);
+        
+        if (Array.isArray(gestoresEnSegmento)) {
+          console.log(`[Analytics] Segment ${segmentoId}: ${gestoresEnSegmento.length} gestores`);
+          
+          // ✅ CORRECCIÓN CRÍTICA: Comparación robusta de claves
+          const gestorEncontrado = gestoresEnSegmento.find(g => {
+            // Probar múltiples variantes de clave (mayúsculas/minúsculas)
+            const candidateId = g.GESTORID || g.gestorid || g.GESTOR_ID || g.gestor_id || g.id;
+            
+            if (candidateId == null) return false;
+            
+            // Comparación numérica robusta
+            return parseInt(candidateId, 10) === numericId;
+          });
+          
+          if (gestorEncontrado) {
+            console.log(`[Analytics] ✅ Gestor ${numericId} encontrado en segmento ${segmentoId}`);
+            return {
+              id: segmentoId,
+              nombre: segmentInfo[segmentoId]?.nombre || 'Segmento Desconocido'
+            };
+          }
+        }
+      } catch (segmentError) {
+        console.warn(`[Analytics] Error checking segment ${segmentoId}:`, segmentError.message);
+      }
+    }
+
+    console.warn(`[Analytics] ❌ Gestor ${numericId} no encontrado en ningún segmento`);
+    return null;
+    
+  } catch (error) {
+    console.error(`[Analytics] Error general fetching segmento for gestorId=${gestorId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Función segura para obtener el segmento de un gestor con fallback
+ */
+async function getSegmentForGestorSafe(gestorId) {
+  const segmento = await getSegmentForGestor(gestorId);
+  
+  if (segmento) {
+    return { 
+      segmentoId: segmento.id, 
+      segmentoNombre: segmento.nombre 
+    };
+  }
+  
+  // Fallback en caso de error
+  console.warn(`[Analytics] Using fallback segment for gestorId=${gestorId}`);
+  return { 
+    segmentoId: 'N10101', 
+    segmentoNombre: 'Banca Minorista' 
+  };
+}
+
+/**
+ * ✅ FUNCIÓN COMPLETAMENTE REESCRITA: Filtra datos por segmento de forma robusta
+ */
+function filterDataBySegment(data, targetSegmentId) {
+  if (!data || !targetSegmentId) {
+    console.warn('[Analytics] No data or targetSegmentId provided for filtering');
+    return data;
+  }
+  
+  console.log(`[Analytics] Filtering data for segment: ${targetSegmentId}`);
+  
+  const filtered = {
+    standard: [],
+    real: []
+  };
+  
+  // Filtrar standard
+  if (Array.isArray(data.standard)) {
+    const beforeCount = data.standard.length;
+    filtered.standard = data.standard.filter(item => {
+      const itemSegmentId = item.SEGMENTO_ID || item.segmento_id;
+      return itemSegmentId === targetSegmentId;
+    });
+    console.log(`[Analytics] Standard: ${beforeCount} -> ${filtered.standard.length} items`);
+  }
+  
+  // Filtrar real
+  if (Array.isArray(data.real)) {
+    const beforeCount = data.real.length;
+    filtered.real = data.real.filter(item => {
+      const itemSegmentId = item.SEGMENTO_ID || item.segmento_id;
+      return itemSegmentId === targetSegmentId;
+    });
+    console.log(`[Analytics] Real: ${beforeCount} -> ${filtered.real.length} items`);
+  }
+  
+  // ✅ VALIDACIÓN: Verificar que el filtrado funciona
+  if (filtered.standard.length === 0 && filtered.real.length === 0) {
+    console.error(`[Analytics] FILTRO FALLÓ: No hay datos para segmento ${targetSegmentId}`);
+    console.log('[Analytics] Available segments in data:', 
+      [...new Set([
+        ...(data.standard || []).map(i => i.SEGMENTO_ID || i.segmento_id),
+        ...(data.real || []).map(i => i.SEGMENTO_ID || i.segmento_id)
+      ])]
+    );
+  }
+  
+  return filtered;
+}
+
+/* =========================================
+ * ✅ NUEVAS FUNCIONES PARA DASHBOARD DIRECCIÓN
+ * ========================================= */
+
+/**
+ * ✅ FUNCIÓN PRINCIPAL: Obtiene datos para gráficos del dashboard de dirección
+ */
+async function getDirectionChartData(chartType = 'gestores-ranking', options = {}) {
+  const { metric = 'CONTRATOS', chart_type = 'horizontal_bar', periodo } = options;
+  
+  console.log(`[Analytics] 🎯 getDirectionChartData: ${chartType}, metric: ${metric}, chart_type: ${chart_type}`);
+  
+  const cacheKey = { chartType, metric, chart_type, periodo };
+  const cached = _getCached("direction_chart", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached direction chart: ${chartType}`);
+    return cached;
+  }
+
+  try {
+    let result;
+    
+    switch (chartType) {
+      case 'gestores-ranking':
+        console.log(`[Analytics] 📊 Calling chartsAPI.gestoresRanking with metric: ${metric}`);
+        result = await chartsAPI.gestoresRanking({ metric, chart_type });
+        break;
+      case 'centros-distribution':
+        console.log(`[Analytics] 📊 Calling chartsAPI.centrosDistribution`);
+        result = await chartsAPI.centrosDistribution({ chart_type });
+        break;
+      case 'productos-popularity':
+        console.log(`[Analytics] 📊 Calling chartsAPI.productosPopularity`);
+        result = await chartsAPI.productosPopularity({ chart_type });
+        break;
+      case 'precios-comparison':
+        console.log(`[Analytics] 📊 Calling chartsAPI.preciosComparison`);
+        result = await chartsAPI.preciosComparison({ chart_type });
+        break;
+      case 'summary-dashboard':
+        console.log(`[Analytics] 📊 Calling chartsAPI.summaryDashboard`);
+        result = await chartsAPI.summaryDashboard();
+        break;
+      default:
+        throw new Error(`Chart type ${chartType} not supported`);
+    }
+
+    console.log(`[Analytics] ✅ Backend response received for ${chartType}:`, {
+      hasChart: !!result.chart,
+      dataLength: result.chart?.data?.length || 0,
+      chartId: result.chart?.id
+    });
+
+    // Transformar a formato uniforme para InteractiveCharts
+    const transformed = transformBackendChartData(result, chartType);
+    
+    _setCached("direction_chart", cacheKey, transformed, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] 🎉 Direction chart data ready:`, {
+      type: chartType,
+      labelsCount: transformed.labels?.length || 0,
+      hasData: transformed.datasets?.length > 0
+    });
+    
+    return transformed;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching direction chart ${chartType}:`, error.message);
+    return generateMockDirectionChart(chartType, options);
+  }
+}
+
+/**
+ * ✅ OPTIMIZACIÓN: Nueva función para obtener datos KPIs unificados usando endpoints reales
+ */
+async function getUnifiedKPIData(gestorId, periodo, options = {}) {
+  console.log(`[Analytics] 🎯 getUnifiedKPIData: gestor ${gestorId}, period ${periodo}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'unified_kpi' };
+  const cached = _getCached("kpi_data", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached KPI data for gestor ${gestorId}`);
+    return cached;
+  }
+
+  try {
+    // ✅ USAR ENDPOINT REAL /kpis/gestor/{id}
+    const kpiData = await kpisAPI.gestor(gestorId, periodo);
+    
+    // ✅ USAR ENDPOINT REAL /comparatives/gestores/margen
+    const comparativeData = await comparativesAPI.gestoresMargen(periodo);
+    
+    // Encontrar datos específicos del gestor en las comparativas
+    const gestorComparative = comparativeData?.find(item => {
+      const itemGestorId = item.GESTOR_ID || item.gestor_id;
+      return parseInt(itemGestorId, 10) === parseInt(gestorId, 10);
+    });
+
+    const unified = {
+      // Datos básicos del gestor
+      gestorId,
+      periodo,
+      nombreGestor: kpiData?.kpis?.desc_gestor || 'Gestor Desconocido',
+      centro: kpiData?.kpis?.desc_centro || 'Centro Desconocido',
+      segmento: kpiData?.kpis?.desc_segmento || 'Segmento Desconocido',
+      
+      // KPIs principales
+      totalContratos: kpiData?.kpis?.total_contratos || 0,
+      totalClientes: kpiData?.kpis?.total_clientes || 0,
+      totalIngresos: kpiData?.kpis?.total_ingresos || 0,
+      patrimonioTotal: kpiData?.kpis?.patrimonio_total || 0,
+      margenNeto: kpiData?.kpis?.margen_neto || 0,
+      beneficioNeto: kpiData?.kpis?.beneficio_neto || 0,
+      roe: kpiData?.kpis?.roe_pct || 0,
+      
+      // Clasificaciones cualitativas
+      clasificacionMargen: kpiData?.kpis?.clasificacion_margen || 'DESCONOCIDO',
+      clasificacionROE: kpiData?.kpis?.clasificacion_roe || 'DESCONOCIDO',
+      clasificacionEficiencia: kpiData?.kpis?.clasificacion_eficiencia || 'DESCONOCIDO',
+      
+      // Datos comparativos
+      ranking: gestorComparative?.ranking || null,
+      mediaMargen: gestorComparative?.media_margen || null,
+      desviacionVsMedia: gestorComparative?.desviacion_vs_media || null,
+      categoriaPerformance: gestorComparative?.categoria_performance || 'DESCONOCIDO',
+      
+      // Metadatos
+      raw: {
+        kpiData,
+        gestorComparative,
+        hasRealData: true
+      }
+    };
+
+    _setCached("kpi_data", cacheKey, unified, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Unified KPI data ready for gestor ${gestorId}:`, {
+      contratos: unified.totalContratos,
+      margen: unified.margenNeto,
+      ranking: unified.ranking
+    });
+    
+    return unified;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching unified KPI data:`, error.message);
+    
+    // Fallback con datos mock básicos
+    return {
+      gestorId,
+      periodo,
+      nombreGestor: 'Gestor Desconocido',
+      centro: 'Centro Desconocido',
+      segmento: 'Segmento Desconocido',
+      totalContratos: Math.floor(Math.random() * 50) + 10,
+      totalClientes: Math.floor(Math.random() * 30) + 5,
+      totalIngresos: Math.floor(Math.random() * 50000) + 10000,
+      patrimonioTotal: Math.floor(Math.random() * 100000) + 20000,
+      margenNeto: Math.floor(Math.random() * 80) + 20,
+      beneficioNeto: Math.floor(Math.random() * 40000) + 5000,
+      roe: Math.floor(Math.random() * 60) + 20,
+      clasificacionMargen: 'EXCELENTE',
+      clasificacionROE: 'SOBRESALIENTE',
+      clasificacionEficiencia: 'MUY_EFICIENTE',
+      ranking: Math.floor(Math.random() * 30) + 1,
+      mediaMargen: 65.92,
+      desviacionVsMedia: Math.floor(Math.random() * 20) - 10,
+      categoriaPerformance: 'GOOD_PERFORMER',
+      raw: { hasRealData: false, mockData: true }
+    };
+  }
+}
+
+/**
+ * ✅ FUNCIÓN DE TRANSFORMACIÓN: Convierte datos del backend al formato esperado por InteractiveCharts
+ */
+function transformBackendChartData(backendData, chartType) {
+  console.log(`[Analytics] 🔄 Transforming backend data for ${chartType}`);
+  
+  const chart = backendData.chart || backendData;
+  
+  if (!chart || !chart.data || !Array.isArray(chart.data)) {
+    console.error('[Analytics] Invalid chart data from backend:', { chart: !!chart, data: !!chart?.data });
+    throw new Error('Invalid chart data from backend');
+  }
+
+  console.log(`[Analytics] Chart data items: ${chart.data.length}`);
+
+  // Extraer labels y values
+  const labels = chart.data.map(item => item.label || 'Sin Etiqueta');
+  const values = chart.data.map(item => item.value || 0);
+  
+  // Colores basados en el tipo de gráfico
+  const colors = getColorsForChartType(chartType, chart.data.length);
+  
+  const transformed = {
+    labels,
+    datasets: [{
+      label: getDatasetLabel(chart.metric || chartType),
+      data: values,
+      backgroundColor: colors,
+      borderRadius: 4,
+    }],
+    raw: chart.data,
+    meta: {
+      type: chartType,
+      title: chart.title,
+      total: chart.data.length,
+      showing: chart.data.length,
+      dimension: chart.dimension,
+      metric: chart.metric,
+      interactive: chart.interactive || false,
+      pivot_enabled: chart.pivot_enabled || false,
+      created_at: chart.created_at,
+      chart_id: chart.id,
+      data_source: chart.data_source || 'backend'
+    }
+  };
+  
+  console.log(`[Analytics] ✅ Transform complete:`, {
+    labels: labels.length,
+    values: values.length,
+    colors: colors.length
+  });
+  
+  return transformed;
+}
+
+/**
+ * ✅ FUNCIÓN PARA PIVOTEO CONVERSACIONAL: Cambia gráficos usando lenguaje natural
+ */
+async function pivotChart(chartId, message, options = {}) {
+  if (!chartId || !message) {
+    throw new Error('chartId and message are required for pivot');
+  }
+  
+  console.log(`[Analytics] 🔄 Pivoting chart ${chartId} with message: "${message}"`);
+  
+  try {
+    const result = await chartsAPI.pivotById(chartId, message, options);
+    console.log(`[Analytics] ✅ Pivot successful for chart ${chartId}`);
+    
+    return transformBackendChartData(result, 'pivot_result');
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error pivoting chart ${chartId}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * ✅ FUNCIÓN PARA INTERPRETACIÓN: Interpreta mensaje en lenguaje natural para generar configuración de gráfico
+ */
+async function interpretChartMessage(message, currentConfig = {}) {
+  if (!message) {
+    throw new Error('message is required for chart interpretation');
+  }
+  
+  console.log(`[Analytics] 🧠 Interpreting chart message: "${message}"`);
+  
+  try {
+    const result = await chartsAPI.interpret(message, currentConfig);
+    console.log(`[Analytics] ✅ Chart message interpreted successfully`);
+    
+    return result;
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error interpreting chart message:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * ✅ FUNCIÓN PARA OBTENER METADATOS DE CHARTS: Obtiene tipos de gráfico soportados y configuraciones
+ */
+async function getChartMeta() {
+  const cacheKey = 'chart_meta';
+  const cached = _getCached(cacheKey, {});
+  if (cached) {
+    console.log('[Analytics] Using cached chart meta');
+    return cached;
+  }
+
+  try {
+    console.log('[Analytics] 🔍 Fetching chart meta from backend');
+    const meta = await chartsAPI.meta();
+    
+    _setCached(cacheKey, {}, meta, 5 * 60 * 1000); // 5 minutos cache
+    
+    console.log('[Analytics] ✅ Chart meta loaded:', {
+      chartTypes: meta.charttypes?.length || 0,
+      dimensions: Object.keys(meta.dimensions || {}).length,
+      metrics: Object.keys(meta.metrics || {}).length
+    });
+    
+    return meta;
+  } catch (error) {
+    console.error('[Analytics] ❌ Error fetching chart meta:', error.message);
+    
+    // Fallback meta basado en los endpoints disponibles
+    return {
+      charttypes: ['bar', 'line', 'pie', 'donut', 'horizontal_bar', 'stacked_bar'],
+      dimensions: {
+        gestor: 'Gestor',
+        centro: 'Centro',
+        producto: 'Producto',
+        segmento: 'Segmento'
+      },
+      metrics: {
+        CONTRATOS: 'Contratos',
+        CLIENTES: 'Clientes',
+        INGRESOS: 'Ingresos',
+        MARGEN: 'Margen'
+      },
+      supportspivot: true
+    };
+  }
+}
+
+/* =========================================
+ * ✅ FUNCIONES AUXILIARES PARA DIRECCIÓN
+ * ========================================= */
+
+function getColorsForChartType(chartType, dataLength) {
+  let colorPalette;
+  
+  switch (chartType) {
+    case 'gestores-ranking':
+      colorPalette = DIRECTION_COLORS.gestores;
+      break;
+    case 'centros-distribution':
+      colorPalette = DIRECTION_COLORS.centros;
+      break;
+    case 'productos-popularity':
+      colorPalette = DIRECTION_COLORS.productos;
+      break;
+    case 'precios-comparison':
+      colorPalette = PRODUCT_COLORS;
+      break;
+    case 'summary-dashboard':
+      colorPalette = DIRECTION_COLORS.general;
+      break;
+    default:
+      colorPalette = DIRECTION_COLORS.general;
+  }
+  
+  // Extender la paleta si necesitamos más colores
+  const colors = [];
+  for (let i = 0; i < dataLength; i++) {
+    colors.push(colorPalette[i % colorPalette.length]);
+  }
+  
+  return colors;
+}
+
+function getDatasetLabel(metric) {
+  const labels = {
+    'CONTRATOS': 'Contratos',
+    'CLIENTES': 'Clientes', 
+    'INGRESOS': 'Ingresos (€)',
+    'MARGEN': 'Margen (%)',
+    'VOLUMEN': 'Volumen'
+  };
+  return labels[metric] || metric;
+}
+
+function generateMockDirectionChart(chartType, options = {}) {
+  console.log(`[Analytics] 🎭 Generating mock data for ${chartType}`);
+  
+  const mockData = {
+    'gestores-ranking': {
+      labels: ['Gestor A', 'Gestor B', 'Gestor C', 'Gestor D', 'Gestor E'],
+      data: [45, 38, 32, 28, 22],
+      label: 'Contratos'
+    },
+    'centros-distribution': {
+      labels: ['Madrid', 'Barcelona', 'Valencia', 'Sevilla', 'Bilbao'],
+      data: [35, 25, 18, 12, 10],
+      label: 'Distribución'
+    },
+    'productos-popularity': {
+      labels: ['Hipotecas', 'Depósitos', 'Fondos'],
+      data: [50, 30, 20],
+      label: 'Popularidad'
+    },
+    'summary-dashboard': {
+      labels: ['Gestores', 'Clientes', 'Contratos', 'Productos'],
+      data: [30, 85, 216, 3],
+      label: 'Resumen'
+    }
+  };
+
+  const mock = mockData[chartType] || mockData['gestores-ranking'];
+  
+  return {
+    labels: mock.labels,
+    datasets: [{
+      label: mock.label,
+      data: mock.data,
+      backgroundColor: getColorsForChartType(chartType, mock.data.length),
+      borderRadius: 4,
+    }],
+    raw: mock.labels.map((label, idx) => ({
+      label,
+      value: mock.data[idx],
+      mock: true
+    })),
+    meta: {
+      type: chartType,
+      mockData: true,
+      total: mock.data.length,
+      showing: mock.data.length,
+      note: 'Error loading data - showing mock',
+      ...options
+    }
+  };
+}
+
+/* =========================================
+ * ✅ GENERADORES DE DATOS MOCK (MANTENIDOS)
+ * ========================================= */
+
+function generateMockTopClients(gestorId = null) {
+  const mockNames = [
+    'CLIENTE PREMIUM SA',
+    'INVERSIONES MADRID SL', 
+    'GRUPO FINANCIERO BCN',
+    'CAPITAL VENTURES SL',
+    'CONSULTORA ESTRATÉGICA'
+  ];
+  
+  const mockValues = [45000, 38000, 32000, 28000, 22000];
+  
+  return {
+    labels: mockNames,
+    datasets: [{
+      label: "Margen (€)",
+      data: mockValues,
+      backgroundColor: CLIENT_COLORS.slice(0, 5),
+      borderRadius: 4,
+    }],
+    raw: mockNames.map((name, idx) => ({
+      NOMBRE_CLIENTE: name,
+      margen: mockValues[idx],
+      contratos: Math.floor(Math.random() * 5) + 2
+    })),
+    meta: {
+      type: 'top_clients',
+      total: 5,
+      showing: 5,
+      mockData: true,
+      gestorId,
+      note: 'Datos de demostración - Backend sin datos reales'
+    }
+  };
+}
+
+function generateMockProductMix(gestorId = null) {
+  const mockProducts = [
+    'Préstamo Hipotecario',
+    'Depósito a Plazo Fijo', 
+    'Fondo de Inversión',
+    'Cuenta Corriente Plus'
+  ];
+  
+  const mockValues = [25, 20, 15, 10];
+  const total = mockValues.reduce((sum, v) => sum + v, 0);
+  
+  return {
+    labels: mockProducts,
+    datasets: [{
+      label: "Contratos",
+      data: mockValues,
+      backgroundColor: PRODUCT_COLORS.slice(0, 4),
+      borderWidth: 2,
+      borderColor: '#ffffff',
+    }],
+    raw: mockProducts.map((product, idx) => ({
+      DESC_PRODUCTO: product,
+      num_contratos: mockValues[idx]
+    })),
+    meta: {
+      type: 'product_mix',
+      total,
+      showing: 4,
+      percentages: mockValues.map(v => ((v / total) * 100).toFixed(1)),
+      mockData: true,
+      gestorId,
+      note: 'Datos de demostración - Backend sin datos reales'
+    }
+  };
+}
+
+/**
+ * ✅ MEJORADO: Genera mock con segmento correcto
+ */
+function generateMockPriceComparison(gestorId = null, segmentoInfo = null) {
+  const mockProducts = ['Préstamo Hipotecario', 'Depósito a Plazo', 'Fondo Inversión'];
+  const stdPrices = [1200, 1160, 1180];
+  const realPrices = [1185, 1190, 1165];
+  
+  const tableData = mockProducts.map((product, idx) => {
+    const std = stdPrices[idx];
+    const real = realPrices[idx];
+    const delta_abs = real - std;
+    const delta_pct = ((delta_abs / std) * 100);
+    const absPct = Math.abs(delta_pct);
+    
+    return {
+      DESC_PRODUCTO: product,
+      precio_std: std,
+      precio_real: real,
+      delta_abs: Number(delta_abs.toFixed(2)),
+      delta_pct: Number(delta_pct.toFixed(2)),
+      semaforo: absPct <= 2 ? 'Verde' : absPct <= 15 ? 'Amarillo' : 'Rojo'
+    };
+  });
+  
+  return {
+    labels: mockProducts,
+    datasets: [
+      {
+        label: "Precio Estándar",
+        data: stdPrices,
+        backgroundColor: "#94a3b8",
+        borderRadius: 4,
+      },
+      {
+        label: "Precio Real",
+        data: realPrices,
+        backgroundColor: tableData.map(r => SEMAPHORE_COLORS[r.semaforo] || SEMAPHORE_COLORS.Gris),
+        borderRadius: 4,
+      }
+    ],
+    table: tableData,
+    raw: { standard: [], real: [] },
+    meta: {
+      type: 'price_comparison',
+      gestorId,
+      showing: 3,
+      total: 3,
+      mockData: true,
+      segmentoId: segmentoInfo?.segmentoId,
+      segmentoNombre: segmentoInfo?.segmentoNombre,
+      periodo: '2025-10',
+      semaforos: { Verde: 2, Amarillo: 1, Rojo: 0 },
+      note: `Datos de demostración para ${segmentoInfo?.segmentoNombre || 'Segmento Desconocido'}`
+    }
+  };
+}
+
+/* =========================================
+ * ✅ TRANSFORMACIONES ESPECÍFICAS CORREGIDAS
+ * ========================================= */
+
+function transformTopClients(clientsData = [], options = {}) {
+  const { limit = 5, mockMetric = true, gestorId = null } = options;
+  
+  if (!Array.isArray(clientsData) || clientsData.length === 0) {
+    console.warn('[Analytics] No clients data available, using mock data');
+    return generateMockTopClients(gestorId);
+  }
+  
+  const withMetrics = clientsData.map((client, index) => ({
+    ...client,
+    margen: mockMetric ? Math.floor(Math.random() * 40000) + 15000 : (client.margen || 0),
+    contratos: mockMetric ? Math.floor(Math.random() * 8) + 2 : (client.contratos || 0),
+  }));
+
+  const sorted = withMetrics
+    .sort((a, b) => (b.margen || 0) - (a.margen || 0))
+    .slice(0, limit);
+
+  if (sorted.length === 0 || sorted.every(c => (c.margen || 0) === 0)) {
+    console.warn('[Analytics] No meaningful client data after processing, using mock data');
+    return generateMockTopClients(gestorId);
+  }
+
+  return {
+    labels: sorted.map(c => {
+      const name = c.NOMBRE_CLIENTE || c.nombre || c.name || 'Cliente';
+      return name.split(' ').slice(0, 2).join(' ');
+    }),
+    datasets: [{
+      label: "Margen (€)",
+      data: sorted.map(c => c.margen || 0),
+      backgroundColor: CLIENT_COLORS.slice(0, sorted.length),
+      borderRadius: 4,
+    }],
+    raw: sorted,
+    meta: {
+      type: 'top_clients',
+      total: clientsData.length,
+      showing: sorted.length,
+      gestorId,
+      mockData: mockMetric
+    }
+  };
+}
+
+function transformProductMix(productsData = [], options = {}) {
+  const { gestorId = null } = options;
+  
+  if (!Array.isArray(productsData) || productsData.length === 0) {
+    console.warn('[Analytics] No products data available, using mock data');
+    return generateMockProductMix(gestorId);
+  }
+
+  const sorted = productsData.sort((a, b) => (b.num_contratos || 0) - (a.num_contratos || 0));
+  const total = sorted.reduce((sum, p) => sum + (p.num_contratos || 0), 0);
+
+  if (total === 0) {
+    console.warn('[Analytics] No contracts found in products data, using mock data');
+    return generateMockProductMix(gestorId);
+  }
+
+  return {
+    labels: sorted.map(p => p.DESC_PRODUCTO || p.producto || p.name || 'Producto'),
+    datasets: [{
+      label: "Contratos",
+      data: sorted.map(p => p.num_contratos || 0),
+      backgroundColor: PRODUCT_COLORS.slice(0, sorted.length),
+      borderWidth: 2,
+      borderColor: '#ffffff',
+    }],
+    raw: sorted,
+    meta: {
+      type: 'product_mix',
+      total,
+      showing: sorted.length,
+      percentages: sorted.map(p => total > 0 ? ((p.num_contratos || 0) / total * 100).toFixed(1) : '0'),
+      gestorId
+    }
+  };
+}
+
+/**
+ * ✅ FUNCIÓN COMPLETAMENTE REESCRITA: transformPriceComparison
+ */
+function transformPriceComparison(data = {}, options = {}) {
+  const { gestorId, segmentoInfo, periodo = '2025-10' } = options;
+  
+  console.log(`[Analytics] transformPriceComparison called for gestor ${gestorId}`);
+  console.log(`[Analytics] Segment info:`, segmentoInfo);
+  console.log(`[Analytics] Raw data lengths - standard: ${data.standard?.length || 0}, real: ${data.real?.length || 0}`);
+  
+  if (!data.standard && !data.real) {
+    console.warn('[Analytics] No price data available, using mock data');
+    return generateMockPriceComparison(gestorId, segmentoInfo);
+  }
+  
+  const standard = Array.isArray(data.standard) ? data.standard : [];
+  const real = Array.isArray(data.real) ? data.real : [];
+
+  if (standard.length === 0 && real.length === 0) {
+    console.warn('[Analytics] No valid price data arrays, using mock data');
+    return generateMockPriceComparison(gestorId, segmentoInfo);
+  }
+
+  // ✅ FILTRAR DATOS POR SEGMENTO
+  let filteredStandard = standard;
+  let filteredReal = real;
+  
+  if (segmentoInfo?.segmentoId) {
+    filteredStandard = standard.filter(item => {
+      const itemSegmentId = item.SEGMENTO_ID || item.segmento_id;
+      return itemSegmentId === segmentoInfo.segmentoId;
+    });
+    
+    filteredReal = real.filter(item => {
+      const itemSegmentId = item.SEGMENTO_ID || item.segmento_id;
+      return itemSegmentId === segmentoInfo.segmentoId;
+    });
+    
+    console.log(`[Analytics] After segment filtering (${segmentoInfo.segmentoId}):`, {
+      standard: filteredStandard.length,
+      real: filteredReal.length
+    });
+  }
+
+  // Filtrar precios reales por período más reciente
+  const realByProduct = {};
+  filteredReal.forEach(item => {
+    const productId = item.PRODUCTO_ID;
+    const currentPeriod = item.FECHA_CALCULO || '';
+    
+    if (!realByProduct[productId] || currentPeriod >= (realByProduct[productId].FECHA_CALCULO || '')) {
+      realByProduct[productId] = item;
+    }
+  });
+
+  // Crear estructura de datos combinando standard y real
+  const productData = [];
+  
+  filteredStandard.forEach(stdItem => {
+    const productId = stdItem.PRODUCTO_ID;
+    const realItem = realByProduct[productId];
+    
+    if (realItem) {
+      const stdPrice = Math.abs(stdItem.PRECIO_MANTENIMIENTO || 0);
+      const realPrice = Math.abs(realItem.PRECIO_MANTENIMIENTO_REAL || 0);
+      
+      if (stdPrice > 0 && realPrice > 0) {
+        const deltaAbs = realPrice - stdPrice;
+        const deltaPct = (deltaAbs / stdPrice) * 100;
+        const absPct = Math.abs(deltaPct);
+        
+        productData.push({
+          PRODUCTO_ID: productId,
+          DESC_PRODUCTO: stdItem.DESC_PRODUCTO || realItem.DESC_PRODUCTO || 'Producto',
+          SEGMENTO_ID: stdItem.SEGMENTO_ID,
+          DESC_SEGMENTO: stdItem.DESC_SEGMENTO,
+          precio_std: stdPrice,
+          precio_real: realPrice,
+          delta_abs: Number(deltaAbs.toFixed(2)),
+          delta_pct: Number(deltaPct.toFixed(2)),
+          semaforo: absPct <= 2 ? 'Verde' : absPct <= 15 ? 'Amarillo' : 'Rojo',
+          contratos_base: realItem.NUM_CONTRATOS_BASE || 0,
+          fecha_calculo: realItem.FECHA_CALCULO
+        });
+      }
+    }
+  });
+
+  console.log(`[Analytics] Final product data length: ${productData.length}`);
+
+  // ✅ VALIDACIÓN: Si no hay productos después del filtrado, usar mock
+  if (productData.length === 0) {
+    console.warn('[Analytics] No complete product data after processing, using mock data');
+    return generateMockPriceComparison(gestorId, segmentoInfo);
+  }
+
+  // Ordenar por desviación absoluta (más críticos primero)
+  const sortedData = productData.sort((a, b) => Math.abs(b.delta_pct) - Math.abs(a.delta_pct));
+
+  // Preparar labels más cortos
+  const labels = sortedData.map(item => {
+    let label = item.DESC_PRODUCTO;
+    return label
+      .replace('Préstamo Hipotecario', 'Hipotecario')
+      .replace('Depósito a Plazo Fijo en Euros', 'Depósito PF')
+      .replace('Fondo Banca March', 'Fondos BM');
+  });
+
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Precio Estándar",
+        data: sortedData.map(item => item.precio_std),
+        backgroundColor: "rgba(25, 124, 99, 1)",
+        borderColor: "rgba(25, 124, 99, 1)",
+        borderWidth: 2,
+        borderRadius: 4,
+      },
+      {
+        label: "Precio Real",
+        data: sortedData.map(item => item.precio_real),
+        backgroundColor: "rgba(20, 70, 50, 1)",
+        borderColor: "rgba(20, 70, 50, 1)",
+        borderWidth: 2,
+        borderRadius: 4,
+      }
+    ],
+    table: sortedData,
+    raw: data,
+    meta: {
+      type: 'price_comparison',
+      gestorId,
+      showing: sortedData.length,
+      total: productData.length,
+      segmentoId: segmentoInfo?.segmentoId,
+      segmentoNombre: segmentoInfo?.segmentoNombre,
+      periodo,
+      semaforos: sortedData.reduce((acc, item) => {
+        acc[item.semaforo] = (acc[item.semaforo] || 0) + 1;
+        return acc;
+      }, { Verde: 0, Amarillo: 0, Rojo: 0, Gris: 0 }),
+      note: `Comparativa de precios para segmento ${segmentoInfo?.segmentoNombre || 'Desconocido'}`
+    }
+  };
+}
+
+/* =========================================
+ * Normalizaciones EXISTENTES - MANTENIDAS
+ * ========================================= */
+
+function normalizeVarianceBridge(apiData = {}) {
+  const scope = apiData.scope || DEFAULTS.scope;
+  const id = apiData.id ?? null;
+  const periodo = apiData.periodo || "";
+  const vs = apiData.vs || DEFAULTS.vs;
+  const rows = Array.isArray(apiData.bridge) ? apiData.bridge : [];
+
+  const ordered = [
+    ...KNOWN_DRIVERS
+      .map((d) => rows.find((r) => (r.driver || "").toLowerCase() === d))
+      .filter(Boolean),
+    ...rows.filter(
+      (r) => !KNOWN_DRIVERS.includes((r.driver || "").toLowerCase())
+    ),
+  ];
+
+  const positives = [];
+  const negatives = [];
+  let totalImpact = 0;
+
+  const byDriver = ordered.map((r) => {
+    const driver = String(r.driver || "").toLowerCase();
+    const impacto = Number(r.impacto || 0);
+    const semaforo = r.semaforo || (impacto === 0 ? "Verde" : impacto > 0 ? "Rojo" : "Amarillo");
+    totalImpact += impacto;
+    if (impacto >= 0) positives.push({ driver, impacto, semaforo });
+    else negatives.push({ driver, impacto, semaforo });
+    return { driver, impacto, semaforo };
+  });
+
+  const countBySemaphore = byDriver.reduce(
+    (acc, { semaforo }) => {
+      acc[semaforo] = (acc[semaforo] || 0) + 1;
+      return acc;
+    },
+    { Verde: 0, Amarillo: 0, Rojo: 0 }
+  );
+
+  const absSum = byDriver.reduce((acc, { impacto }) => acc + Math.abs(impacto), 0) || 1;
+  const withContribution = byDriver.map((r) => ({
+    ...r,
+    pct_contrib: Number(((Math.abs(r.impacto) / absSum) * 100).toFixed(2)),
+  }));
+
+  return {
+    scope,
+    id,
+    periodo,
+    vs,
+    totalImpact,
+    drivers: withContribution,
+    positives,
+    negatives,
+    semaphores: countBySemaphore,
+    raw: apiData,
+  };
+}
+
+/* =========================================
+ * Transformaciones para gráficos EXISTENTES
+ * ========================================= */
+
+function toBarChartDataset(nb) {
+  const labels = nb.drivers.map((d) => d.driver);
+  const values = nb.drivers.map((d) => d.impacto);
+  const colors = nb.drivers.map((d) => SEMAPHORE_COLORS[d.semaforo] || SEMAPHORE_COLORS.Gris);
+
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Impacto",
+        data: values,
+        backgroundColor: colors,
+      },
+    ],
+    meta: {
+      totalImpact: nb.totalImpact,
+      periodo: nb.periodo,
+      vs: nb.vs,
+      scope: nb.scope,
+      id: nb.id,
+    },
+  };
+}
+
+function toSemaphoreDonutDataset(nb) {
+  const labels = ["Verde", "Amarillo", "Rojo"];
+  const data = labels.map((l) => nb.semaphores[l] || 0);
+  const backgroundColor = labels.map((l) => SEMAPHORE_COLORS[l] || SEMAPHORE_COLORS.Gris);
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Alertas",
+        data,
+        backgroundColor,
+      },
+    ],
+  };
+}
+
+function toTableRows(nb) {
+  return nb.drivers.map((d, idx) => ({
+    id: idx + 1,
+    driver: d.driver,
+    impacto: d.impacto,
+    semaforo: d.semaforo,
+    pct_contrib: d.pct_contrib,
+    color: SEMAPHORE_COLORS[d.semaforo] || SEMAPHORE_COLORS.Gris,
+  }));
+}
+
+/* =========================================
+ * Llamadas de alto nivel EXISTENTES
+ * ========================================= */
+
+async function fetchVariance(params, cfg) {
+  const clean = validateVarianceParams(params || {});
+  return analyticsAPI.variance(clean, cfg);
+}
+
+async function getVarianceBridge(params, { ttlMs = DEFAULT_TTL_MS, cfg } = {}) {
+  const clean = validateVarianceParams(params || {});
+  const cached = _getCached("variance", clean);
+  if (cached) return cached;
+
+  const data = await analyticsAPI.variance(clean, cfg);
+  const normalized = normalizeVarianceBridge(data);
+  _setCached("variance", clean, normalized, ttlMs);
+  return normalized;
+}
+
+async function getVarianceChartData(params, opts = {}) {
+  const nb = await getVarianceBridge(params, opts);
+  return {
+    bar: toBarChartDataset(nb),
+    donut: toSemaphoreDonutDataset(nb),
+    table: toTableRows(nb),
+    meta: {
+      periodo: nb.periodo,
+      vs: nb.vs,
+      totalImpact: nb.totalImpact,
+      scope: nb.scope,
+      id: nb.id,
+    },
+  };
+}
+
+async function createServerChartFromBridge(params, { chartType = "horizontal_bar", cfg } = {}) {
+  const nb = await getVarianceBridge(params, { cfg });
+  const data = nb.drivers.map((d) => ({
+    driver: d.driver,
+    impacto: d.impacto,
+    semaforo: d.semaforo,
+    pct_contrib: d.pct_contrib,
+  }));
+
+  const config = {
+    type: chartType,
+    x: "impacto",
+    y: "driver",
+    colorBy: "semaforo",
+    palette: SEMAPHORE_COLORS,
+    title: `Variance (${nb.scope}${nb.id ? `:${nb.id}` : ""}) — ${nb.periodo} vs ${nb.vs}`,
+    valueFormat: "0,0.00",
+  };
+
+  const res = await chartsAPI.fromData(data, config, cfg);
+  return res;
+}
+
+/* =========================================
+ * ✅ FUNCIONES DE ALTO NIVEL COMPLETAMENTE REESCRITAS
+ * ========================================= */
+
+async function getTopClientsChartData(gestorId, options = {}) {
+  const cacheKey = { gestorId, options };
+  const cached = _getCached("top_clients", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached top clients data for gestor ${gestorId}`);
+    return cached;
+  }
+
+  try {
+    console.log(`[Analytics] Fetching top clients for gestor ${gestorId}`);
+    
+    const numericGestorId = parseInt(gestorId, 10);
+    if (isNaN(numericGestorId)) {
+      console.warn(`[Analytics] Invalid gestorId: ${gestorId}, using mock data`);
+      return generateMockTopClients(gestorId);
+    }
+
+    const clientsData = await basicAPI.clientesByGestor(numericGestorId);
+    console.log(`[Analytics] Retrieved ${clientsData?.length || 0} clients from API`);
+    
+    const result = transformTopClients(clientsData, { ...options, gestorId });
+    
+    if (!result.meta?.mockData) {
+      _setCached("top_clients", cacheKey, result, DEFAULT_TTL_MS);
+    }
+    
+    return result;
+  } catch (error) {
+    console.warn('[Analytics] Error fetching top clients:', error.message);
+    return generateMockTopClients(gestorId);
+  }
+}
+
+async function getProductMixChartData(gestorId, options = {}) {
+  const cacheKey = { gestorId, options };
+  const cached = _getCached("product_mix", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached product mix data for gestor ${gestorId}`);
+    return cached;
+  }
+
+  try {
+    console.log(`[Analytics] Fetching product mix for gestor ${gestorId}`);
+    
+    const numericGestorId = parseInt(gestorId, 10);
+    if (isNaN(numericGestorId)) {
+      console.warn(`[Analytics] Invalid gestorId: ${gestorId}, using mock data`);
+      return generateMockProductMix(gestorId);
+    }
+
+    const productsData = await basicAPI.productosByGestor(numericGestorId);
+    console.log(`[Analytics] Retrieved ${productsData?.length || 0} products from API`);
+    
+    const result = transformProductMix(productsData, { ...options, gestorId });
+    
+    if (!result.meta?.mockData) {
+      _setCached("product_mix", cacheKey, result, DEFAULT_TTL_MS);
+    }
+    
+    return result;
+  } catch (error) {
+    console.warn('[Analytics] Error fetching product mix:', error.message);
+    return generateMockProductMix(gestorId);
+  }
+}
+
+/**
+ * ✅ FUNCIÓN COMPLETAMENTE REESCRITA: getPriceComparisonChartData (AHORA ASYNC)
+ */
+async function getPriceComparisonChartData(params = {}, options = {}) {
+  const { gestorId, periodo, productoId } = params;
+  
+  console.log(`[Analytics] === getPriceComparisonChartData START ===`);
+  console.log(`[Analytics] Params:`, { gestorId, periodo, productoId });
+  
+  // ✅ PASO 2: Obtener segmento del gestor de forma ASYNC
+  const segmentoInfo = await getSegmentForGestorSafe(gestorId);
+  console.log(`[Analytics] Segment info for gestor ${gestorId}:`, segmentoInfo);
+  
+  try {
+    // ✅ PASO 3: Preparar parámetros para la API
+    const cleanParams = {};
+    
+    if (gestorId) {
+      const numericGestorId = parseInt(gestorId, 10);
+      if (!isNaN(numericGestorId)) {
+        cleanParams.gestor_id = numericGestorId;
+      }
+    }
+    
+    if (periodo) {
+      cleanParams.periodo = String(periodo);
+    }
+    
+    if (productoId) {
+      cleanParams.producto_id = productoId;
+    }
+
+    if (Object.keys(cleanParams).length === 0) {
+      console.warn('[Analytics] No valid parameters for price comparison, using mock data');
+      return generateMockPriceComparison(gestorId, segmentoInfo);
+    }
+
+    console.log(`[Analytics] API call params:`, cleanParams);
+
+    // ✅ PASO 4: Llamada al API
+    const priceData = await dataQueriesAPI.pricesComparison(cleanParams);
+    console.log('[Analytics] Raw API response:', {
+      standard: priceData?.standard?.length || 0,
+      real: priceData?.real?.length || 0
+    });
+
+    // ✅ PASO 5: Transformar datos (incluye filtrado automático)
+    const result = transformPriceComparison(priceData, { 
+      gestorId, 
+      segmentoInfo,
+      periodo,
+      ...options 
+    });
+    
+    console.log(`[Analytics] === getPriceComparisonChartData END ===`);
+    console.log(`[Analytics] Final result meta:`, result.meta);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('[Analytics] Error fetching price comparison:', error.message);
+    return generateMockPriceComparison(gestorId, segmentoInfo);
+  }
+}
+
+/**
+ * ✅ FUNCIÓN COMPLETAMENTE REESCRITA: getPriceComparisonBySegment (AHORA ASYNC)
+ */
+async function getPriceComparisonBySegment(params = {}, options = {}) {
+  const { gestorId, periodo } = params;
+  
+  console.log(`[Analytics] === getPriceComparisonBySegment START ===`);
+  console.log(`[Analytics] Params:`, { gestorId, periodo });
+  
+  // ✅ Obtener segmento del gestor de forma ASYNC
+  const segmentoInfo = await getSegmentForGestorSafe(gestorId);
+  console.log(`[Analytics] Segment info for gestor ${gestorId}:`, segmentoInfo);
+  
+  // ✅ Validación de parámetros
+  if (!periodo) {
+    throw new Error('Parametro "periodo" es requerido');
+  }
+
+  try {
+    // ✅ Preparar parámetros para la API
+    const apiParams = {
+      segmento_id: segmentoInfo.segmentoId,
+      periodo
+    };
+
+    console.log(`[Analytics] API call params:`, apiParams);
+
+    // ✅ Llamada al nuevo endpoint específico
+    const rawData = await dataQueriesAPI.pricesComparisonBySegment(apiParams.segmento_id, apiParams.periodo, options);
+    console.log('[Analytics] Raw API response:', {
+      standard: rawData?.standard?.length || 0,
+      real: rawData?.real?.length || 0
+    });
+
+    // ✅ Transformar datos (reutiliza la función existente)
+    const result = transformPriceComparison(rawData, { 
+      gestorId, 
+      segmentoInfo,
+      periodo,
+      ...options 
+    });
+    
+    console.log(`[Analytics] === getPriceComparisonBySegment END ===`);
+    console.log(`[Analytics] Final result meta:`, result.meta);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('[Analytics] Error fetching price comparison by segment:', error.message);
+    return generateMockPriceComparison(gestorId, segmentoInfo);
+  }
+}
+
+/* =========================================
+ * Analítica auxiliar EXISTENTE
+ * ========================================= */
+
+async function getPricesComparison({ gestor_id, producto_id, periodo } = {}, cfg) {
+  const payload = {};
+  
+  if (gestor_id) {
+    const numericId = parseInt(gestor_id, 10);
+    if (!isNaN(numericId)) {
+      payload.gestor_id = numericId;
+    }
+  }
+  
+  if (producto_id) {
+    payload.producto_id = producto_id;
+  }
+  
+  if (periodo) {
+    payload.periodo = String(periodo);
+  }
+
+  const data = await dataQueriesAPI.pricesComparison(payload, cfg);
+  const transformed = transformPriceComparison(data, { gestorId: gestor_id });
+  
+  return {
+    table: transformed.table || [],
+    bar: {
+      labels: transformed.labels || [],
+      datasets: [{
+        label: "Δ Precio (real - std)",
+        data: (transformed.table || []).map(r => r.delta_abs || 0),
+        backgroundColor: (transformed.table || []).map(r => {
+          const delta = r.delta_abs || 0;
+          return delta >= 0 ? SEMAPHORE_COLORS.Rojo : SEMAPHORE_COLORS.Verde;
+        }),
+      }],
+    },
+    raw: data,
+    meta: transformed.meta || {},
+  };
+}
+
+/* =========================================
+ * ✅ EXPORTS COMPLETOS Y ACTUALIZADOS
+ * ========================================= */
+
+const analyticsService = {
+  // ✅ FUNCIONES PRINCIPALES PARA DASHBOARD DIRECCIÓN
+  getDirectionChartData,
+  transformBackendChartData,
+  pivotChart,
+  interpretChartMessage,
+  getChartMeta,
+
+  // ✅ NUEVA FUNCIÓN OPTIMIZADA
+  getUnifiedKPIData,
+
+  // llamadas crudas / normalizadas EXISTENTES
+  fetchVariance,
+  getVarianceBridge,
+  getVarianceChartData,
+  createServerChartFromBridge,
+
+  // ✅ FUNCIONES PRINCIPALES CORREGIDAS (AHORA ASYNC)
+  getTopClientsChartData,
+  getProductMixChartData,
+  getPriceComparisonChartData,
+  getPriceComparisonBySegment,
+
+  // ✅ FUNCIONES DE SEGMENTACIÓN DINÁMICAS
+  getSegmentInfo,
+  getSegmentForGestor,
+  getSegmentForGestorSafe,
+  filterDataBySegment,
+
+  // auxiliares
+  getPricesComparison,
+
+  // transformaciones
+  transformTopClients,
+  transformProductMix,
+  transformPriceComparison,
+
+  // generadores mock
+  generateMockTopClients,
+  generateMockProductMix,
+  generateMockPriceComparison,
+  generateMockDirectionChart,
+
+  // normalizaciones
+  normalizeVarianceBridge,
+  toBarChartDataset,
+  toSemaphoreDonutDataset,
+  toTableRows,
+
+  // ✅ CACHE OPTIMIZADO
+  clearAnalyticsCache,
+  _clearCacheForPeriod,
+  _clearCacheForGestor,
+
+  // constantes
+  SCOPE,
+  VS,
+  SEMAPHORE_COLORS,
+  PRODUCT_COLORS,
+  CLIENT_COLORS,
+  DIRECTION_COLORS,
+};
+
+export default analyticsService;
+export {
+  analyticsService,
+  
+  // ✅ NUEVAS EXPORTACIONES PARA DASHBOARD DIRECCIÓN
+  getDirectionChartData,
+  transformBackendChartData,
+  pivotChart,
+  interpretChartMessage,
+  getChartMeta,
+  
+  // ✅ OPTIMIZACIÓN NUEVA
+  getUnifiedKPIData,
+  
+  // EXISTENTES
+  fetchVariance,
+  getVarianceBridge,
+  getVarianceChartData,
+  createServerChartFromBridge,
+  getPricesComparison,
+  getTopClientsChartData,
+  getProductMixChartData,
+  getPriceComparisonChartData,
+  getPriceComparisonBySegment,
+  getSegmentInfo,
+  getSegmentForGestor,
+  getSegmentForGestorSafe,
+  filterDataBySegment,
+  transformTopClients,
+  transformProductMix,
+  transformPriceComparison,
+  normalizeVarianceBridge,
+  toBarChartDataset,
+  toSemaphoreDonutDataset,
+  toTableRows,
+  clearAnalyticsCache,
+  generateMockDirectionChart,
+  SCOPE,
+  VS,
+  SEMAPHORE_COLORS,
+  PRODUCT_COLORS,
+  CLIENT_COLORS,
+  DIRECTION_COLORS,
+};

@@ -1,11 +1,24 @@
 // src/index.js
-// Punto de entrada principal de la aplicación CDG con React 18 y optimizaciones
-
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
+import 'antd/dist/reset.css';
 import reportWebVitals from './reportWebVitals';
+
+// ✅ AGREGAR ESTO: Suprimir error de extensiones del navegador
+if (process.env.NODE_ENV === 'development') {
+  const originalConsoleError = console.error;
+  console.error = function(...args) {
+    // Filtrar el error específico de extensiones
+    if (typeof args[0] === 'string' && 
+        args[0].includes('Attempting to use a disconnected port object')) {
+      return; // No mostrar este error
+    }
+    // Mostrar todos los demás errores normalmente
+    originalConsoleError.apply(console, args);
+  };
+}
 
 // ✅ CORREGIDO: Variables globales con puerto 8000 para chat
 window.CDG_CONFIG = {
@@ -43,9 +56,7 @@ if (process.env.NODE_ENV === 'development') {
 
 // Renderizar la aplicación
 root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <App />
 );
 
 // Configuración de Web Vitals para monitoreo de rendimiento

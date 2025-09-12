@@ -1,0 +1,1239 @@
+// frontend/src/components/Dashboard/ChatInterface.jsx
+/* eslint-disable no-console */
+
+/**
+ * ChatInterface v11.0 — Perfect Integration (Chat Agent v10.0 + CDG Agent v6.0)
+ * -----------------------------------------------------------------------------
+ * ✅ CORREGIDO: Ciclo de re-renders y WebSocket estable
+ * ✅ INTEGRADO: Perfect Integration con Chat Agent v10.0 + CDG Agent v6.0
+ * ✅ MEJORADO: UI profesional con tema Banca March corporativo
+ * ✅ OPTIMIZADO: Dependencies estabilizadas y useEffect controlado
+ * ✅ DIFERENCIADO: Chat general (NO pivoteo) vs ConversationalPivot
+ */
+
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  Card,
+  Input,
+  Button,
+  Avatar,
+  Typography,
+  Space,
+  Badge,
+  Tag,
+  Empty,
+  Alert,
+  Tooltip,
+  Spin,
+  Switch,
+  notification,
+  Dropdown,
+  Row,
+  Col,
+  Statistic
+} from 'antd';
+import {
+  SendOutlined,
+  RobotOutlined,
+  UserOutlined,
+  MessageOutlined,
+  WifiOutlined,
+  DisconnectOutlined,
+  ThunderboltOutlined,
+  ReloadOutlined,
+  CopyOutlined,
+  LoadingOutlined,
+  ExpandOutlined,
+  CompressOutlined,
+  EyeOutlined,
+  CheckCircleOutlined,
+  SettingOutlined,
+  FileTextOutlined,
+  BarChartOutlined,
+  BulbOutlined,
+  TeamOutlined,
+  ArrowUpOutlined
+} from '@ant-design/icons';
+import PropTypes from 'prop-types';
+
+// ✅ Services actualizados v11.0
+import chatService from '../../services/chatService';
+import reportService from '../../services/reportService';
+import theme from '../../styles/theme';
+
+const { TextArea } = Input;
+const { Text, Title } = Typography;
+
+/**
+ * ✅ ChatInterface - CHAT GENERAL CDG v11.0 (NO PIVOTEO)
+ */
+const ChatInterface = ({
+  scope = 'direccion',
+  periodo = null,
+  gestorId = null,
+  currentChartConfig = null,
+  onNewChart = () => {},
+  onCommand = () => {},
+  onReportGenerated = () => {},
+  suggestions = null,
+  expanded = false,
+  className = '',
+  style = {}
+}) => {
+  
+  // ✅ ESTADOS PRINCIPALES
+  const [messages, setMessages] = useState([]);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [error, setError] = useState(null);
+  const [useWebSocket, setUseWebSocket] = useState(true);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(expanded);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [lastAnalysisType, setLastAnalysisType] = useState(null);
+  const [sessionMetrics, setSessionMetrics] = useState({
+    messages_sent: 0,
+    queries_processed: 0,
+    reports_generated: 0,
+    charts_requested: 0
+  });
+
+  // ✅ REFERENCIAS
+  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const inputRef = useRef(null);
+  const sessionRef = useRef(null);
+  const reconnectTimer = useRef(null);
+  const isManualDisconnect = useRef(false);
+  const isMounted = useRef(true);
+  const initializationRef = useRef(false); // ✅ NUEVO: Evitar doble inicialización
+
+  // ✅ USER ID ESTABLE - FIJO por scope y gestorId
+  const userId = useMemo(() => {
+    const baseId = `cdg-chat-v11-${scope}`;
+    const gestorPart = scope === 'gestor' && gestorId ? `-${gestorId}` : '';
+    const randomPart = Math.random().toString(36).substr(2, 6);
+    return `${baseId}${gestorPart}-${randomPart}`;
+  }, [scope, gestorId]); // ✅ CORREGIDO: Solo depende de scope y gestorId
+
+  // ✅ CONTEXTO ENRIQUECIDO v11.0 - ESTABILIZADO
+  const buildContext = useCallback(() => ({
+    scope,
+    periodo: periodo || undefined,
+    gestor_id: scope === 'gestor' ? gestorId : undefined,
+    user_role: scope,
+    chat_type: 'general',
+    current_chart_available: !!currentChartConfig,
+    session_id: userId,
+    integration_version: '11.0',
+    chat_agent_version: '10.0',
+    cdg_agent_version: '6.0',
+    perfect_integration: true
+  }), [scope, periodo, gestorId, currentChartConfig, userId]);
+
+  // ✅ MENSAJE DE BIENVENIDA ESTABLE - MEMOIZADO CORRECTAMENTE
+  const welcomeMessage = useMemo(() => ({
+    id: `welcome-${scope}-${gestorId || 'default'}`,
+    type: 'assistant',
+    content: scope === 'direccion' 
+      ? `¡Hola! Soy tu **Asistente CDG v11.0 para Análisis Corporativo**. Con **Perfect Integration** (Chat Agent v10.0 + CDG Agent v6.0) puedo ayudarte con:
+
+**📊 Análisis Inteligente:**
+• KPIs consolidados y comparativas
+• Rankings de gestores y centros
+• Detección de desviaciones críticas
+• Análisis de márgenes y volumen
+
+**🎯 Funciones Avanzadas:**
+• Generación automática de reportes
+• Clasificación inteligente de consultas
+• Insights basados en IA
+• Recomendaciones ejecutivas
+
+**💡 Ejemplos de consultas:**
+• *"¿Cuáles son los KPIs críticos?"*
+• *"Genera reporte ejecutivo del período"*
+• *"¿Qué desviaciones necesitan atención?"*
+
+¿En qué análisis corporativo te puedo ayudar?`
+      : `¡Hola${gestorId ? ` Gestor ${gestorId}` : ''}! Soy tu **Asistente CDG v11.0 Personal**. Con **Perfect Integration** puedo ayudarte con:
+
+**👤 Tu Performance:**
+• Análisis de tu cartera personalizada
+• Comparativas vs otros gestores
+• Oportunidades de cross-selling
+• KPIs individuales en tiempo real
+
+**🎯 Análisis Inteligente:**
+• Top clientes por rentabilidad
+• Mix de productos optimizado  
+• Desviaciones en tu gestión
+• Recomendaciones personalizadas
+
+**📈 Funciones Premium:**
+• Reportes automáticos personales
+• Proyecciones de incentivos
+• Análisis predictivo de cartera
+
+¿Qué te gustaría consultar sobre tu gestión?`,
+    timestamp: new Date(),
+    recommendations: [
+      scope === 'direccion' ? 'Dashboard corporativo principal' : 'Mi dashboard personal',
+      scope === 'direccion' ? 'Top 5 gestores críticos' : 'Mi posición en rankings',
+      scope === 'direccion' ? 'Alertas desviaciones críticas' : 'Mis oportunidades de mejora',
+      scope === 'direccion' ? 'Reporte ejecutivo consolidado' : 'Mi reporte de performance'
+    ]
+  }), [scope, gestorId]); // ✅ CORREGIDO: Solo scope y gestorId
+
+  // ✅ SUGERENCIAS CONTEXTUALES - ESTABILIZADAS
+  const defaultSuggestions = useMemo(() => {
+    if (scope === 'direccion') {
+      return [
+        '📊 ¿Cuáles son los KPIs corporativos principales?',
+        '🏆 ¿Qué gestores lideran el ranking por margen?', 
+        '🚨 ¿Hay desviaciones críticas vs presupuesto?',
+        '📈 Genera un reporte ejecutivo consolidado',
+        '🎯 ¿Qué centros requieren atención inmediata?',
+        '💹 Analiza las tendencias de volumen',
+        '🔍 Detecta anomalías en los datos',
+        '📋 Resumen del estado del negocio'
+      ];
+    } else {
+      return [
+        '📈 ¿Cómo está mi performance este período?',
+        '👥 ¿Cuáles son mis mejores clientes por margen?',
+        '🏆 ¿Cómo me comparo con otros gestores?',
+        '🎯 ¿Qué productos debería priorizar?',
+        '💡 ¿Tengo oportunidades de cross-selling?',
+        '📊 Genera mi reporte personal',
+        '🎁 ¿Cuáles son mis proyecciones de incentivos?',
+        '🔍 Analiza mi cartera detalladamente'
+      ];
+    }
+  }, [scope]);
+
+  const activeSuggestions = suggestions || defaultSuggestions;
+
+  // ✅ PROCESAR MENSAJE - ESTABILIZADO
+  const handleChatMessage = useCallback((data) => {
+    if (!isMounted.current) return;
+    
+    console.log('[ChatInterface] 📥 Chat response received:', data);
+
+    const responseData = data?.data || data;
+    const { 
+      text, 
+      response, 
+      recommendations = [], 
+      metadata = {},
+      charts = [],
+      reports = [],
+      analysis_type,
+      confidence_score,
+      processing_time,
+      data_sources = []
+    } = responseData;
+
+    const content = text || response || 'Respuesta procesada correctamente.';
+
+    if (analysis_type) {
+      setLastAnalysisType(analysis_type);
+    }
+
+    const assistantMessage = {
+      id: `assistant-${Date.now()}`,
+      type: 'assistant',
+      content,
+      timestamp: new Date(),
+      recommendations: Array.isArray(recommendations) ? recommendations.slice(0, 6) : [],
+      metadata: {
+        ...metadata,
+        confidence_score,
+        processing_time,
+        analysis_type,
+        data_sources,
+        chat_agent_version: '10.0',
+        cdg_agent_version: '6.0'
+      },
+      charts: charts || [],
+      reports: reports || [],
+      source: 'perfect_integration'
+    };
+
+    setMessages(prev => [...prev, assistantMessage]);
+    setIsSending(false);
+    setIsTyping(false);
+
+    setSessionMetrics(prev => ({
+      ...prev,
+      queries_processed: prev.queries_processed + 1,
+      charts_requested: prev.charts_requested + (charts?.length || 0),
+      reports_generated: prev.reports_generated + (reports?.length || 0)
+    }));
+
+    if (charts && charts.length > 0) {
+      onNewChart(charts[0]);
+    }
+    
+    if (reports && reports.length > 0) {
+      onReportGenerated(reports[0]);
+    }
+
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'end' 
+        });
+      }
+    }, 150);
+  }, [onNewChart, onReportGenerated]);
+
+  // ✅ INICIALIZAR WEBSOCKET - PROTEGIDO CONTRA DOBLE INICIALIZACIÓN
+  const initializeWebSocket = useCallback(() => {
+    if (!isMounted.current || initializationRef.current) return;
+    if (sessionRef.current && sessionRef.current.readyState === WebSocket.CONNECTING) return;
+
+    console.log('[ChatInterface] 🌐 Initializing WebSocket with Perfect Integration...');
+    initializationRef.current = true;
+
+    // Limpiar sesión anterior
+    if (sessionRef.current) {
+      try {
+        sessionRef.current.close();
+      } catch (e) {
+        console.warn('Error closing previous session:', e);
+      }
+      sessionRef.current = null;
+    }
+
+    try {
+      const session = chatService.createChatSession(userId, {
+        onMessage: handleChatMessage,
+        onOpen: () => {
+          if (isMounted.current) {
+            console.log('[ChatInterface] ✅ WebSocket connected with Perfect Integration');
+            setIsConnected(true);
+            setConnectionStatus('connected');
+            setConnectionAttempts(0);
+            setError(null);
+          }
+        },
+        onClose: (event) => {
+          if (isMounted.current && !isManualDisconnect.current) {
+            console.log('[ChatInterface] 🔌 WebSocket closed:', event?.code || 'unknown');
+            setIsConnected(false);
+            setConnectionStatus('disconnected');
+            initializationRef.current = false; // ✅ Permitir reconexión
+            attemptReconnect();
+          }
+        },
+        onError: (error) => {
+          if (isMounted.current && !isManualDisconnect.current) {
+            console.error('[ChatInterface] ❌ WebSocket error:', error);
+            setIsConnected(false);
+            setConnectionStatus('error');
+            initializationRef.current = false; // ✅ Permitir reconexión
+            attemptReconnect();
+          }
+        },
+        onTyping: ({ active, analysis_type }) => {
+          if (isMounted.current) {
+            setIsTyping(active);
+            if (analysis_type) {
+              setLastAnalysisType(analysis_type);
+            }
+          }
+        }
+      });
+
+      sessionRef.current = session;
+      session.connect();
+
+    } catch (error) {
+      console.error('[ChatInterface] Error initializing WebSocket:', error);
+      initializationRef.current = false;
+      if (!isManualDisconnect.current && isMounted.current) {
+        attemptReconnect();
+      }
+    }
+  }, [userId, handleChatMessage]);
+
+  // ✅ LÓGICA DE RECONEXIÓN - ESTABILIZADA
+  const attemptReconnect = useCallback(() => {
+    if (!isMounted.current || isManualDisconnect.current || connectionAttempts >= 3) {
+      console.log('[ChatInterface] 🔄 Max attempts reached, switching to HTTP fallback');
+      if (isMounted.current) {
+        setUseWebSocket(false);
+        setConnectionStatus('http-fallback');
+        setConnectionAttempts(0);
+        setIsConnected(true);
+        initializationRef.current = false;
+      }
+      return;
+    }
+
+    const delay = Math.min(2000 * Math.pow(1.5, connectionAttempts), 8000);
+    console.log(`[ChatInterface] 🕒 Reconnecting in ${delay}ms (attempt ${connectionAttempts + 1})`);
+
+    setConnectionStatus(`reconnecting-${connectionAttempts + 1}`);
+
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+    }
+
+    reconnectTimer.current = setTimeout(() => {
+      if (isMounted.current && !isManualDisconnect.current) {
+        setConnectionAttempts(prev => prev + 1);
+        initializationRef.current = false;
+        initializeWebSocket();
+      }
+    }, delay);
+  }, [connectionAttempts, initializeWebSocket]);
+
+  // ✅ ENVIAR MENSAJE - ESTABILIZADO
+  const sendMessage = useCallback(async (messageText, isQuickAction = false, messageType = 'query') => {
+    if (!messageText.trim() || isSending || !isMounted.current) return;
+
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      type: 'user',
+      content: messageText,
+      timestamp: new Date(),
+      isQuickAction,
+      messageType
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setCurrentMessage('');
+    setIsSending(true);
+    setIsTyping(true);
+    setError(null);
+
+    setSessionMetrics(prev => ({
+      ...prev,
+      messages_sent: prev.messages_sent + 1
+    }));
+
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'end' 
+        });
+      }
+    }, 100);
+
+    try {
+      const context = buildContext();
+
+      if (useWebSocket && sessionRef.current && isConnected) {
+        console.log('[ChatInterface] 🌐 Sending via WebSocket');
+        sessionRef.current.send({
+          message: messageText,
+          context,
+          message_type: messageType,
+          include_analysis: true,
+          include_recommendations: true
+        });
+      } else {
+        console.log('[ChatInterface] 📡 Sending via HTTP');
+        
+        const response = await chatService.sendMessage({
+          user_id: userId,
+          message: messageText,
+          periodo,
+          gestor_id: scope === 'gestor' ? gestorId : undefined,
+          context,
+          include_charts: false,
+          include_recommendations: true,
+          include_analysis: true,
+          chart_interaction_type: 'query',
+          message_type: messageType
+        });
+
+        handleChatMessage(response);
+      }
+
+    } catch (error) {
+      console.error('[ChatInterface] ❌ Send error:', error);
+      setError(error?.message || 'Error al enviar mensaje');
+      setIsSending(false);
+      setIsTyping(false);
+
+      const errorMessage = {
+        id: `error-${Date.now()}`,
+        type: 'assistant',
+        content: `❌ **Error de Comunicación**\n\n${error?.message || 'No se pudo procesar tu consulta'}.\n\nPor favor, verifica tu conexión e inténtalo de nuevo.`,
+        timestamp: new Date(),
+        isError: true,
+        recommendations: ['Reintentar mensaje', 'Verificar conexión', 'Cambiar a modo HTTP']
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    }
+  }, [isSending, isConnected, useWebSocket, buildContext, userId, periodo, gestorId, scope, handleChatMessage]);
+
+  // ✅ GENERAR REPORTE
+  const generateReport = useCallback(async (reportType = 'business_review') => {
+    if (isGeneratingReport || !isMounted.current) return;
+    
+    setIsGeneratingReport(true);
+    
+    try {
+      let report;
+      if (reportType === 'business_review' && gestorId) {
+        report = await reportService.businessReview({
+          user_id: userId,
+          gestor_id: gestorId,
+          periodo,
+          options: { include_complex_analysis: true }
+        });
+      } else if (reportType === 'executive_summary') {
+        report = await reportService.executiveSummary({
+          user_id: userId,
+          periodo,
+          options: { include_integration_status: true }
+        });
+      } else if (reportType === 'deviation_analysis') {
+        report = await reportService.deviationAnalysis(periodo, {
+          include_critical: true,
+          include_margen: true,
+          include_volumen: true
+        });
+      }
+
+      if (report) {
+        const reportMessage = {
+          id: `report-${Date.now()}`,
+          type: 'assistant',
+          content: `📋 **Reporte generado exitosamente**\n\n**${report.title}**\n\nEl reporte ha sido generado con análisis complejo integrado.`,
+          timestamp: new Date(),
+          reports: [report],
+          recommendations: ['Descargar reporte', 'Análisis adicional']
+        };
+
+        setMessages(prev => [...prev, reportMessage]);
+        onReportGenerated(report);
+        
+        notification.success({
+          message: 'Reporte Generado',
+          description: `${report.title} generado exitosamente`,
+          duration: 3,
+          placement: 'bottomRight'
+        });
+      }
+
+    } catch (error) {
+      console.error('[ChatInterface] ❌ Report generation error:', error);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  }, [isGeneratingReport, userId, gestorId, periodo, onReportGenerated]);
+
+  // ✅ HANDLERS DE UI
+  const handleSend = useCallback(() => {
+    sendMessage(currentMessage);
+  }, [currentMessage, sendMessage]);
+
+  const handleKeyPress = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
+  const handleSuggestion = useCallback((suggestion) => {
+    if (suggestion.includes('reporte') || suggestion.includes('Reporte')) {
+      if (suggestion.includes('ejecutivo') || suggestion.includes('consolidado')) {
+        generateReport('executive_summary');
+      } else if (suggestion.includes('personal') || suggestion.includes('mi reporte')) {
+        generateReport('business_review');
+      } else if (suggestion.includes('desviación') || suggestion.includes('crítica')) {
+        generateReport('deviation_analysis');
+      } else {
+        sendMessage(suggestion, true, 'report_request');
+      }
+    } else {
+      sendMessage(suggestion, true);
+    }
+  }, [sendMessage, generateReport]);
+
+  const handleCopyMessage = useCallback((content) => {
+    navigator.clipboard.writeText(content).then(() => {
+      notification.success({
+        message: 'Copiado',
+        description: 'Mensaje copiado al portapapeles',
+        duration: 2,
+        placement: 'bottomRight'
+      });
+    });
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    const lastUserMessage = [...messages].reverse().find(m => m.type === 'user');
+    if (lastUserMessage) {
+      sendMessage(lastUserMessage.content, lastUserMessage.isQuickAction, lastUserMessage.messageType);
+    }
+  }, [messages, sendMessage]);
+
+  const handleReconnect = useCallback(() => {
+    setConnectionAttempts(0);
+    setError(null);
+    isManualDisconnect.current = false;
+    initializationRef.current = false;
+    initializeWebSocket();
+  }, [initializeWebSocket]);
+
+  const handleWebSocketToggle = useCallback((checked) => {
+    isManualDisconnect.current = !checked;
+    
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+    }
+
+    if (sessionRef.current) {
+      try {
+        sessionRef.current.close();
+      } catch (e) {
+        // Ignore
+      }
+      sessionRef.current = null;
+    }
+
+    setConnectionAttempts(0);
+    setUseWebSocket(checked);
+    setError(null);
+    initializationRef.current = false;
+    
+    if (checked) {
+      setTimeout(() => initializeWebSocket(), 100);
+    } else {
+      setConnectionStatus('http-ready');
+      setIsConnected(true);
+    }
+  }, [initializeWebSocket]);
+
+  const handleToggleExpansion = useCallback(() => {
+    setIsExpanded(prev => !prev);
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'end' 
+        });
+      }
+    }, 300);
+  }, []);
+
+  // ✅ MENU DE ACCIONES
+  const advancedActionsMenu = {
+    items: [
+      {
+        key: 'generate-report',
+        icon: <FileTextOutlined />,
+        label: 'Generar Reporte',
+        children: [
+          {
+            key: 'business-review',
+            label: scope === 'gestor' ? 'Reporte Personal' : 'Business Review',
+            onClick: () => generateReport('business_review')
+          },
+          {
+            key: 'executive-summary', 
+            label: 'Resumen Ejecutivo',
+            onClick: () => generateReport('executive_summary')
+          },
+          {
+            key: 'deviation-analysis',
+            label: 'Análisis Desviaciones',
+            onClick: () => generateReport('deviation_analysis')
+          }
+        ]
+      },
+      {
+        key: 'clear-chat',
+        icon: <ReloadOutlined />,
+        label: 'Limpiar Chat',
+        onClick: () => {
+          setMessages([welcomeMessage]);
+          setSessionMetrics({
+            messages_sent: 0,
+            queries_processed: 0,
+            reports_generated: 0,
+            charts_requested: 0
+          });
+        }
+      }
+    ]
+  };
+
+  // ✅ INICIALIZACIÓN - CORREGIDA
+  useEffect(() => {
+    // ✅ Evitar doble inicialización en desarrollo
+    if (initializationRef.current) return;
+
+    isMounted.current = true;
+    
+    console.log('[ChatInterface] 🚀 Component initialized with Perfect Integration v11.0');
+    setMessages([welcomeMessage]);
+    setError(null);
+    isManualDisconnect.current = false;
+    
+    if (useWebSocket) {
+      setConnectionStatus('connecting');
+      setTimeout(() => {
+        if (isMounted.current && !initializationRef.current) {
+          initializeWebSocket();
+        }
+      }, 500); // ✅ Delay mayor para evitar hot reload issues
+    } else {
+      setConnectionStatus('http-ready');
+      setIsConnected(true);
+    }
+
+    return () => {
+      console.log('[ChatInterface] 🧹 Component cleanup');
+      isMounted.current = false;
+      isManualDisconnect.current = true;
+      initializationRef.current = false;
+
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+      }
+
+      if (sessionRef.current) {
+        try {
+          sessionRef.current.close();
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        sessionRef.current = null;
+      }
+    };
+  }, []); // ✅ CORREGIDO: Sin dependencies para evitar re-renders
+
+  // ✅ EFECTO PARA CARGAR MENSAJE DE BIENVENIDA - SEPARADO
+  useEffect(() => {
+    if (messages.length === 0) {
+      setMessages([welcomeMessage]);
+    }
+  }, [welcomeMessage]);
+
+  // ✅ SCROLL AUTOMÁTICO
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'end' 
+        });
+      }
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [messages, isTyping]);
+
+  // ✅ RENDERIZAR MENSAJE
+  const renderMessage = (message) => {
+    const isUser = message.type === 'user';
+    const isError = message.isError;
+    const hasAdvancedData = message.metadata || message.charts?.length > 0 || message.reports?.length > 0;
+
+    return (
+      <div 
+        key={message.id} 
+        style={{ 
+          display: 'flex', 
+          justifyContent: isUser ? 'flex-end' : 'flex-start',
+          marginBottom: 16,
+          alignItems: 'flex-start'
+        }}
+      >
+        {!isUser && (
+          <Avatar 
+            icon={<RobotOutlined />} 
+            style={{ 
+              backgroundColor: isError 
+                ? theme.colors?.error || '#ff4d4f' 
+                : hasAdvancedData 
+                  ? theme.colors?.bmGreenLight || '#52c41a'
+                  : theme.colors?.bmGreenPrimary || '#1890ff',
+              marginRight: 12,
+              flexShrink: 0
+            }} 
+            size="small"
+          />
+        )}
+        
+        <div style={{ 
+          maxWidth: isExpanded ? '90%' : '80%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isUser ? 'flex-end' : 'flex-start'
+        }}>
+          <div style={{
+            backgroundColor: isUser 
+              ? theme.colors?.bmGreenPrimary || '#1890ff'
+              : isError 
+                ? `${theme.colors?.error || '#ff4d4f'}10`
+                : hasAdvancedData
+                  ? `${theme.colors?.bmGreenLight || '#52c41a'}08`
+                  : theme.colors?.backgroundLight || '#fafafa',
+            color: isUser ? 'white' : theme.colors?.textPrimary || '#333',
+            padding: '12px 16px',
+            borderRadius: 16,
+            borderTopRightRadius: isUser ? 4 : 16,
+            borderTopLeftRadius: isUser ? 16 : 4,
+            marginBottom: 6,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            position: 'relative',
+            border: isError 
+              ? `1px solid ${theme.colors?.error || '#ff4d4f'}40` 
+              : hasAdvancedData
+                ? `1px solid ${theme.colors?.bmGreenLight || '#52c41a'}40`
+                : 'none',
+            wordBreak: 'break-word'
+          }}>
+            <Text style={{ 
+              color: isUser ? 'white' : theme.colors?.textPrimary || '#333',
+              fontSize: 14,
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap'
+            }}>
+              {message.content}
+            </Text>
+            
+            <div style={{ position: 'absolute', top: -8, right: 8, display: 'flex', gap: 4 }}>
+              {message.isQuickAction && (
+                <Tag size="small" color="blue" style={{ fontSize: 10 }}>
+                  Rápida
+                </Tag>
+              )}
+              {message.metadata?.analysis_type && (
+                <Tag size="small" color="green" style={{ fontSize: 10 }}>
+                  {message.metadata.analysis_type.replace('_', ' ')}
+                </Tag>
+              )}
+              {message.metadata?.confidence_score && (
+                <Tag 
+                  size="small" 
+                  color={message.metadata.confidence_score > 0.8 ? 'green' : 'orange'}
+                  style={{ fontSize: 10 }}
+                >
+                  {Math.round(message.metadata.confidence_score * 100)}%
+                </Tag>
+              )}
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {message.timestamp.toLocaleTimeString()}
+            </Text>
+            
+            {!isUser && (
+              <Button
+                type="text"
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => handleCopyMessage(message.content)}
+                style={{ fontSize: 10, padding: 0, height: 'auto' }}
+              />
+            )}
+            
+            {message.metadata?.processing_time && (
+              <Text type="secondary" style={{ fontSize: 10 }}>
+                <ThunderboltOutlined /> {message.metadata.processing_time}ms
+              </Text>
+            )}
+          </div>
+          
+          {message.recommendations && message.recommendations.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {message.recommendations.slice(0, 4).map((rec, index) => (
+                <Tag
+                  key={index}
+                  style={{ 
+                    cursor: 'pointer',
+                    borderColor: theme.colors?.bmGreenLight,
+                    color: theme.colors?.bmGreenPrimary,
+                    fontSize: 11
+                  }}
+                  onClick={() => handleSuggestion(rec)}
+                >
+                  {rec}
+                </Tag>
+              ))}
+            </div>
+          )}
+
+          {(message.charts?.length > 0 || message.reports?.length > 0) && (
+            <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+              {message.charts?.length > 0 && (
+                <Tag color="blue" style={{ fontSize: 10 }}>
+                  <BarChartOutlined /> {message.charts.length} gráfico{message.charts.length > 1 ? 's' : ''}
+                </Tag>
+              )}
+              {message.reports?.length > 0 && (
+                <Tag color="green" style={{ fontSize: 10 }}>
+                  <FileTextOutlined /> {message.reports.length} reporte{message.reports.length > 1 ? 's' : ''}
+                </Tag>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {isUser && (
+          <Avatar 
+            icon={<UserOutlined />} 
+            style={{ 
+              backgroundColor: theme.colors?.textSecondary || '#666',
+              marginLeft: 12,
+              flexShrink: 0
+            }} 
+            size="small"
+          />
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card
+      className={className}
+      style={{
+        height: isExpanded ? '90vh' : '70vh', // ✅ CORREGIDO: Altura mínima más grande
+        minHeight: '600px', // ✅ NUEVO: Altura mínima garantizada
+        display: 'flex',
+        flexDirection: 'column',
+        transition: 'height 0.3s ease',
+        ...style
+      }}
+      styles={{ 
+        body: { 
+          padding: 0, 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column' 
+        } 
+      }}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Space>
+            <MessageOutlined style={{ color: theme.colors?.bmGreenPrimary }} />
+            <Title level={5} style={{ margin: 0 }}>
+              Chat CDG v11.0 - Perfect Integration
+            </Title>
+            <Badge 
+              count={scope === 'direccion' ? 'Corporativo' : 'Personal'} 
+              style={{ backgroundColor: theme.colors?.bmGreenPrimary }} 
+            />
+          </Space>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Tooltip title="Métricas de sesión">
+              <Space size={4} style={{ fontSize: 10, color: theme.colors?.textSecondary }}>
+                <Text type="secondary" style={{ fontSize: 10 }}>
+                  📤{sessionMetrics.messages_sent} 🔍{sessionMetrics.queries_processed} 📊{sessionMetrics.reports_generated}
+                </Text>
+              </Space>
+            </Tooltip>
+            
+            <Dropdown menu={advancedActionsMenu} placement="bottomRight">
+              <Button
+                type="text"
+                size="small"
+                icon={<SettingOutlined />}
+              />
+            </Dropdown>
+            
+            <Tooltip title={isExpanded ? 'Contraer' : 'Expandir'}>
+              <Button
+                type="text"
+                size="small"
+                icon={isExpanded ? <CompressOutlined /> : <ExpandOutlined />}
+                onClick={handleToggleExpansion}
+              />
+            </Tooltip>
+            
+            <Switch
+              size="small"
+              checked={useWebSocket}
+              onChange={handleWebSocketToggle}
+              checkedChildren={<WifiOutlined />}
+              unCheckedChildren={<DisconnectOutlined />}
+            />
+            
+            <Badge 
+              status={
+                connectionStatus === 'connected' ? 'success' :
+                connectionStatus.includes('reconnecting') ? 'processing' :
+                connectionStatus === 'http-ready' || connectionStatus === 'http-fallback' ? 'default' : 'error'
+              }
+              text={
+                connectionStatus === 'connected' ? 'v11.0' :
+                connectionStatus.includes('reconnecting') ? `Recon-${connectionStatus.split('-')[1]}` :
+                connectionStatus === 'http-ready' || connectionStatus === 'http-fallback' ? 'HTTP' : 'Error'
+              }
+              style={{ fontSize: 9 }}
+            />
+          </div>
+        </div>
+      }
+    >
+      <div style={{ 
+        padding: '12px 20px',
+        backgroundColor: `${theme.colors?.bmGreenPrimary || '#1890ff'}05`,
+        borderBottom: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`
+      }}>
+        <Row gutter={[16, 8]}>
+          <Col span={8}>
+            <Statistic
+              title="Catálogos"
+              value={6}
+              prefix={<TeamOutlined />}
+              valueStyle={{ fontSize: 14 }}
+            />
+          </Col>
+          <Col span={8}>
+            <Statistic
+              title="Flujos"
+              value={4}
+              prefix={<ArrowUpOutlined />}
+              valueStyle={{ fontSize: 14 }}
+            />
+          </Col>
+          <Col span={8}>
+            <Statistic
+              title="Queries"
+              value={8}
+              prefix={<BarChartOutlined />}
+              valueStyle={{ fontSize: 14 }}
+            />
+          </Col>
+        </Row>
+      </div>
+
+      {showSuggestions && activeSuggestions.length > 0 && (
+        <div style={{ 
+          padding: '16px 20px',
+          backgroundColor: `${theme.colors?.bmGreenLight || '#52c41a'}06`,
+          borderBottom: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`
+        }}>
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text strong style={{ fontSize: 12, color: theme.colors?.textSecondary }}>
+              <BulbOutlined style={{ marginRight: 4 }} />
+              Consultas Populares
+            </Text>
+            <Button 
+              type="text" 
+              size="small" 
+              onClick={() => setShowSuggestions(false)}
+              style={{ fontSize: 10, padding: '0 4px' }}
+            >
+              Ocultar
+            </Button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 8 }}>
+            {activeSuggestions.slice(0, 6).map((suggestion, index) => (
+              <Button
+                key={index}
+                size="small"
+                onClick={() => handleSuggestion(suggestion)}
+                disabled={isSending}
+                style={{
+                  borderColor: theme.colors?.bmGreenPrimary,
+                  color: theme.colors?.bmGreenPrimary,
+                  fontSize: 11,
+                  textAlign: 'left',
+                  height: 'auto',
+                  whiteSpace: 'normal',
+                  padding: '6px 12px'
+                }}
+                block
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div 
+        ref={messagesContainerRef}
+        style={{ 
+          flex: 1,
+          padding: '20px',
+          overflow: 'auto',
+          backgroundColor: theme.colors?.backgroundLight || '#fafafa',
+          maxHeight: isExpanded ? '75vh' : '500px', // ✅ CORREGIDO: Más grande
+          minHeight: '350px' // ✅ CORREGIDO: Altura mínima mayor
+        }}
+      >
+        {messages.length === 0 ? (
+          <Empty 
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="Inicia una conversación con el Agente CDG v11.0"
+            style={{ marginTop: 40 }}
+          />
+        ) : (
+          <>
+            {messages.map(renderMessage)}
+            {isTyping && (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'flex-start', 
+                marginBottom: 16,
+                alignItems: 'center'
+              }}>
+                <Avatar 
+                  icon={<RobotOutlined />} 
+                  style={{ 
+                    backgroundColor: theme.colors?.bmGreenPrimary,
+                    marginRight: 12
+                  }} 
+                  size="small"
+                />
+                <div style={{
+                  backgroundColor: theme.colors?.backgroundLight,
+                  padding: '12px 16px',
+                  borderRadius: 16,
+                  borderTopLeftRadius: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}>
+                  <Spin 
+                    indicator={<LoadingOutlined style={{ fontSize: 14 }} spin />} 
+                    size="small" 
+                  />
+                  <Text style={{ fontSize: 14, color: theme.colors?.textSecondary }}>
+                    Analizando con Perfect Integration...
+                  </Text>
+                  {isGeneratingReport && (
+                    <Tag size="small" color="blue">Generando reporte</Tag>
+                  )}
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} style={{ height: '1px' }} />
+          </>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ padding: '0 20px 12px' }}>
+          <Alert
+            message="Error de Comunicación"
+            description={error}
+            type="error"
+            showIcon
+            closable
+            onClose={() => setError(null)}
+            action={
+              <Space>
+                <Button 
+                  size="small" 
+                  onClick={handleRetry} 
+                  disabled={isSending}
+                  icon={<ReloadOutlined />}
+                >
+                  Reintentar
+                </Button>
+                <Button 
+                  size="small" 
+                  onClick={handleReconnect}
+                  type="primary"
+                  style={{ backgroundColor: theme.colors?.bmGreenPrimary }}
+                >
+                  Reconectar
+                </Button>
+              </Space>
+            }
+          />
+        </div>
+      )}
+
+      <div style={{ 
+        padding: '16px 20px',
+        backgroundColor: 'white',
+        borderTop: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`
+      }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <TextArea
+            ref={inputRef}
+            placeholder={`💬 ${scope === 'direccion' ? 'Pregunta sobre KPIs corporativos, rankings, análisis ejecutivos...' : 'Pregunta sobre tu cartera, rendimiento, comparativas...'}`}
+            value={currentMessage}
+            onChange={(e) => setCurrentMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isSending || isGeneratingReport}
+            autoSize={{ minRows: 1, maxRows: 4 }}
+            style={{ flex: 1 }}
+          />
+          <Button
+            type="primary"
+            icon={isSending || isGeneratingReport ? <LoadingOutlined spin /> : <SendOutlined />}
+            onClick={handleSend}
+            disabled={!currentMessage.trim() || isSending || isGeneratingReport}
+            style={{
+              backgroundColor: theme.colors?.bmGreenPrimary,
+              borderColor: theme.colors?.bmGreenPrimary,
+              height: 36
+            }}
+            loading={isSending || isGeneratingReport}
+          >
+            Enviar
+          </Button>
+        </div>
+        
+        <div style={{ 
+          marginTop: 8, 
+          fontSize: 11, 
+          color: theme.colors?.textSecondary,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Space size={16}>
+            <span>
+              <EyeOutlined style={{ marginRight: 4 }} />
+              Enter para enviar • Shift+Enter para nueva línea
+            </span>
+            <span style={{ color: theme.colors?.bmGreenPrimary }}>
+              <CheckCircleOutlined style={{ marginRight: 4 }} />
+              Perfect Integration v11.0
+            </span>
+          </Space>
+          
+          {periodo && (
+            <Text type="secondary" style={{ fontSize: 10 }}>
+              📋 {scope === 'direccion' ? 'Corporativo' : `Gestor ${gestorId}`} • {periodo}
+            </Text>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+ChatInterface.propTypes = {
+  scope: PropTypes.oneOf(['direccion', 'gestor']).isRequired,
+  periodo: PropTypes.string,
+  gestorId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  currentChartConfig: PropTypes.object,
+  onNewChart: PropTypes.func,
+  onCommand: PropTypes.func,
+  onReportGenerated: PropTypes.func,
+  suggestions: PropTypes.arrayOf(PropTypes.string),
+  expanded: PropTypes.bool,
+  className: PropTypes.string,
+  style: PropTypes.object
+};
+
+export default ChatInterface;

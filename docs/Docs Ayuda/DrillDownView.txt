@@ -1,0 +1,694 @@
+// frontend/src/components/Dashboard/DrillDownView.jsx
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { 
+  Card, 
+  Table, 
+  Input, 
+  Button, 
+  Space, 
+  Breadcrumb, 
+  Tag, 
+  Tooltip, 
+  Badge, 
+  Typography, 
+  Row, 
+  Col,
+  Statistic,
+  Empty,
+  Divider
+} from 'antd';
+import {
+  SearchOutlined,
+  ReloadOutlined,
+  HomeOutlined,
+  BankOutlined,
+  UserOutlined,
+  FileTextOutlined,
+  DollarOutlined,
+  TrophyOutlined,
+  WarningOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  MinusOutlined,
+  RightOutlined,
+  BarChartOutlined,
+  TeamOutlined,
+  ShopOutlined,
+  AppstoreOutlined
+} from '@ant-design/icons';
+import PropTypes from 'prop-types';
+import api from '../../services/api';
+import ErrorState from '../common/ErrorState';
+import Loader from '../common/Loader';
+import theme from '../../styles/theme';
+
+const { Search } = Input;
+const { Title, Text } = Typography;
+
+/**
+ * DrillDownView - Navegación jerárquica para análisis detallado CDG
+ * Soporte para dos modos: Dirección (vista corporativa) y Gestor (vista personal)
+ */
+const DrillDownView = ({
+  mode = 'direccion',
+  periodo,
+  gestorId = null,
+  defaultRootTab = null,
+  onSelectLeaf = null,
+  refreshToken = null,
+  style = {},
+  className = '',
+}) => {
+  const [currentPath, setCurrentPath] = useState([]);
+  const [tableData, setTableData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [searchText, setSearchText] = useState('');
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+
+  // Configuración de niveles por modo
+  const drillConfig = useMemo(() => ({
+    direccion: [
+      { 
+        key: 'centros', 
+        label: 'Centros', 
+        icon: BankOutlined, 
+        color: theme.colors.bmGreenPrimary,
+        endpoint: () => api.basic.centros(),
+        columns: ['nombre', 'contratos', 'ingresos', 'margen', 'margen_pct', 'gestores_count']
+      },
+      { 
+        key: 'gestores', 
+        label: 'Gestores', 
+        icon: UserOutlined, 
+        color: theme.colors.bmGreenLight,
+        endpoint: (parentId) => api.basic.gestoresByCentro(parentId),
+        columns: ['nombre', 'contratos', 'ingresos', 'margen', 'margen_pct', 'clientes_count']
+      },
+      { 
+        key: 'clientes', 
+        label: 'Clientes', 
+        icon: TeamOutlined, 
+        color: theme.colors.info,
+        endpoint: (parentId) => api.basic.clientesByGestor(parentId),
+        columns: ['nombre', 'contratos', 'volumen', 'margen', 'productos_count', 'last_activity']
+      },
+      { 
+        key: 'contratos', 
+        label: 'Contratos', 
+        icon: FileTextOutlined, 
+        color: theme.colors.success,
+        endpoint: (parentId) => api.basic.contractsByCliente(parentId),
+        columns: ['numero', 'producto', 'fecha_alta', 'volumen', 'estado', 'margen_pct'],
+        isLeaf: true
+      }
+    ],
+    gestor: [
+      { 
+        key: 'clientes', 
+        label: 'Mis Clientes', 
+        icon: TeamOutlined, 
+        color: theme.colors.bmGreenPrimary,
+        endpoint: () => api.basic.clientesByGestor(gestorId),
+        columns: ['nombre', 'contratos', 'volumen', 'margen', 'productos_count', 'last_contact']
+      },
+      { 
+        key: 'productos', 
+        label: 'Productos', 
+        icon: AppstoreOutlined, 
+        color: theme.colors.bmGreenLight,
+        endpoint: (parentId) => api.basic.productosByGestor(gestorId),
+        columns: ['nombre', 'contratos_count', 'volumen_total', 'margen_avg', 'precio_std', 'precio_real']
+      },
+      { 
+        key: 'contratos', 
+        label: 'Contratos', 
+        icon: FileTextOutlined, 
+        color: theme.colors.info,
+        endpoint: (parentId) => api.basic.contractsByCliente(parentId),
+        columns: ['numero', 'cliente', 'producto', 'fecha_alta', 'volumen', 'margen_pct'],
+        isLeaf: true
+      }
+    ]
+  }), [mode, gestorId]);
+
+  // Configurar ruta inicial
+  const initialLevel = useMemo(() => {
+    const levels = drillConfig[mode];
+    const rootKey = defaultRootTab || levels[0].key;
+    return levels.find(level => level.key === rootKey) || levels[0];
+  }, [mode, defaultRootTab, drillConfig]);
+
+  // Cargar datos del nivel actual
+  const loadLevelData = useCallback(async (levelConfig, parentId = null) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const rawData = await levelConfig.endpoint(parentId);
+      
+      // Normalizar datos a formato uniforme
+      const normalizedData = Array.isArray(rawData) ? rawData.map((item, index) => {
+        return {
+          key: item.id || item.CENTROID || item.GESTORID || item.CLIENTEID || item.CONTRATOID || index,
+          id: item.id || item.CENTROID || item.GESTORID || item.CLIENTEID || item.CONTRATOID || index,
+          nombre: item.nombre || item.DESCCENTRO || item.DESCGESTOR || item.NOMBRE_CLIENTE || item.DESC_PRODUCTO || item.NUMERO_CONTRATO || `Item ${index + 1}`,
+          tipo: levelConfig.key,
+          kpis: {
+            contratos: item.numcontratos || item.contratos_count || item.contratos || calculateContracts(item),
+            ingresos: item.ingresos || item.volumen || item.importe || calculateIngresos(item),
+            margen: item.margen || item.margen_neto || calculateMargen(item),
+            margen_pct: item.margen_pct || item.margen_porcentaje || calculateMargenPct(item),
+            clientes_count: item.clientes_count || item.numclientes || 0,
+            gestores_count: item.gestores_count || 0,
+            productos_count: item.productos_count || item.numproductos || 0,
+          },
+          flags: {
+            alerta: checkAlerta(item),
+            tendencia: calculateTendencia(item),
+            score: calculateScore(item),
+          },
+          meta: {
+            fecha_alta: item.fecha_alta,
+            fecha_modificacion: item.fecha_modificacion,
+            estado: item.estado || 'ACTIVO',
+            centro: item.centro || item.CENTROID,
+            gestor: item.gestor || item.GESTORID,
+            last_activity: item.last_activity,
+            last_contact: item.last_contact,
+            precio_std: item.precio_std,
+            precio_real: item.precio_real,
+          }
+        };
+      }) : [];
+
+      setTableData(normalizedData);
+      
+    } catch (err) {
+      console.error(`[DrillDownView] Error loading level ${levelConfig.key}:`, err);
+      setError(err);
+      // Fallback con datos mock para desarrollo
+      setTableData(generateMockData(levelConfig));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Helpers para cálculos y normalización de datos
+  const calculateContracts = (item) => item.total_contratos || item.num_contratos || 0;
+  const calculateIngresos = (item) => item.ingresos_totales || item.volumen_total || item.importe_total || 0;
+  const calculateMargen = (item) => item.margen_total || item.beneficio || (item.ingresos - item.gastos) || 0;
+  const calculateMargenPct = (item) => item.ingresos > 0 ? ((item.margen || 0) / item.ingresos) * 100 : 0;
+  
+  const checkAlerta = (item) => {
+    const margenPct = calculateMargenPct(item);
+    return margenPct < 10 ? 'rojo' : margenPct < 15 ? 'amarillo' : 'verde';
+  };
+  
+  const calculateTendencia = (item) => {
+    const variacion = item.variacion_mes || item.crecimiento || 0;
+    return variacion > 5 ? 'up' : variacion < -5 ? 'down' : 'stable';
+  };
+  
+  const calculateScore = (item) => {
+    const margen = calculateMargenPct(item);
+    const contratos = calculateContracts(item);
+    return Math.round((margen * 0.6) + (Math.min(contratos / 10, 10) * 4));
+  };
+
+  // Mock data generator para desarrollo
+  const generateMockData = (levelConfig) => {
+    const mockItems = {
+      centros: [
+        { id: 1, nombre: 'Madrid Centro', contratos: 245, ingresos: 2850000, margen: 428000, margen_pct: 15.2, gestores_count: 12 },
+        { id: 2, nombre: 'Barcelona Norte', contratos: 189, ingresos: 2145000, margen: 298000, margen_pct: 13.9, gestores_count: 9 },
+        { id: 3, nombre: 'Valencia', contratos: 156, ingresos: 1890000, margen: 245000, margen_pct: 13.0, gestores_count: 7 },
+      ],
+      gestores: [
+        { id: 101, nombre: 'Ana García López', contratos: 34, ingresos: 485000, margen: 72000, margen_pct: 14.8, clientes_count: 28 },
+        { id: 102, nombre: 'Carlos Martín Sánchez', contratos: 28, ingresos: 395000, margen: 58000, margen_pct: 14.7, clientes_count: 24 },
+        { id: 103, nombre: 'María José Ruiz', contratos: 31, ingresos: 445000, margen: 62000, margen_pct: 13.9, clientes_count: 26 },
+      ],
+      clientes: [
+        { id: 201, nombre: 'Constructora ABC S.L.', contratos: 5, volumen: 250000, margen: 35000, productos_count: 3, last_contact: '2025-09-01' },
+        { id: 202, nombre: 'Tech Solutions Inc.', contratos: 3, volumen: 180000, margen: 28000, productos_count: 2, last_contact: '2025-09-05' },
+        { id: 203, nombre: 'Familia González', contratos: 2, volumen: 120000, margen: 18000, productos_count: 2, last_contact: '2025-09-03' },
+      ],
+      contratos: [
+        { id: 301, numero: 'CT-2025-001', producto: 'Hipoteca Variable', fecha_alta: '2025-01-15', volumen: 180000, margen_pct: 2.5, estado: 'ACTIVO' },
+        { id: 302, numero: 'CT-2025-002', producto: 'Préstamo Personal', fecha_alta: '2025-02-20', volumen: 45000, margen_pct: 5.2, estado: 'ACTIVO' },
+        { id: 303, numero: 'CT-2025-003', producto: 'Cuenta Corriente Premium', fecha_alta: '2025-03-10', volumen: 25000, margen_pct: 8.1, estado: 'ACTIVO' },
+      ]
+    };
+    
+    return (mockItems[levelConfig.key] || []).map(item => ({
+      key: item.id,
+      id: item.id,
+      nombre: item.nombre || item.numero,
+      tipo: levelConfig.key,
+      kpis: {
+        contratos: item.contratos || 0,
+        ingresos: item.ingresos || item.volumen || 0,
+        margen: item.margen || 0,
+        margen_pct: item.margen_pct || 0,
+        clientes_count: item.clientes_count || 0,
+        gestores_count: item.gestores_count || 0,
+        productos_count: item.productos_count || 0,
+      },
+      flags: {
+        alerta: item.margen_pct > 15 ? 'verde' : item.margen_pct > 10 ? 'amarillo' : 'rojo',
+        tendencia: 'stable',
+        score: Math.round(item.margen_pct || 50),
+      },
+      meta: {
+        fecha_alta: item.fecha_alta,
+        estado: item.estado || 'ACTIVO',
+        last_contact: item.last_contact,
+      }
+    }));
+  };
+
+  // Navegación
+  const handleDrillDown = useCallback((record) => {
+    const currentLevel = getCurrentLevel();
+    if (!currentLevel || currentLevel.isLeaf) {
+      // Es un nodo hoja, disparar callback
+      if (onSelectLeaf) {
+        onSelectLeaf(record);
+      }
+      return;
+    }
+
+    // Navegar al siguiente nivel
+    const nextLevelIndex = currentPath.length;
+    const nextLevel = drillConfig[mode][nextLevelIndex + 1];
+    
+    if (nextLevel) {
+      setCurrentPath([...currentPath, { 
+        level: currentLevel, 
+        record, 
+        id: record.id, 
+        nombre: record.nombre 
+      }]);
+      loadLevelData(nextLevel, record.id);
+    }
+  }, [currentPath, drillConfig, mode, loadLevelData, onSelectLeaf]);
+
+  const handleBreadcrumbClick = useCallback((targetIndex) => {
+    if (targetIndex === -1) {
+      // Volver al inicio
+      setCurrentPath([]);
+      loadLevelData(initialLevel);
+    } else if (targetIndex < currentPath.length) {
+      // Volver a un nivel específico
+      const newPath = currentPath.slice(0, targetIndex + 1);
+      setCurrentPath(newPath);
+      const targetLevel = drillConfig[mode][targetIndex + 1];
+      const parentId = targetIndex >= 0 ? newPath[targetIndex].id : null;
+      loadLevelData(targetLevel, parentId);
+    }
+  }, [currentPath, drillConfig, mode, loadLevelData, initialLevel]);
+
+  // Obtener configuración del nivel actual
+  const getCurrentLevel = useCallback(() => {
+    return drillConfig[mode][currentPath.length];
+  }, [drillConfig, mode, currentPath.length]);
+
+  // Configurar columnas de la tabla
+  const getTableColumns = useCallback(() => {
+    const currentLevel = getCurrentLevel();
+    if (!currentLevel) return [];
+
+    const baseColumns = [
+      {
+        title: 'Nombre',
+        dataIndex: 'nombre',
+        key: 'nombre',
+        fixed: 'left',
+        width: 250,
+        render: (text, record) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <currentLevel.icon style={{ color: currentLevel.color, fontSize: 16 }} />
+            <div>
+              <div style={{ fontWeight: 500, color: theme.colors.textPrimary }}>
+                {text}
+              </div>
+              {record.meta?.estado && (
+                <Tag size="small" color={record.meta.estado === 'ACTIVO' ? 'green' : 'orange'}>
+                  {record.meta.estado}
+                </Tag>
+              )}
+            </div>
+          </div>
+        ),
+        sorter: (a, b) => a.nombre.localeCompare(b.nombre),
+        filteredValue: searchText ? [searchText] : null,
+        onFilter: (value, record) =>
+          record.nombre.toLowerCase().includes(value.toLowerCase()),
+      },
+      {
+        title: 'Contratos',
+        dataIndex: ['kpis', 'contratos'],
+        key: 'contratos',
+        width: 120,
+        render: (value) => (
+          <Statistic
+            value={value || 0}
+            formatter={val => new Intl.NumberFormat('es-ES').format(val)}
+            valueStyle={{ fontSize: 14, color: theme.colors.textPrimary }}
+          />
+        ),
+        sorter: (a, b) => (a.kpis.contratos || 0) - (b.kpis.contratos || 0),
+      },
+      {
+        title: 'Ingresos',
+        dataIndex: ['kpis', 'ingresos'],
+        key: 'ingresos',
+        width: 150,
+        render: (value) => (
+          <Statistic
+            value={value || 0}
+            formatter={val => new Intl.NumberFormat('es-ES', {
+              style: 'currency',
+              currency: 'EUR',
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            }).format(val)}
+            valueStyle={{ fontSize: 14, color: theme.colors.textPrimary }}
+          />
+        ),
+        sorter: (a, b) => (a.kpis.ingresos || 0) - (b.kpis.ingresos || 0),
+      },
+      {
+        title: 'Margen',
+        dataIndex: ['kpis', 'margen'],
+        key: 'margen',
+        width: 140,
+        render: (value, record) => (
+          <Tooltip title={`Margen: ${((record.kpis.margen_pct || 0)).toFixed(1)}%`}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Statistic
+                value={value || 0}
+                formatter={val => new Intl.NumberFormat('es-ES', {
+                  style: 'currency',
+                  currency: 'EUR',
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                }).format(val)}
+                valueStyle={{ fontSize: 14, color: theme.colors.textPrimary }}
+              />
+              <Badge 
+                status={record.flags.alerta === 'verde' ? 'success' : 
+                       record.flags.alerta === 'amarillo' ? 'warning' : 'error'} 
+              />
+            </div>
+          </Tooltip>
+        ),
+        sorter: (a, b) => (a.kpis.margen || 0) - (b.kpis.margen || 0),
+      },
+      {
+        title: 'Margen %',
+        dataIndex: ['kpis', 'margen_pct'],
+        key: 'margen_pct',
+        width: 120,
+        render: (value, record) => {
+          const TrendIcon = record.flags.tendencia === 'up' ? ArrowUpOutlined :
+                           record.flags.tendencia === 'down' ? ArrowDownOutlined : MinusOutlined;
+          const trendColor = record.flags.tendencia === 'up' ? theme.colors.success :
+                            record.flags.tendencia === 'down' ? theme.colors.error : theme.colors.textSecondary;
+          
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 14, fontWeight: 500 }}>
+                {(value || 0).toFixed(1)}%
+              </span>
+              <TrendIcon style={{ fontSize: 12, color: trendColor }} />
+            </div>
+          );
+        },
+        sorter: (a, b) => (a.kpis.margen_pct || 0) - (b.kpis.margen_pct || 0),
+        defaultSortOrder: 'descend',
+      },
+      {
+        title: 'Score',
+        dataIndex: ['flags', 'score'],
+        key: 'score',
+        width: 100,
+        render: (value) => (
+          <div style={{ textAlign: 'center' }}>
+            <div 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                backgroundColor: value >= 70 ? theme.colors.success :
+                               value >= 50 ? theme.colors.warning : theme.colors.error,
+                color: 'white',
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {value || 0}
+            </div>
+          </div>
+        ),
+        sorter: (a, b) => (a.flags.score || 0) - (b.flags.score || 0),
+      }
+    ];
+
+    return baseColumns;
+  }, [getCurrentLevel, searchText]);
+
+  // Efectos
+  useEffect(() => {
+    if (periodo && (mode === 'direccion' || (mode === 'gestor' && gestorId))) {
+      setCurrentPath([]);
+      loadLevelData(initialLevel);
+    }
+  }, [periodo, mode, gestorId, initialLevel, loadLevelData, refreshToken]);
+
+  // Handlers
+  const handleRefresh = useCallback(() => {
+    const currentLevel = getCurrentLevel();
+    if (currentLevel) {
+      const parentId = currentPath.length > 0 ? currentPath[currentPath.length - 1].id : null;
+      loadLevelData(currentLevel, parentId);
+    }
+  }, [getCurrentLevel, currentPath, loadLevelData]);
+
+  const handleReset = useCallback(() => {
+    setCurrentPath([]);
+    setSearchText('');
+    setSelectedRowKeys([]);
+    loadLevelData(initialLevel);
+  }, [initialLevel, loadLevelData]);
+
+  // Renderizado
+  const currentLevel = getCurrentLevel();
+  const breadcrumbItems = [
+    {
+      title: (
+        <span onClick={() => handleBreadcrumbClick(-1)} style={{ cursor: 'pointer' }}>
+          <HomeOutlined /> Inicio
+        </span>
+      )
+    },
+    ...currentPath.map((pathItem, index) => ({
+      title: (
+        <span 
+          onClick={() => handleBreadcrumbClick(index)} 
+          style={{ cursor: 'pointer' }}
+        >
+          <pathItem.level.icon style={{ marginRight: 4 }} />
+          {pathItem.nombre}
+        </span>
+      )
+    })),
+    ...(currentLevel ? [{
+      title: (
+        <span style={{ color: theme.colors.bmGreenPrimary, fontWeight: 500 }}>
+          <currentLevel.icon style={{ marginRight: 4 }} />
+          {currentLevel.label}
+        </span>
+      )
+    }] : [])
+  ];
+
+  // Calcular resumen del nivel actual
+  const summary = useMemo(() => {
+    if (!tableData.length) return null;
+    
+    return {
+      total_items: tableData.length,
+      total_contratos: tableData.reduce((sum, item) => sum + (item.kpis.contratos || 0), 0),
+      total_ingresos: tableData.reduce((sum, item) => sum + (item.kpis.ingresos || 0), 0),
+      total_margen: tableData.reduce((sum, item) => sum + (item.kpis.margen || 0), 0),
+      avg_margen_pct: tableData.length > 0 ? 
+        tableData.reduce((sum, item) => sum + (item.kpis.margen_pct || 0), 0) / tableData.length : 0,
+      alertas: tableData.reduce((acc, item) => {
+        acc[item.flags.alerta] = (acc[item.flags.alerta] || 0) + 1;
+        return acc;
+      }, { verde: 0, amarillo: 0, rojo: 0 })
+    };
+  }, [tableData]);
+
+  if (!currentLevel) {
+    return (
+      <Card className={className} style={style}>
+        <Empty description="Configuración de drill-down no disponible" />
+      </Card>
+    );
+  }
+
+  return (
+    <Card
+      className={`drill-down-view ${className}`}
+      style={{
+        borderRadius: theme.token.borderRadius,
+        boxShadow: '0 4px 12px rgba(27, 94, 85, 0.08)',
+        ...style
+      }}
+    >
+      {/* Header */}
+      <div style={{ marginBottom: theme.spacing.lg }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: theme.spacing.md }}>
+          <div>
+            <Title level={4} style={{ margin: 0, color: theme.colors.bmGreenPrimary }}>
+              <BarChartOutlined style={{ marginRight: 8 }} />
+              Análisis Navegable {mode === 'gestor' ? '- Mi Cartera' : '- Vista Corporativa'}
+            </Title>
+            <Text type="secondary">
+              Explora los datos por niveles jerárquicos • Período: {periodo}
+              {mode === 'gestor' && gestorId && ` • Gestor: ${gestorId}`}
+            </Text>
+          </div>
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={loading}>
+              Actualizar
+            </Button>
+            <Button onClick={handleReset} disabled={currentPath.length === 0}>
+              Reiniciar
+            </Button>
+          </Space>
+        </div>
+
+        {/* Breadcrumb */}
+        <Breadcrumb 
+          separator={<RightOutlined />}
+          style={{ marginBottom: theme.spacing.sm }}
+          items={breadcrumbItems}
+        />
+
+        {/* Herramientas y Resumen */}
+        <Row gutter={[16, 16]} align="middle">
+          <Col xs={24} sm={12} md={8}>
+            <Search
+              placeholder={`Buscar en ${currentLevel.label.toLowerCase()}...`}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{ width: '100%' }}
+              allowClear
+            />
+          </Col>
+          
+          {summary && (
+            <Col xs={24} sm={12} md={16}>
+              <div style={{ 
+                display: 'flex', 
+                gap: theme.spacing.lg, 
+                alignItems: 'center',
+                padding: theme.spacing.sm,
+                backgroundColor: theme.colors.backgroundLight,
+                borderRadius: 6,
+                border: `1px solid ${theme.colors.borderLight}`
+              }}>
+                <Statistic
+                  title="Items"
+                  value={summary.total_items}
+                  valueStyle={{ fontSize: 16, color: theme.colors.textPrimary }}
+                />
+                <Divider type="vertical" />
+                <Statistic
+                  title="Contratos"
+                  value={summary.total_contratos}
+                  valueStyle={{ fontSize: 16, color: theme.colors.textPrimary }}
+                />
+                <Divider type="vertical" />
+                <Statistic
+                  title="Margen Promedio"
+                  value={summary.avg_margen_pct}
+                  suffix="%"
+                  precision={1}
+                  valueStyle={{ fontSize: 16, color: theme.colors.bmGreenPrimary }}
+                />
+                <Divider type="vertical" />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <Badge status="success" text={summary.alertas.verde} />
+                  <Badge status="warning" text={summary.alertas.amarillo} />
+                  <Badge status="error" text={summary.alertas.rojo} />
+                </div>
+              </div>
+            </Col>
+          )}
+        </Row>
+      </div>
+
+      {/* Contenido Principal */}
+      {loading ? (
+        <Loader 
+          tip={`Cargando ${currentLevel.label.toLowerCase()}...`}
+          style={{ minHeight: 400 }}
+        />
+      ) : error ? (
+        <ErrorState
+          error={error}
+          message={`Error al cargar ${currentLevel.label.toLowerCase()}`}
+          onRetry={handleRefresh}
+          style={{ minHeight: 400 }}
+        />
+      ) : (
+        <Table
+          columns={getTableColumns()}
+          dataSource={tableData}
+          loading={loading}
+          pagination={{
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) => `${range[0]}-${range[1]} de ${total} items`,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            defaultPageSize: 20,
+          }}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: setSelectedRowKeys,
+            type: 'checkbox',
+          }}
+          onRow={(record) => ({
+            onClick: () => handleDrillDown(record),
+            style: { cursor: 'pointer' },
+          })}
+          scroll={{ x: 1000 }}
+          size="middle"
+          bordered={false}
+          className="drill-down-table"
+        />
+      )}
+    </Card>
+  );
+};
+
+DrillDownView.propTypes = {
+  mode: PropTypes.oneOf(['direccion', 'gestor']).isRequired,
+  periodo: PropTypes.string.isRequired,
+  gestorId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  defaultRootTab: PropTypes.string,
+  onSelectLeaf: PropTypes.func,
+  refreshToken: PropTypes.any,
+  style: PropTypes.object,
+  className: PropTypes.string,
+};
+
+export default DrillDownView;

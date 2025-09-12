@@ -1,0 +1,1449 @@
+"""
+Chat Agent Refactorizado - Módulo de Servicio Conversacional CDG v7.0
+=====================================================================
+
+Módulo de servicio conversacional para Control de Gestión bancario.
+- Integración completa con CDG Agent, Chart Generator y Basic Queries
+- Personalización inteligente y gestión de sesiones
+- System Prompts profesionales especializados
+- Sin FastAPI - Listo para integración en main.py
+
+Versión: 7.0 - Refactorizado como módulo
+Autor: Agente CDG Development Team
+Fecha: 2025-09-01
+"""
+
+import json
+import logging
+import uuid
+import os
+import re
+from datetime import datetime
+from typing import Dict, Any, Optional, List, Tuple
+from dataclasses import dataclass, field
+from fastapi import WebSocket
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
+MODEL_NAME = os.getenv('AZURE_OPENAI_DEPLOYMENT_ID', 'gpt-4')
+
+# ============================================================================
+# IMPORTACIONES INTEGRADAS
+# ============================================================================
+
+try:
+    from utils.initial_agent import iniciar_agente_llm
+    from agents.cdg_agent import CDGAgent, CDGRequest, CDGResponse, create_cdg_agent, process_cdg_request
+
+    
+    from prompts.system_prompts import (
+        CHAT_CONVERSATIONAL_SYSTEM_PROMPT,
+        CHAT_FEEDBACK_SYSTEM_PROMPT,
+        CHAT_INTENT_CLASSIFICATION_PROMPT,
+        CHAT_PERSONALIZATION_SYSTEM_PROMPT
+    )
+    
+    from prompts.user_prompts import (
+        build_feedback_processing_prompt,
+        build_conversation_context_prompt,
+        build_personalization_learning_prompt,
+        build_intent_clarification_prompt,
+        build_dynamic_dashboard_prompt
+    )
+    
+    from tools.chart_generator import (
+        create_chart_from_query_data,
+        pivot_chart_with_query_integration,
+        QueryIntegratedChartGenerator
+    )
+    
+    from queries.basic_queries import basic_queries
+    from queries.gestor_queries import GestorQueries
+    from queries.comparative_queries import ComparativeQueries
+    from queries.deviation_queries import DeviationQueries
+    from queries.incentive_queries import IncentiveQueries
+    from queries.period_queries import PeriodQueries, get_available_periods_enhanced
+    
+    IMPORTS_SUCCESSFUL = True
+    CHART_GENERATOR_AVAILABLE = True
+    BASIC_QUERIES_AVAILABLE = True
+    logger = logging.getLogger(__name__)
+    logger.info("🚀 CDG Chat Agent v7.0 módulo inicializado exitosamente")
+    
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.error(f"⚠️ Error de importación: {e}")
+    
+    # Fallbacks para testing
+    def iniciar_agente_llm():
+        class MockClient:
+            class Chat:
+                class Completions:
+                    def create(self, **kwargs):
+                        class Response:
+                            choices = [type('Choice', (), {'message': type('Message', (), {'content': 'Mock response'})()})]
+                        return Response()
+                completions = Completions()
+            chat = Chat()
+        return MockClient()
+    
+    class MockCDGAgent:
+        async def process_request(self, request):
+            return type('MockResponse', (), {
+                'content': {'response': 'Mock CDG response'},
+                'charts': [],
+                'recommendations': ['Mock recommendation'],
+                'metadata': {'analysis_type': 'mock'},
+                'confidence_score': 0.5,
+                'response_type': type('ResponseType', (), {'value': 'mock'})(),
+                'chart_configs': [],
+                'pivot_suggestions': []
+            })()
+    
+    CDGAgent = MockCDGAgent
+    GestorQueries = ComparativeQueries = DeviationQueries = IncentiveQueries = PeriodQueries = type('MockQueries', (), {})
+    
+    def create_chart_from_query_data(data, config):
+        return {'id': 'mock_chart', 'type': config.get('chart_type', 'bar'), 'title': 'Mock Chart'}
+    
+    def pivot_chart_with_query_integration(user_message, current_config):
+        return {'status': 'success', 'new_config': current_config, 'message': 'Pivoteo mock'}
+    
+    class QueryIntegratedChartGenerator:
+        def __init__(self): pass
+        def generate_chart_from_data(self, *args, **kwargs): 
+            return {'id': 'mock_chart', 'title': 'Gráfico Mock'}
+    
+    class basic_queries:
+        @staticmethod
+        def get_resumen_general():
+            return {'total_gestores': 30, 'total_clientes': 85, 'total_contratos': 216}
+        
+        @staticmethod
+        def count_contratos_by_gestor():
+            return [{'DESC_GESTOR': 'Mock Gestor 1', 'num_contratos': 10}]
+    
+    CHAT_CONVERSATIONAL_SYSTEM_PROMPT = "Eres un asistente financiero especializado."
+    CHAT_FEEDBACK_SYSTEM_PROMPT = "Analiza feedback para mejorar respuestas."
+    CHAT_INTENT_CLASSIFICATION_PROMPT = "Clasifica la intención del usuario."
+    CHAT_PERSONALIZATION_SYSTEM_PROMPT = "Personaliza respuestas según el usuario."
+    
+    def build_feedback_processing_prompt(*args, **kwargs): return "Mock feedback prompt"
+    def build_conversation_context_prompt(*args, **kwargs): return "Mock context prompt"
+    def build_personalization_learning_prompt(*args, **kwargs): return "Mock personalization prompt"
+    def build_intent_clarification_prompt(*args, **kwargs): return "Mock clarification prompt"
+    def build_dynamic_dashboard_prompt(*args, **kwargs): return "Mock dashboard prompt"
+    
+    IMPORTS_SUCCESSFUL = False
+    CHART_GENERATOR_AVAILABLE = False
+    BASIC_QUERIES_AVAILABLE = False
+
+# ============================================================================
+# MODELOS DE DATOS
+# ============================================================================
+
+class ChatMessage(BaseModel):
+    user_id: str
+    message: str
+    gestor_id: Optional[str] = None
+    periodo: Optional[str] = None
+    include_charts: bool = True
+    include_recommendations: bool = True
+    context: Dict[str, Any] = {}
+    user_feedback: Optional[Dict[str, Any]] = None
+    current_chart_config: Optional[Dict[str, Any]] = None
+    chart_interaction_type: Optional[str] = None
+    use_basic_queries: bool = True
+    quick_mode: bool = False
+
+class ChatResponse(BaseModel):
+    response: str
+    response_type: str
+    charts: List[Dict[str, Any]] = []
+    recommendations: List[str] = []
+    metadata: Dict[str, Any] = {}
+    execution_time: float
+    confidence_score: float
+    timestamp: str
+    session_id: str
+    chart_configs: List[Dict[str, Any]] = []
+    pivot_suggestions: List[str] = []
+    basic_queries_used: bool = False
+    data_sources: List[str] = []
+
+# ============================================================================
+# GESTIÓN DE SESIONES
+# ============================================================================
+
+@dataclass
+class ChatSession:
+    user_id: str
+    session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    conversation_history: List[Dict] = field(default_factory=list)
+    user_preferences: Dict[str, str] = field(default_factory=lambda: {
+        'communication_style': 'professional',
+        'technical_level': 'intermediate',
+        'preferred_format': 'combined',
+        'response_length': 'medium'
+    })
+    personalization_data: Dict[str, Any] = field(default_factory=lambda: {
+        'frequent_queries': [],
+        'successful_interactions': 0,
+        'feedback_history': [],
+        'usage_patterns': {},
+        'basic_queries_usage': 0,
+        'quick_queries_count': 0
+    })
+    current_chart_configs: List[Dict] = field(default_factory=list)
+    chart_interaction_history: List[Dict] = field(default_factory=list)
+    chart_preferences: Dict[str, Any] = field(default_factory=lambda: {
+        'preferred_chart_type': 'bar',
+        'chart_complexity': 'medium',
+        'interactive_mode': True
+    })
+    created_at: datetime = field(default_factory=datetime.now)
+    last_active: datetime = field(default_factory=datetime.now)
+    
+    def add_interaction(self, user_msg: str, agent_resp: Dict, intent: str, satisfaction_rating: Optional[int] = None):
+        interaction = {
+            'timestamp': datetime.now().isoformat(),
+            'user_message': user_msg,
+            'agent_response': agent_resp,
+            'intent': intent,
+            'session_id': self.session_id,
+            'satisfaction_rating': satisfaction_rating,
+            'charts_generated': len(agent_resp.get('charts', [])),
+            'chart_interaction': 'current_chart_config' in user_msg,
+            'basic_queries_used': agent_resp.get('basic_queries_used', False),
+            'data_sources': agent_resp.get('data_sources', [])
+        }
+        
+        self.conversation_history.append(interaction)
+        self.last_active = datetime.now()
+        self._update_personalization_data(user_msg, intent, satisfaction_rating, agent_resp)
+        
+        if len(self.conversation_history) > 50:
+            self.conversation_history = self.conversation_history[-50:]
+    
+    def _update_personalization_data(self, user_msg: str, intent: str, rating: Optional[int], agent_resp: Dict):
+        if intent not in self.personalization_data['frequent_queries']:
+            self.personalization_data['frequent_queries'].append(intent)
+        
+        if rating and rating >= 4:
+            self.personalization_data['successful_interactions'] += 1
+        
+        msg_length = len(user_msg.split())
+        if msg_length < 5:
+            self.user_preferences['response_length'] = 'short'
+        elif msg_length > 15:
+            self.user_preferences['response_length'] = 'detailed'
+        
+        charts = agent_resp.get('charts', [])
+        if charts:
+            chart_types = [chart.get('type', 'bar') for chart in charts]
+            if chart_types:
+                from collections import Counter
+                most_common = Counter(chart_types).most_common(1)
+                if most_common:
+                    self.chart_preferences['preferred_chart_type'] = most_common[0][0]
+        
+        if 'cambia' in user_msg.lower() or 'gráfico' in user_msg.lower():
+            self.chart_interaction_history.append({
+                'timestamp': datetime.now().isoformat(),
+                'interaction_type': 'pivot',
+                'message': user_msg,
+                'rating': rating
+            })
+        
+        if agent_resp.get('basic_queries_used'):
+            self.personalization_data['basic_queries_usage'] += 1
+        
+        quick_keywords = ['resumen', 'cuántos', 'total', 'lista', 'rápido']
+        if any(keyword in user_msg.lower() for keyword in quick_keywords):
+            self.personalization_data['quick_queries_count'] += 1
+    
+    def add_chart_config(self, config: Dict[str, Any]):
+        self.current_chart_configs.append({
+            'config': config,
+            'timestamp': datetime.now().isoformat(),
+            'session_id': self.session_id
+        })
+        
+        if len(self.current_chart_configs) > 10:
+            self.current_chart_configs = self.current_chart_configs[-10:]
+    
+    def get_recent_context(self, max_interactions: int = 5) -> List[Dict]:
+        return self.conversation_history[-max_interactions:]
+    
+    def get_personalization_context(self) -> Dict[str, Any]:
+        return {
+            'user_preferences': self.user_preferences,
+            'chart_preferences': self.chart_preferences,
+            'personalization_data': self.personalization_data,
+            'total_interactions': len(self.conversation_history),
+            'chart_interactions': len(self.chart_interaction_history),
+            'basic_queries_usage': self.personalization_data.get('basic_queries_usage', 0),
+            'quick_queries_count': self.personalization_data.get('quick_queries_count', 0),
+            'last_activity': self.last_active.isoformat()
+        }
+
+class ChatSessionManager:
+    def __init__(self):
+        self.sessions: Dict[str, ChatSession] = {}
+        self.active_websockets: Dict[str, WebSocket] = {}  # ← AÑADIR ESTA LÍNEA
+    
+    def get_or_create_session(self, user_id: str) -> ChatSession:
+        if user_id not in self.sessions:
+            self.sessions[user_id] = ChatSession(user_id=user_id)
+            logger.info(f"🆕 Nueva sesión creada para usuario {user_id}")
+        self.sessions[user_id].last_active = datetime.now()
+        return self.sessions[user_id]
+    
+    # ← AÑADIR ESTOS MÉTODOS:
+    def add_websocket_connection(self, user_id: str, websocket):
+        """Añade conexión WebSocket para un usuario"""
+        self.active_websockets[user_id] = websocket
+        logger.info(f"🔌 WebSocket conectado para usuario {user_id}")
+    
+    def remove_websocket_connection(self, user_id: str):
+        """Remueve conexión WebSocket para un usuario"""
+        if user_id in self.active_websockets:
+            del self.active_websockets[user_id]
+            logger.info(f"🔌 WebSocket desconectado para usuario {user_id}")
+    
+    def get_websocket_connection(self, user_id: str):
+        """Obtiene conexión WebSocket activa para un usuario"""
+        return self.active_websockets.get(user_id)
+    
+    def reset_session(self, user_id: str):
+        if user_id in self.sessions:
+            self.sessions[user_id].conversation_history.clear()
+            self.sessions[user_id].chart_interaction_history.clear()
+            self.sessions[user_id].current_chart_configs.clear()
+    
+    def cleanup_inactive_sessions(self):
+        """Limpia sesiones inactivas (opcional)"""
+        # Puedes implementar lógica de limpieza aquí si es necesario
+        pass
+
+# ============================================================================
+# AGENTE DE CHAT PRINCIPAL
+# ============================================================================
+
+class CDGChatAgent:
+    """
+    Agente de Chat CDG v7.0 - Módulo de Servicio
+    
+    Funcionalidades principales:
+    - Integración completa con CDG Agent
+    - System Prompts profesionales especializados
+    - Personalización inteligente adaptativa
+    - Gestión conversacional avanzada
+    - Pivoteo conversacional de gráficos
+    - Consultas rápidas con basic_queries
+    """
+    
+    def __init__(self):
+        self.session_manager = ChatSessionManager()
+        self.llm_client = iniciar_agente_llm()
+        self.start_time = datetime.now()
+        self.imports_successful = IMPORTS_SUCCESSFUL
+        self.chart_generator_available = CHART_GENERATOR_AVAILABLE
+        self.basic_queries_available = BASIC_QUERIES_AVAILABLE
+        
+        # Inicializar CDG Agent
+        try:
+            self.cdg_agent = create_cdg_agent()  # ← Usar la función factory
+            logger.info("🎯 CDG Agent integrado exitosamente")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando CDG Agent: {e}")
+            try:
+                self.cdg_agent = CDGAgent()  # ← Fallback directo
+                logger.info("🎯 CDG Agent inicializado con método directo")
+            except Exception as e2:
+                logger.error(f"❌ Error en fallback CDG Agent: {e2}")
+                self.cdg_agent = MockCDGAgent() if not IMPORTS_SUCCESSFUL else None
+
+        
+        # Inicializar Chart Generator
+        try:
+            if CHART_GENERATOR_AVAILABLE:
+                self.query_chart_generator = QueryIntegratedChartGenerator()
+                logger.info("📊 QueryIntegratedChartGenerator inicializado")
+            else:
+                self.query_chart_generator = None
+        except Exception as e:
+            logger.warning(f"⚠️ Error inicializando QueryIntegratedChartGenerator: {e}")
+            self.query_chart_generator = None
+        
+        # Inicializar Basic Queries
+        try:
+            if BASIC_QUERIES_AVAILABLE:
+                self.basic_queries = basic_queries
+                logger.info("📈 Basic Queries inicializado")
+            else:
+                self.basic_queries = None
+        except Exception as e:
+            logger.warning(f"⚠️ Error inicializando Basic Queries: {e}")
+            self.basic_queries = None
+        
+        # Sistemas de queries
+        try:
+            self.gestor_queries = GestorQueries()
+            self.comparative_queries = ComparativeQueries()
+            self.deviation_queries = DeviationQueries()
+            self.incentive_queries = IncentiveQueries()
+            self.period_queries = PeriodQueries()
+        except Exception as e:
+            logger.warning(f"Error inicializando sistemas de queries: {e}")
+            self.gestor_queries = self.comparative_queries = self.deviation_queries = self.incentive_queries = self.period_queries = type('MockQueries', (), {})()
+        
+        logger.info(f"🚀 CDG Chat Agent v7.0 módulo inicializado - Modo: {'PRODUCTION' if IMPORTS_SUCCESSFUL else 'MOCK'}")
+        
+        # 🆕 MEJORAR: Validar integración con CDG Agent
+        try:
+            if hasattr(self.cdg_agent, 'validate_basic_queries_integration'):
+                validation_result = self.cdg_agent.validate_basic_queries_integration()
+                if validation_result.get('overall_status') == 'OK':
+                    logger.info("✅ Validación de basic_queries en CDG Agent exitosa")
+                else:
+                    logger.warning(f"⚠️ Validación basic_queries: {validation_result.get('overall_status', 'UNKNOWN')}")
+        except Exception as e:
+            logger.warning(f"No se pudo validar integración CDG Agent: {e}")
+
+    
+    # ========================================================================
+    # MÉTODOS PRINCIPALES DE PROCESAMIENTO
+    # ========================================================================
+    
+    async def process_chat_message(self, chat_message: ChatMessage) -> ChatResponse:
+        """Procesamiento principal de mensajes de chat"""
+        start_time = datetime.now()
+        session = self.session_manager.get_or_create_session(chat_message.user_id)
+        
+        try:
+            # Sanitizar mensaje
+            message = self._sanitize_message(chat_message.message)
+            if not message:
+                return self._create_error_response("Mensaje vacío", session.session_id, start_time)
+            
+            # Detectar interacciones con gráficos
+            if self._is_chart_interaction(message, chat_message.current_chart_config):
+                logger.info("📊 Detectada interacción con gráfico")
+                return await self._handle_chart_interaction(chat_message, session, start_time)
+            
+            # Detectar consultas básicas
+            if chat_message.quick_mode or (chat_message.use_basic_queries and self._is_basic_query_request(message)):
+                logger.info("📈 Detectada consulta básica")
+                return await self._handle_basic_query(chat_message, session, start_time)
+            
+            # Clasificar intención
+            intent_analysis = await self._classify_user_intent(message, session)
+            intent = intent_analysis['intent']
+            confidence = intent_analysis['confidence']
+            
+            # Verificar si necesita aclaración
+            if self._should_request_clarification(intent_analysis):
+                logger.info(f"🔍 Solicitando aclaración - Intent: {intent}, Confianza: {confidence:.2f}")
+                return await self._request_clarification(chat_message, intent_analysis, session)
+            
+            # Extraer parámetros
+            gestor_id = self._extract_gestor_id(chat_message, session)
+            periodo_final = chat_message.periodo or self._extract_periodo_from_message(message)
+            
+            # Decisión: CDG Agent o simple
+            if intent_analysis['requires_cdg_agent']:
+                logger.info("🎯 DELEGANDO A CDG AGENT")
+                return await self._process_with_cdg_agent_professional(
+                    chat_message, message, gestor_id, periodo_final, session, start_time, intent_analysis
+                )
+            else:
+                logger.info("💬 PROCESANDO CON CHAT PROFESIONAL")
+                return await self._process_simple_chat_professional(
+                    chat_message, message, gestor_id, periodo_final, session, start_time, intent_analysis
+                )
+            
+        except Exception as e:
+            logger.error(f"❌ Error procesando chat: {e}")
+            return self._create_error_response(str(e), session.session_id, start_time)
+    
+    # ========================================================================
+    # MÉTODOS DE DETECCIÓN Y CLASIFICACIÓN
+    # ========================================================================
+    
+    def _is_basic_query_request(self, message: str) -> bool:
+        """Detecta si es una consulta básica"""
+        basic_keywords = [
+            'resumen', 'summary', 'general', 'overview',
+            'cuántos', 'total', 'cantidad', 'count',
+            'ranking', 'top', 'mejor', 'peor',
+            'centros', 'oficinas', 'gestores',
+            'productos', 'contratos', 'clientes',
+            'rápido', 'quick', 'fast',
+            'lista', 'listar', 'mostrar'
+        ]
+        
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in basic_keywords)
+    
+    def _is_chart_interaction(self, message: str, current_chart_config: Optional[Dict] = None) -> bool:
+        """Detecta si el mensaje es una interacción con gráfico"""
+        chart_keywords = [
+            'cambia', 'cambiar', 'modifica', 'modificar', 'convierte', 'convertir',
+            'gráfico', 'chart', 'barras', 'línea', 'circular', 'pie', 'líneas',
+            'mostrar', 'visualizar', 'ver en', 'como', 'tipo', 'formato'
+        ]
+        
+        message_lower = message.lower()
+        has_chart_keywords = any(k in message_lower for k in chart_keywords)
+        return has_chart_keywords and (current_chart_config is not None)
+
+    
+    
+    async def _classify_user_intent(self, message: str, session: ChatSession) -> Dict[str, Any]:
+        """Clasificación de intención con prompts profesionales"""
+        try:
+            # Detectar interacciones específicas primero
+            if self._is_chart_interaction(message):
+                return {
+                    'intent': 'chart_pivot',
+                    'confidence': 0.95,
+                    'requires_cdg_agent': False,
+                    'recommended_approach': 'chart_interaction'
+                }
+            
+            if self._is_basic_query_request(message):
+                return {
+                    'intent': 'basic_query',
+                    'confidence': 0.88,
+                    'requires_cdg_agent': False,
+                    'recommended_approach': 'basic_queries'
+                }
+            
+            # Clasificación con LLM
+            client = self.llm_client
+            
+            classification_context = {
+                'message': message,
+                'recent_history': [h.get('intent', 'general') for h in session.get_recent_context(3)],
+                'user_preferences': session.user_preferences,
+                'chart_preferences': session.chart_preferences,
+                'basic_queries_usage': session.personalization_data.get('basic_queries_usage', 0),
+                'session_length': len(session.conversation_history)
+            }
+            
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": CHAT_INTENT_CLASSIFICATION_PROMPT
+                    },
+                    {
+                        "role": "user", 
+                        "content": f"Clasifica la siguiente consulta:\n\nMensaje: {message}\n\nContexto: {json.dumps(classification_context, ensure_ascii=False, indent=2)}"
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=200
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            try:
+                result = json.loads(result_text)
+                intent = result.get('intent', 'general_inquiry')
+                confidence = result.get('confidence', 0.5)
+            except json.JSONDecodeError:
+                intent = 'general_inquiry'
+                confidence = 0.3
+            
+            logger.info(f"🎯 Intención clasificada: {intent} (confianza: {confidence:.2f})")
+            
+            return {
+                'intent': intent,
+                'confidence': confidence,
+                'requires_cdg_agent': self._intent_requires_cdg_agent(intent, message),
+                'recommended_approach': self._get_approach_for_intent(intent)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error en clasificación de intención: {e}")
+            return {
+                'intent': 'general_inquiry',
+                'confidence': 0.3,
+                'requires_cdg_agent': self._requires_cdg_agent(message),
+                'recommended_approach': 'simple'
+            }
+    
+    # ========================================================================
+    # MÉTODOS DE PROCESAMIENTO ESPECÍFICO
+    # ========================================================================
+    
+    async def _handle_basic_query(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
+        """Maneja consultas básicas usando basic_queries"""
+        logger.info("📈 Procesando consulta básica")
+        
+        try:
+            if not self.basic_queries_available:
+                return await self._create_basic_query_fallback_response(chat_message, session, start_time)
+            
+            message_lower = chat_message.message.lower()
+            
+            # Detectar tipo de consulta básica
+            if any(word in message_lower for word in ['resumen', 'summary', 'general', 'overview']):
+                data = self.basic_queries.get_resumen_general()
+                response_type = "quick_summary"
+                response_text = self._format_basic_summary(data, session)
+                
+            elif any(word in message_lower for word in ['ranking', 'top', 'mejor', 'gestores']):
+                metric = 'contratos'
+                if any(word in message_lower for word in ['clientes', 'clients']):
+                    metric = 'clientes'
+                
+                data = (self.basic_queries.count_contratos_by_gestor() if metric == 'contratos' 
+                       else self.basic_queries.count_clientes_by_gestor())
+                response_type = "gestores_ranking"
+                response_text = self._format_gestores_ranking(data, metric, session)
+                
+            else:
+                # Consulta genérica
+                data = self.basic_queries.get_resumen_general()
+                response_type = "quick_summary"
+                response_text = self._format_basic_summary(data, session)
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=response_text,
+                response_type=response_type,
+                charts=[],
+                recommendations=self._get_basic_query_recommendations(response_type),
+                metadata={
+                    'source': 'basic_queries',
+                    'basic_queries_available': True,
+                    'query_type': response_type,
+                    'data_count': len(data) if isinstance(data, list) else len(data.keys()) if isinstance(data, dict) else 1
+                },
+                execution_time=execution_time,
+                confidence_score=0.9,
+                timestamp=datetime.now().isoformat(),
+                session_id=session.session_id,
+                chart_configs=[],
+                pivot_suggestions=[],
+                basic_queries_used=True,
+                data_sources=['basic_queries']
+            )
+            
+        except Exception as e:
+            logger.error(f"Error manejando consulta básica: {e}")
+            return self._create_error_response(f"Error procesando consulta básica: {str(e)}", session.session_id, start_time)
+    
+    async def _handle_chart_interaction(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
+        """Maneja interacciones específicas con gráficos"""
+        logger.info("📊 Procesando interacción con gráfico")
+        
+        try:
+            if not CHART_GENERATOR_AVAILABLE:
+                return self._create_chart_fallback_response(chat_message, session, start_time)
+            
+            # Obtener configuración actual del gráfico
+            current_config = chat_message.current_chart_config or {}
+            if not current_config and session.current_chart_configs:
+                current_config = session.current_chart_configs[-1]['config']
+            
+            # Usar función de pivoteo conversacional CON NUEVAS CAPACIDADES
+            pivot_result = pivot_chart_with_query_integration(
+                chat_message.message,
+                current_config
+            )
+            
+            # 🆕 NUEVO: Intentar usar el nuevo handler si está disponible
+            try:
+                # Verificar si el CDG Agent tiene la nueva función
+                if hasattr(self.cdg_agent, 'handle_chart_change_with_prompt'):
+                    enhanced_result = await self.cdg_agent.handle_chart_change_with_prompt(
+                        chat_message.message,
+                        current_config,
+                        {'agente': 'CDG_Chat', 'usuario_id': chat_message.user_id}
+                    )
+                    if enhanced_result.get('status') == 'success':
+                        pivot_result = enhanced_result
+            except Exception as e:
+                logger.warning(f"No se pudo usar enhanced chart handler: {e}")
+
+            
+            # Actualizar configuración en la sesión
+            if pivot_result.get('status') == 'success':
+                new_config = pivot_result.get('new_config', {})
+                session.add_chart_config(new_config)
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            # Generar respuesta profesional
+            response_text = await self._generate_chart_pivot_response(
+                pivot_result, chat_message.message, session
+            )
+            
+            return ChatResponse(
+                response=response_text,
+                response_type="chart_pivot",
+                charts=[pivot_result] if pivot_result.get('status') == 'success' else [],
+                recommendations=[pivot_result.get('message', 'Gráfico actualizado')],
+                metadata={
+                    'source': 'chart_interaction',
+                    'pivot_result': pivot_result,
+                    'original_config': current_config,
+                    'chart_generator_available': CHART_GENERATOR_AVAILABLE
+                },
+                execution_time=execution_time,
+                confidence_score=0.9,
+                timestamp=datetime.now().isoformat(),
+                session_id=session.session_id,
+                chart_configs=[pivot_result.get('new_config', {})] if pivot_result.get('status') == 'success' else [],
+                pivot_suggestions=self._generate_pivot_suggestions_for_chart(pivot_result),
+                basic_queries_used=False,
+                data_sources=['chart_generator']
+            )
+            
+        except Exception as e:
+            logger.error(f"Error en interacción con gráfico: {e}")
+            return self._create_error_response(f"Error en pivoteo de gráfico: {str(e)}", session.session_id, start_time)
+    
+    async def _process_with_cdg_agent_professional(self, chat_message: ChatMessage, message: str, gestor_id: str, periodo: str, session: ChatSession, start_time: datetime, intent_analysis: Dict) -> ChatResponse:
+        """Procesamiento profesional con CDG Agent"""
+        try:
+            # Crear CDGRequest
+            cdg_request = CDGRequest(
+                user_message=message,
+                user_id=chat_message.user_id,
+                gestor_id=gestor_id,
+                periodo=periodo,
+                context=chat_message.context,
+                include_charts=chat_message.include_charts,
+                include_recommendations=chat_message.include_recommendations,
+                current_chart_config=chat_message.current_chart_config,
+                chart_interaction_type=chat_message.chart_interaction_type,
+                use_basic_queries=chat_message.use_basic_queries,
+                quick_mode=chat_message.quick_mode
+            )
+            
+            # Procesar con CDG Agent - con fallback mejorado
+            try:
+                cdg_response = await self.cdg_agent.process_request(cdg_request)
+            except Exception as e:
+                logger.error(f"Error en CDG Agent process_request: {e}")
+                # Fallback usando la función global
+                try:
+                    result_dict = await process_cdg_request(
+                        cdg_request.user_message,
+                        gestor_id=cdg_request.gestor_id,
+                        periodo=cdg_request.periodo,
+                        user_id=cdg_request.user_id,
+                        include_charts=cdg_request.include_charts,
+                        include_recommendations=cdg_request.include_recommendations,
+                        use_basic_queries=cdg_request.use_basic_queries
+                    )
+                    # Convertir dict a objeto mock para compatibilidad
+                    cdg_response = type('MockCDGResponse', (), {
+                        'content': result_dict.get('content', {}),
+                        'charts': result_dict.get('charts', []),
+                        'recommendations': result_dict.get('recommendations', []),
+                        'confidence_score': result_dict.get('confidence_score', 0.7),
+                        'chart_configs': result_dict.get('chart_configs', []),
+                        'pivot_suggestions': result_dict.get('pivot_suggestions', []),
+                        'basic_queries_used': result_dict.get('basic_queries_used', False),
+                        'data_sources': result_dict.get('data_sources', [])
+                    })()
+                except Exception as e2:
+                    logger.error(f"Error en fallback CDG: {e2}")
+                    raise e  # Re-raise el error original
+
+            
+            # Procesar configuraciones de gráficos
+            chart_configs = getattr(cdg_response, 'chart_configs', [])
+            pivot_suggestions = getattr(cdg_response, 'pivot_suggestions', [])
+            basic_queries_used = getattr(cdg_response, 'basic_queries_used', False)
+            data_sources = getattr(cdg_response, 'data_sources', [])
+            
+            # Actualizar sesión
+            for config in chart_configs:
+                session.add_chart_config(config)
+            
+            # Generar respuesta profesional
+            response_text = await self._generate_professional_response(
+                cdg_response.content, message, cdg_response, session, intent_analysis
+            )
+            
+            # Construir respuesta completa
+            chat_response = ChatResponse(
+                response=response_text,
+                response_type=intent_analysis['intent'],
+                charts=cdg_response.charts,
+                recommendations=cdg_response.recommendations,
+                metadata={
+                    'source': 'cdg_agent_professional',
+                    'analysis_type': intent_analysis['intent'],
+                    'confidence': intent_analysis['confidence'],
+                    'gestor_id': gestor_id,
+                    'periodo': periodo,
+                    'imports_successful': self.imports_successful,
+                    'chart_generator_available': self.chart_generator_available,
+                    'basic_queries_available': self.basic_queries_available,
+                    'model_used': MODEL_NAME,
+                    'cdg_agent_integration': True,
+                    'professional_prompts': True,
+                    'intent_classification': intent_analysis,
+                    'personalization_applied': True
+                },
+                execution_time=(datetime.now() - start_time).total_seconds(),
+                confidence_score=cdg_response.confidence_score * intent_analysis['confidence'],
+                timestamp=datetime.now().isoformat(),
+                session_id=session.session_id,
+                chart_configs=chart_configs,
+                pivot_suggestions=pivot_suggestions,
+                basic_queries_used=basic_queries_used,
+                data_sources=data_sources
+            )
+            
+            # Añadir a historial
+            session.add_interaction(
+                message, 
+                chat_response.model_dump(), 
+                intent_analysis['intent'],
+                satisfaction_rating=None
+            )
+            
+            # Procesar feedback si existe
+            if chat_message.user_feedback:
+                await self._process_user_feedback_professional(chat_message.user_id, chat_message.user_feedback, session)
+            
+            return chat_response
+            
+        except Exception as e:
+            logger.error(f"❌ Error en procesamiento profesional CDG Agent: {e}")
+            return self._create_error_response(str(e), session.session_id, start_time)
+    
+    # ========================================================================
+    # MÉTODOS DE UTILIDAD Y HELPERS
+    # ========================================================================
+    
+    def _sanitize_message(self, message: str) -> str:
+        """Sanitiza mensaje de entrada"""
+        if not message or not isinstance(message, str):
+            return ""
+        
+        sanitized = message.strip()
+        if len(sanitized) > 2000:
+            sanitized = sanitized[:2000] + "..."
+            logger.warning("Mensaje truncado por exceder longitud máxima")
+        
+        return sanitized
+    
+    def _extract_periodo_from_message(self, message: str) -> Optional[str]:
+        """Extracción inteligente de período"""
+        periodo_patterns = [
+            r'(\d{4}-\d{2})',
+            r'(\d{4}/\d{2})',
+            r'(\d{2}/\d{4})',
+            r'(\d{2}-\d{4})',
+            r'periodo\s+(\d{4}-\d{2})',
+            r'mes\s+(\d{4}-\d{2})',
+            r'en\s+(\d{4}-\d{2})',
+            r'del\s+(\d{4}-\d{2})',
+        ]
+        
+        message_lower = message.lower()
+        
+        for pattern in periodo_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                periodo_found = match.group(1)
+                logger.info(f"🗓️ Período detectado: '{periodo_found}'")
+                
+                # Normalizar formato
+                if re.match(r'\d{4}-\d{2}', periodo_found):
+                    return periodo_found
+                elif re.match(r'\d{4}/\d{2}', periodo_found):
+                    return periodo_found.replace('/', '-')
+                elif re.match(r'\d{2}/\d{4}', periodo_found):
+                    parts = periodo_found.split('/')
+                    return f"{parts[1]}-{parts[0]}"
+                elif re.match(r'\d{2}-\d{4}', periodo_found):
+                    parts = periodo_found.split('-')
+                    return f"{parts[1]}-{parts[0]}"
+        
+        # Fallback dinámico
+        current_period = datetime.now().strftime('%Y-%m')
+        logger.info(f"🗓️ No se detectó período, usando actual: {current_period}")
+        return current_period
+    
+    def _extract_gestor_id(self, chat_message: ChatMessage, session: ChatSession) -> Optional[str]:
+        """Extracción inteligente de gestor_id"""
+        
+        if chat_message.gestor_id:
+            return chat_message.gestor_id
+        
+        if 'gestor_id' in chat_message.context:
+            return chat_message.context['gestor_id']
+        
+        for interaction in reversed(session.get_recent_context(3)):
+            if 'gestor_id' in interaction.get('agent_response', {}).get('metadata', {}):
+                return interaction['agent_response']['metadata']['gestor_id']
+        
+        gestor_patterns = [
+            r'gestor\s+(\d+)',
+            r'id\s+(\d+)', 
+            r'#(\d+)',
+            r'número\s+(\d+)',
+            r'num\s+(\d+)'
+        ]
+        
+        message_lower = chat_message.message.lower()
+        
+        for pattern in gestor_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                potential_id = match.group(1)
+                if potential_id.isdigit() and 1 <= int(potential_id) <= 100:
+                    logger.info(f"🎯 Gestor ID extraído: {potential_id}")
+                    return potential_id
+        
+        return "1"
+    
+    def _create_error_response(self, error_message: str, session_id: str, start_time: datetime) -> ChatResponse:
+        """Respuesta de error profesional"""
+        return ChatResponse(
+            response=f"❌ Lo siento, ha ocurrido un error procesando tu consulta: {error_message}\n\n💡 Por favor, intenta reformular tu pregunta o contacta con el equipo de Control de Gestión.",
+            response_type="error",
+            charts=[],
+            recommendations=[
+                "Intenta reformular tu pregunta de forma más específica",
+                "Verifica que los parámetros sean correctos",
+                "Contacta con el equipo si persiste el problema"
+            ],
+            metadata={
+                "error": True,
+                "error_message": error_message,
+                "imports_successful": self.imports_successful,
+                "chart_generator_available": self.chart_generator_available,
+                "basic_queries_available": self.basic_queries_available,
+                "model_used": MODEL_NAME
+            },
+            execution_time=(datetime.now() - start_time).total_seconds(),
+            confidence_score=0.0,
+            timestamp=datetime.now().isoformat(),
+            session_id=session_id,
+            chart_configs=[],
+            pivot_suggestions=[],
+            basic_queries_used=False,
+            data_sources=[]
+        )
+    
+    # ========================================================================
+    # MÉTODOS DE ESTADO Y GESTIÓN
+    # ========================================================================
+    
+    def get_agent_status(self) -> Dict[str, Any]:
+        """Estado del agente"""
+        return {
+            'status': 'active',
+            'version': '7.0',
+            'mode': 'PRODUCTION' if self.imports_successful else 'MOCK',
+            'uptime_seconds': (datetime.now() - self.start_time).total_seconds(),
+            'active_sessions': len(self.session_manager.sessions),
+            'model_configured': MODEL_NAME,
+            'integrations': {
+                'cdg_agent': 'active' if self.cdg_agent else 'inactive',
+                'chart_generator': 'active' if self.chart_generator_available else 'inactive',
+                'basic_queries': 'active' if self.basic_queries_available else 'inactive',
+                'professional_prompts': 'active',
+                'personalization': 'active',
+                'intent_classification': 'active',
+                'feedback_processing': 'active'
+            },
+            'features': {
+                'intelligent_period_extraction': True,
+                'intelligent_gestor_extraction': True,
+                'cdg_agent_delegation': True,
+                'professional_system_prompts': True,
+                'intent_classification': True,
+                'personalization_engine': True,
+                'feedback_learning': True,
+                'conversation_memory': True,
+                'dynamic_formatting': True,
+                'chart_generation': self.chart_generator_available,
+                'chart_pivot_conversational': self.chart_generator_available,
+                'chart_interaction_detection': True,
+                'visualization_preferences': True,
+                'basic_queries_integration': self.basic_queries_available,
+                'quick_response_mode': self.basic_queries_available,
+                'system_summary_generation': self.basic_queries_available
+            },
+            'architecture': 'professional_v7.0_module'
+        }
+    
+    def get_session_history(self, user_id: str):
+        """Historial de sesión con personalización"""
+        if user_id in self.session_manager.sessions:
+            session = self.session_manager.sessions[user_id]
+            return {
+                'conversation_history': session.conversation_history,
+                'user_preferences': session.user_preferences,
+                'chart_preferences': session.chart_preferences,
+                'personalization_data': session.personalization_data,
+                'chart_interaction_history': session.chart_interaction_history,
+                'current_chart_configs': session.current_chart_configs,
+                'basic_queries_usage': session.personalization_data.get('basic_queries_usage', 0),
+                'quick_queries_count': session.personalization_data.get('quick_queries_count', 0)
+            }
+        return {
+            'conversation_history': [], 
+            'user_preferences': {}, 
+            'chart_preferences': {},
+            'personalization_data': {},
+            'chart_interaction_history': [],
+            'current_chart_configs': [],
+            'basic_queries_usage': 0,
+            'quick_queries_count': 0
+        }
+    
+    def get_dynamic_suggestions(self, user_id: str) -> List[str]:
+        """Sugerencias inteligentes personalizadas"""
+        current_period = datetime.now().strftime('%Y-%m')
+        
+        # Obtener preferencias del usuario si existe
+        user_prefs = {}
+        chart_prefs = {}
+        basic_queries_usage = 0
+        if user_id in self.session_manager.sessions:
+            session = self.session_manager.sessions[user_id]
+            user_prefs = session.user_preferences
+            chart_prefs = session.chart_preferences
+            frequent_queries = session.personalization_data.get('frequent_queries', [])
+            basic_queries_usage = session.personalization_data.get('basic_queries_usage', 0)
+        else:
+            frequent_queries = []
+        
+        # Sugerencias base
+        base_suggestions = [
+            f"¿Cómo está mi rendimiento en {current_period}?",
+            "Comparar gestores 18 y 21 en ROE",
+            "Comparar segmentos Empresas vs Minorista",
+            "Análisis del centro de Madrid vs Barcelona",
+            f"¿Qué gestores tienen alertas críticas en {current_period}?",
+            f"¿Quién merece incentivos en {current_period}?",
+            "Business Review del gestor 19",
+            "Executive Summary del período actual"
+        ]
+        
+        # Añadir sugerencias de gráficos si está disponible
+        if CHART_GENERATOR_AVAILABLE:
+            chart_suggestions = [
+                "Generar gráfico comparativo de gestores",
+                "Mostrar evolución temporal en gráfico de líneas",
+                "Crear dashboard interactivo"
+            ]
+            base_suggestions.extend(chart_suggestions)
+        
+        # Añadir sugerencias de basic queries si está disponible
+        if BASIC_QUERIES_AVAILABLE:
+            basic_suggestions = [
+                "Resumen general del sistema",
+                "Ranking de gestores por contratos",
+                "Información de centros operativos",
+                "Popularidad de productos"
+            ]
+            if basic_queries_usage > 0:
+                base_suggestions = basic_suggestions + base_suggestions
+        
+        return base_suggestions[:12]
+    
+    # ========================================================================
+    # MÉTODOS DE FORMATO Y HELPERS (SIMPLIFICADOS)
+    # ========================================================================
+    
+    def _format_basic_summary(self, data: Dict, session: ChatSession) -> str:
+        """Formatea resumen básico del sistema"""
+        try:
+            style = session.user_preferences.get('communication_style', 'professional')
+            
+            if style == 'concise':
+                return (f"📊 **Resumen del Sistema CDG:**\n"
+                       f"• **Gestores:** {data.get('total_gestores', 0)}\n"
+                       f"• **Clientes:** {data.get('total_clientes', 0)}\n"
+                       f"• **Contratos:** {data.get('total_contratos', 0)}")
+            
+            else:
+                return (f"📊 **Resumen General del Sistema de Control de Gestión**\n\n"
+                       f"✅ **Estado actual del sistema:**\n"
+                       f"• **Gestores activos:** {data.get('total_gestores', 0)} gestores comerciales\n"
+                       f"• **Base de clientes:** {data.get('total_clientes', 0)} clientes registrados\n"
+                       f"• **Contratos vigentes:** {data.get('total_contratos', 0)} contratos activos\n"
+                       f"• **Productos disponibles:** {data.get('total_productos', 0)} líneas de producto\n"
+                       f"• **Centros operativos:** {data.get('total_centros', 0)} centros finalistas")
+        
+        except Exception as e:
+            logger.warning(f"Error formateando resumen básico: {e}")
+            return "📊 Resumen del sistema disponible."
+    
+    def _format_gestores_ranking(self, data: List[Dict], metric: str, session: ChatSession) -> str:
+        """Formatea ranking de gestores"""
+        try:
+            if not data:
+                return f"❌ No se encontraron datos de {metric} para los gestores."
+            
+            metric_field = 'num_contratos' if metric == 'contratos' else 'num_clientes'
+            metric_label = 'Contratos' if metric == 'contratos' else 'Clientes'
+            
+            response_parts = [f"🏆 **Ranking de Gestores por {metric_label}**\n"]
+            
+            # Mostrar top 10
+            top_data = data[:10]
+            for i, gestor in enumerate(top_data, 1):
+                gestor_name = gestor.get('DESC_GESTOR', 'N/A')
+                count = gestor.get(metric_field, 0)
+                
+                emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+                response_parts.append(f"{emoji} **{gestor_name}:** {count:,} {metric}")
+            
+            if len(data) > 10:
+                response_parts.append(f"\n... y {len(data) - 10} gestores más")
+            
+            response_parts.append(f"\n📈 **Total analizado:** {len(data)} gestores")
+            
+            return "\n".join(response_parts)
+            
+        except Exception as e:
+            logger.warning(f"Error formateando ranking de gestores: {e}")
+            return f"📊 Ranking de gestores por {metric} procesado."
+    
+    def _get_basic_query_recommendations(self, query_type: str) -> List[str]:
+        """Genera recomendaciones para consultas básicas"""
+        recommendations_map = {
+            'quick_summary': [
+                "Solicita análisis específicos de gestores para mayor detalle",
+                "Explora comparativas entre centros o segmentos"
+            ],
+            'gestores_ranking': [
+                "Analiza el performance detallado de los top performers",
+                "Compara métricas específicas entre gestores"
+            ]
+        }
+        return recommendations_map.get(query_type, [
+            "Explora análisis más específicos con el CDG Agent",
+            "Solicita visualizaciones para mejor comprensión"
+        ])
+    
+    # ========================================================================
+    # MÉTODOS ADICIONALES SIMPLIFICADOS
+    # ========================================================================
+    
+    async def _create_basic_query_fallback_response(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
+        """Respuesta fallback cuando Basic Queries no está disponible"""
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        return ChatResponse(
+            response=f"📊 He recibido tu consulta: '{chat_message.message}'\n\n⚠️ Las consultas rápidas no están disponibles temporalmente.",
+            response_type="basic_query_fallback",
+            charts=[],
+            recommendations=["Reformula la consulta para análisis completo"],
+            metadata={'source': 'basic_query_fallback', 'basic_queries_available': False},
+            execution_time=execution_time,
+            confidence_score=0.3,
+            timestamp=datetime.now().isoformat(),
+            session_id=session.session_id,
+            chart_configs=[],
+            pivot_suggestions=[],
+            basic_queries_used=False,
+            data_sources=[]
+        )
+    
+    def _create_chart_fallback_response(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
+        """Respuesta fallback cuando Chart Generator no está disponible"""
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        return ChatResponse(
+            response=f"📊 He recibido tu solicitud de cambio de gráfico: '{chat_message.message}'\n\n⚠️ La funcionalidad de pivoteo de gráficos no está disponible temporalmente.",
+            response_type="chart_pivot_fallback",
+            charts=[],
+            recommendations=["Consulta con el equipo técnico para habilitar funciones de gráficos"],
+            metadata={'source': 'chart_fallback', 'chart_generator_available': False},
+            execution_time=execution_time,
+            confidence_score=0.3,
+            timestamp=datetime.now().isoformat(),
+            session_id=session.session_id,
+            chart_configs=[],
+            pivot_suggestions=[],
+            basic_queries_used=False,
+            data_sources=[]
+        )
+    
+    def _should_request_clarification(self, intent_analysis: Dict) -> bool:
+        """Determina si se debe pedir clarificación por baja confianza"""
+        confidence = intent_analysis['confidence']
+        intent = intent_analysis['intent']
+        
+        # No pedir clarificación para interacciones específicas
+        if intent in ['chart_pivot', 'basic_query']:
+            return False
+
+        thresholds = {
+            'performance_analysis': 0.6,
+            'comparative_analysis': 0.65,
+            'deviation_detection': 0.7,
+            'incentive_analysis': 0.65,
+            'business_review': 0.7,
+            'executive_summary': 0.7,
+            'general_inquiry': 0.4
+        }
+
+        return confidence < thresholds.get(intent, 0.6)
+    
+    async def _request_clarification(self, chat_message: ChatMessage, intent_analysis: Dict, session: ChatSession) -> ChatResponse:
+        """Solicita aclaración al usuario por baja confianza"""
+        start_time = datetime.now()
+        
+        intent = intent_analysis.get('intent', 'general_inquiry')
+        confidence = intent_analysis.get('confidence', 0)
+        
+        clarification_msg = f"💡 **Consulta detectada** (confianza: {confidence:.0%})\n\n" \
+                          "No estoy completamente seguro de haber entendido tu consulta. " \
+                          "¿Podrías proporcionar más detalles?"
+        
+        return ChatResponse(
+            response=clarification_msg,
+            response_type="clarification_request",
+            charts=[],
+            recommendations=["Especifica más detalles en tu consulta"],
+            metadata={
+                "source": "clarification_handler",
+                "original_intent": intent,
+                "original_confidence": confidence,
+                "requires_clarification": True
+            },
+            execution_time=(datetime.now() - start_time).total_seconds(),
+            confidence_score=confidence,
+            timestamp=datetime.now().isoformat(),
+            session_id=session.session_id,
+            chart_configs=[],
+            pivot_suggestions=[],
+            basic_queries_used=False,
+            data_sources=[]
+        )
+    
+    def _intent_requires_cdg_agent(self, intent: str, message: str) -> bool:
+        """Determina si la intención requiere CDG Agent"""
+        cdg_intents = {
+            'performance_analysis',
+            'comparative_analysis', 
+            'deviation_detection',
+            'incentive_analysis',
+            'business_review',
+            'executive_summary'
+        }
+        
+        if intent in ['chart_pivot', 'basic_query']:
+            return False
+        
+        return intent in cdg_intents or self._requires_cdg_agent(message)
+    
+    def _requires_cdg_agent(self, message: str) -> bool:
+        """Determina si requiere CDG Agent"""
+        message_lower = message.lower()
+        
+        complex_patterns = [
+            r'gestor\s+\d+',
+            r'cómo\s+está.*gestor',
+            r'performance.*gestor',
+            r'rendimiento.*gestor',
+            r'comparar.*gestores',
+            r'business\s+review',
+            r'executive\s+summary'
+        ]
+        
+        for pattern in complex_patterns:
+            if re.search(pattern, message_lower):
+                logger.info(f"🎯 Consulta compleja detectada: {pattern}")
+                return True
+        
+        return False
+    
+    def _get_approach_for_intent(self, intent: str) -> str:
+        """Obtiene enfoque recomendado según intención"""
+        approach_map = {
+            'performance_analysis': 'cdg_detailed',
+            'comparative_analysis': 'cdg_detailed',
+            'deviation_detection': 'cdg_alerts',
+            'incentive_analysis': 'cdg_calculations',
+            'business_review': 'cdg_executive',
+            'executive_summary': 'cdg_executive',
+            'chart_pivot': 'chart_interaction',
+            'basic_query': 'basic_queries',
+            'general_inquiry': 'simple_conversational'
+        }
+        return approach_map.get(intent, 'simple_conversational')
+    
+    async def _generate_chart_pivot_response(self, pivot_result: Dict, original_message: str, session: ChatSession) -> str:
+        """Genera respuesta profesional para pivoteo de gráficos"""
+        try:
+            if pivot_result.get('status') == 'success':
+                new_config = pivot_result.get('new_config', {})
+                chart_type = new_config.get('chart_type', 'gráfico')
+                
+                return f"📊 **Gráfico actualizado:** {original_message}\n\n✅ He cambiado la visualización a **{chart_type}** según tu solicitud."
+            else:
+                return f"❌ No pude procesar el cambio de gráfico: {pivot_result.get('message', 'Error desconocido')}"
+                
+        except Exception as e:
+            logger.error(f"Error generando respuesta de pivoteo: {e}")
+            return f"✅ He procesado tu solicitud de cambio de gráfico: {original_message}"
+    
+    def _generate_pivot_suggestions_for_chart(self, pivot_result: Dict) -> List[str]:
+        """Genera sugerencias de pivoteo específicas para el gráfico actual"""
+        try:
+            if pivot_result.get('status') != 'success':
+                return []
+            
+            current_type = pivot_result.get('new_config', {}).get('chart_type', 'bar')
+            
+            suggestions = []
+            
+            if current_type == 'bar':
+                suggestions.extend([
+                    "Cambiar a gráfico circular",
+                    "Mostrar como líneas de tendencia"
+                ])
+            elif current_type == 'line':
+                suggestions.extend([
+                    "Cambiar a barras verticales", 
+                    "Mostrar como área sombreada"
+                ])
+            elif current_type == 'pie':
+                suggestions.extend([
+                    "Cambiar a barras comparativas",
+                    "Mostrar como tabla de datos"
+                ])
+            
+            return suggestions[:3]
+            
+        except Exception as e:
+            logger.warning(f"Error generando sugerencias de pivoteo: {e}")
+            return []
+    
+    async def _generate_professional_response(self, content: Dict[str, Any], original_message: str, cdg_response, session: ChatSession, intent_analysis: Dict) -> str:
+        """Genera respuesta profesional combinando datos y explicación"""
+        try:
+            # Generar respuesta básica
+            response_parts = [
+                f"📊 **Análisis para:** {original_message}",
+                "",
+                "🧠 **Interpretación:**",
+                "Los datos han sido procesados exitosamente."
+            ]
+            
+            # Añadir información de gráficos si están disponibles
+            if hasattr(cdg_response, 'charts') and cdg_response.charts:
+                chart_count = len(cdg_response.charts)
+                response_parts.append(f"\n📊 **Visualizaciones:** {chart_count} gráfico{'s' if chart_count > 1 else ''} generado{'s' if chart_count > 1 else ''}.")
+            
+            return "\n".join(response_parts)
+            
+        except Exception as e:
+            logger.error(f"❌ Error generando respuesta profesional: {e}")
+            return f"He procesado tu consulta: {original_message}. Los resultados están disponibles."
+    
+    async def _process_simple_chat_professional(self, chat_message: ChatMessage, message: str, gestor_id: str, periodo: str, session: ChatSession, start_time: datetime, intent_analysis: Dict) -> ChatResponse:
+        """Procesamiento simple con enfoque profesional"""
+        try:
+            response_text = f"💬 He recibido tu consulta: {message}\n\nProcesando con enfoque conversacional profesional."
+            
+            chat_response = ChatResponse(
+                response=response_text,
+                response_type=intent_analysis['intent'],
+                charts=[],
+                recommendations=["Consulta información más específica para análisis detallado"],
+                metadata={
+                    'source': 'chat_simple_professional',
+                    'intent': intent_analysis['intent'],
+                    'confidence': intent_analysis['confidence'],
+                    'gestor_id': gestor_id,
+                    'periodo': periodo
+                },
+                execution_time=(datetime.now() - start_time).total_seconds(),
+                confidence_score=intent_analysis['confidence'],
+                timestamp=datetime.now().isoformat(),
+                session_id=session.session_id,
+                chart_configs=[],
+                pivot_suggestions=[],
+                basic_queries_used=False,
+                data_sources=['simple_queries']
+            )
+            
+            session.add_interaction(message, chat_response.model_dump(), intent_analysis['intent'])
+            
+            return chat_response
+            
+        except Exception as e:
+            logger.error(f"❌ Error en procesamiento simple profesional: {e}")
+            return self._create_error_response(str(e), session.session_id, start_time)
+    
+    async def _process_user_feedback_professional(self, user_id: str, feedback: Dict[str, Any], session: ChatSession):
+        """Procesamiento profesional de feedback"""
+        try:
+            if not feedback:
+                return
+            
+            rating = feedback.get('rating', 0)
+            
+            # Añadir a historial
+            session.personalization_data['feedback_history'].append({
+                'timestamp': datetime.now().isoformat(),
+                'rating': rating,
+                'feedback': feedback
+            })
+            
+            # Ajustar preferencias basado en rating
+            if rating >= 4:
+                session.personalization_data['successful_interactions'] += 1
+            elif rating <= 2:
+                comments = feedback.get('comment', '').lower()
+                if 'muy largo' in comments:
+                    session.user_preferences['response_length'] = 'short'
+                elif 'muy corto' in comments:
+                    session.user_preferences['response_length'] = 'detailed'
+            
+            logger.info(f"📝 Feedback procesado para usuario {user_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error procesando feedback: {e}")
+
+# ============================================================================
+# FUNCIONES DE CONVENIENCIA
+# ============================================================================
+
+def create_chat_agent() -> CDGChatAgent:
+    """Función de conveniencia para crear instancia del agente"""
+    return CDGChatAgent()
+
+# Instancia global para uso directo
+chat_agent_instance = None
+
+def get_chat_agent() -> CDGChatAgent:
+    """Obtiene instancia global del agente de chat"""
+    global chat_agent_instance
+    if chat_agent_instance is None:
+        chat_agent_instance = CDGChatAgent()
+    return chat_agent_instance
+
+# Exports
+__all__ = [
+    'CDGChatAgent',
+    'ChatMessage', 
+    'ChatResponse',
+    'ChatSession',
+    'ChatSessionManager',
+    'create_chat_agent',
+    'get_chat_agent'
+]

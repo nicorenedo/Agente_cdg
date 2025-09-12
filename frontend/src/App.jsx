@@ -1,133 +1,103 @@
 // src/App.jsx
-// Aplicación principal con routing y configuración completa integrada
-// CORREGIDO: Añadido App component de Ant Design para contexto de mensajes estáticos
+// ✅ CDG Sistema v1.2 - App Principal Optimizado
+// Enrutador principal para LandingPage, GestorView y DireccionView
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ConfigProvider, App as AntdApp, message, notification } from 'antd'; // ✅ AÑADIDO: App as AntdApp
+import { ConfigProvider, App as AntdApp } from 'antd';
 import { ErrorBoundary } from 'react-error-boundary';
-import esES from 'antd/locale/es_ES';
-import theme from './styles/theme';
-import api from './services/api';
-import chatService from './services/chatService';
+import esES from 'antd/es/locale/es_ES';
 
-// Importar páginas principales
+// Servicios y tema
+import theme from './styles/theme';
+
+// Páginas del sistema CDG
 import LandingPage from './pages/LandingPage';
 import GestorView from './pages/GestorView';
 import DireccionView from './pages/DireccionView';
 
-console.log('🔍 Environment Variables:', {
-  API_URL: process.env.REACT_APP_API_URL,
-  CHAT_URL: process.env.REACT_APP_CHAT_API_URL,
-  NODE_ENV: process.env.NODE_ENV
-});
+// ============================================================================
+// 🎨 CONFIGURACIÓN TEMA BANCA MARCH
+// ============================================================================
 
-// Configuración completa de tema para Ant Design
-const antdThemeConfig = {
+const antdTheme = {
   token: {
-    ...theme.token,
-    // Colores específicos de Ant Design
     colorPrimary: theme.colors.bmGreenPrimary,
-    colorSuccess: theme.colors.bmGreenLight,
+    colorSuccess: theme.colors.success,
     colorWarning: theme.colors.warning,
     colorError: theme.colors.error,
     colorInfo: theme.colors.info,
-    
-    // Configuración de componentes
-    borderRadius: 6,
-    borderRadiusLG: 8,
-    borderRadiusSM: 4,
-    controlHeight: 32,
-    controlHeightLG: 40,
-    controlHeightSM: 24,
-    
-    // Tipografía
+    borderRadius: 8,
+    fontFamily: "'Inter', 'Segoe UI', sans-serif",
     fontSize: 14,
-    fontSizeLG: 16,
-    fontSizeSM: 12,
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    lineHeight: 1.5,
-    
-    // Colores de fondo
     colorBgContainer: theme.colors.background,
-    colorBgElevated: theme.colors.background,
     colorBgLayout: theme.colors.backgroundLight,
-    
-    // Bordes y texto
-    colorBorder: theme.colors.border,
     colorText: theme.colors.textPrimary,
     colorTextSecondary: theme.colors.textSecondary,
-    colorTextTertiary: theme.colors.textLight,
-    
-    // Sombras
-    boxShadow: theme.token.boxShadow,
-    boxShadowSecondary: theme.token.boxShadowSecondary,
+    borderRadiusLG: 12,
+    wireframe: false,
   },
   components: {
-    Card: {
-      borderRadius: 8,
-      boxShadowTertiary: '0 2px 8px rgba(0,0,0,0.1)',
-    },
     Button: {
       borderRadius: 6,
-      fontWeight: 600,
-      controlHeight: 32,
-      controlHeightLG: 40,
-      controlHeightSM: 24,
+      controlHeight: 36,
+      colorPrimaryHover: theme.colors.bmGreenLight,
+      fontWeight: 500,
+    },
+    Card: {
+      borderRadius: 12,
+      padding: 20,
+      boxShadow: '0 2px 8px rgba(27, 94, 85, 0.08)',
     },
     Table: {
       borderRadius: 8,
-      headerBg: theme.colors.backgroundLight,
-      headerColor: theme.colors.textPrimary,
-    },
-    Input: {
-      borderRadius: 6,
-      controlHeight: 32,
+      colorBorderSecondary: theme.colors.borderLight,
     },
     Select: {
       borderRadius: 6,
-      controlHeight: 32,
+      controlHeight: 36,
+      colorBorder: theme.colors.borderLight,
     },
-    DatePicker: {
+    Input: {
       borderRadius: 6,
+      controlHeight: 36,
+      colorBorder: theme.colors.borderLight,
     },
-    Modal: {
+    Layout: {
+      headerBg: theme.colors.backgroundLight,
+      bodyBg: theme.colors.background,
+    },
+    Menu: {
+      borderRadius: 6,
+      colorItemBg: 'transparent',
+    },
+    Badge: {
+      colorPrimary: theme.colors.bmGreenPrimary,
+    },
+    Alert: {
       borderRadius: 8,
     },
     Drawer: {
-      borderRadius: 8,
+      borderRadius: 12,
     },
-    Menu: {
-      itemBorderRadius: 6,
+    Modal: {
+      borderRadius: 12,
     },
-    Tabs: {
-      borderRadius: 6,
-    },
-    // ✅ AÑADIDO: Configuración específica para mensajes
-    Message: {
-      zIndexPopup: 2000,
-    },
-    Notification: {
-      zIndexPopup: 2000,
-    }
-  },
+  }
 };
 
-// Componente de error boundary mejorado
+// ============================================================================
+// ❌ ERROR BOUNDARY MEJORADO
+// ============================================================================
+
 const ErrorFallback = ({ error, resetErrorBoundary }) => {
-  const [showDetails, setShowDetails] = useState(false);
-  
-  useEffect(() => {
-    // Log del error para debugging
-    console.error('Application Error:', error);
-    
-    // Notificar error crítico
-    notification.error({
-      message: 'Error Crítico',
-      description: 'Se ha producido un error en la aplicación CDG',
-      duration: 0, // No auto-close
-    });
-  }, [error]);
+  const handleBackToHome = () => {
+    window.location.href = '/';
+  };
+
+  const handleReload = () => {
+    window.location.reload();
+  };
 
   return (
     <div style={{
@@ -136,382 +106,226 @@ const ErrorFallback = ({ error, resetErrorBoundary }) => {
       justifyContent: 'center',
       alignItems: 'center',
       height: '100vh',
-      backgroundColor: theme.colors.backgroundLight,
-      background: theme.colors.gradients.light,
-      padding: theme.spacing.xl,
-      textAlign: 'center',
+      background: `linear-gradient(135deg, ${theme.colors.backgroundLight}, ${theme.colors.background})`,
+      padding: 24,
+      textAlign: 'center'
     }}>
       <div style={{
-        backgroundColor: theme.colors.background,
-        padding: theme.spacing.xxl,
-        borderRadius: theme.token.borderRadiusLG,
-        boxShadow: theme.token.boxShadowSecondary,
-        maxWidth: '600px',
-        width: '100%'
+        background: 'white',
+        padding: 40,
+        borderRadius: 16,
+        boxShadow: '0 8px 32px rgba(27, 94, 85, 0.15)',
+        maxWidth: 600,
+        border: `1px solid ${theme.colors.borderLight}`
       }}>
-        <h1 style={{ 
-          color: theme.colors.error,
-          fontSize: '28px',
-          marginBottom: theme.spacing.md,
-          fontWeight: theme.typography.fontWeights.bold
+        <div style={{ 
+          fontSize: 48, 
+          marginBottom: 24,
+          color: theme.colors.error 
         }}>
-          🚨 Error en la Aplicación
-        </h1>
+          ⚠️
+        </div>
+        
+        <h2 style={{ 
+          color: theme.colors.error, 
+          marginBottom: 16,
+          fontSize: 24,
+          fontWeight: 600
+        }}>
+          Error del Sistema CDG
+        </h2>
         
         <p style={{ 
-          color: theme.colors.textSecondary,
-          marginBottom: theme.spacing.lg,
-          fontSize: '16px',
-          lineHeight: theme.typography.lineHeights.relaxed
+          color: theme.colors.textSecondary, 
+          marginBottom: 32,
+          fontSize: 16,
+          lineHeight: 1.6
         }}>
-          Ha ocurrido un error inesperado en el sistema de Control de Gestión de Banca March. 
-          Por favor, intenta recargar la aplicación o contacta al soporte técnico si el problema persiste.
+          Ha ocurrido un error inesperado en el Sistema de Control de Gestión. 
+          Nuestro equipo técnico ha sido notificado automáticamente.
         </p>
         
         <div style={{
-          display: 'flex',
-          gap: theme.spacing.md,
-          justifyContent: 'center',
-          marginBottom: theme.spacing.lg
+          background: theme.colors.backgroundLight,
+          padding: 16,
+          borderRadius: 8,
+          marginBottom: 32,
+          fontSize: 13,
+          color: theme.colors.textSecondary,
+          wordBreak: 'break-word',
+          fontFamily: 'monospace',
+          textAlign: 'left',
+          border: `1px solid ${theme.colors.borderLight}`
         }}>
+          <strong>Error técnico:</strong><br />
+          {error?.message || 'Error desconocido del sistema'}
+          {error?.stack && (
+            <>
+              <br /><br />
+              <details style={{ fontSize: 11, opacity: 0.8 }}>
+                <summary style={{ cursor: 'pointer', marginBottom: 8 }}>
+                  Ver detalles técnicos
+                </summary>
+                <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                  {error.stack}
+                </pre>
+              </details>
+            </>
+          )}
+        </div>
+        
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
           <button
             onClick={resetErrorBoundary}
             style={{
-              padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
-              backgroundColor: theme.colors.bmGreenPrimary,
+              background: theme.colors.bmGreenPrimary,
               color: 'white',
               border: 'none',
-              borderRadius: theme.token.borderRadius,
+              padding: '14px 28px',
+              borderRadius: 8,
               cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: theme.typography.fontWeights.semibold,
-              transition: theme.transitions.normal,
+              fontSize: 14,
+              fontWeight: 500,
+              transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => {
-              e.target.style.backgroundColor = theme.colors.bmGreenDark;
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.backgroundColor = theme.colors.bmGreenPrimary;
-            }}
+            onMouseOver={(e) => e.target.style.backgroundColor = theme.colors.bmGreenLight}
+            onMouseOut={(e) => e.target.style.backgroundColor = theme.colors.bmGreenPrimary}
           >
             🔄 Reintentar
           </button>
           
           <button
-            onClick={() => window.location.href = '/'}
+            onClick={handleReload}
             style={{
-              padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
-              backgroundColor: 'transparent',
-              color: theme.colors.textPrimary,
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: theme.token.borderRadius,
+              background: theme.colors.textSecondary,
+              color: 'white',
+              border: 'none',
+              padding: '14px 28px',
+              borderRadius: 8,
               cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: theme.typography.fontWeights.medium,
-              transition: theme.transitions.normal,
+              fontSize: 14,
+              fontWeight: 500,
             }}
           >
-            🏠 Volver al Inicio
+            ♻️ Recargar Página
+          </button>
+          
+          <button
+            onClick={handleBackToHome}
+            style={{
+              background: 'transparent',
+              color: theme.colors.textSecondary,
+              border: `1px solid ${theme.colors.borderLight}`,
+              padding: '14px 28px',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            🏠 Ir al Inicio
           </button>
         </div>
         
-        <div style={{ borderTop: `1px solid ${theme.colors.border}`, paddingTop: theme.spacing.md }}>
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: theme.colors.textSecondary,
-              cursor: 'pointer',
-              fontSize: '14px',
-              textDecoration: 'underline'
-            }}
-          >
-            {showDetails ? '▼' : '▶'} Mostrar detalles técnicos
-          </button>
-          
-          {showDetails && (
-            <div style={{
-              marginTop: theme.spacing.md,
-              padding: theme.spacing.md,
-              backgroundColor: theme.colors.backgroundDark,
-              borderRadius: theme.token.borderRadiusSM,
-              textAlign: 'left',
-              maxHeight: '200px',
-              overflow: 'auto'
-            }}>
-              <pre style={{
-                fontSize: '12px',
-                color: theme.colors.error,
-                margin: 0,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
-              }}>
-                <strong>Error:</strong> {error.message}
-                {error.stack && (
-                  <>
-                    <br/><br/>
-                    <strong>Stack trace:</strong>
-                    <br/>
-                    {error.stack}
-                  </>
-                )}
-              </pre>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Footer con información de contacto */}
-      <div style={{
-        marginTop: theme.spacing.xl,
-        color: theme.colors.textSecondary,
-        fontSize: '12px'
-      }}>
-        <p>Sistema CDG - Banca March | Soporte Técnico: soporte-cdg@bancamarch.es</p>
-        <p>© 2025 Todos los derechos reservados</p>
+        <p style={{ 
+          marginTop: 24, 
+          fontSize: 12, 
+          color: theme.colors.textLight 
+        }}>
+          Si el problema persiste, contacta con soporte técnico: [sistemas@bancamarch.es](mailto:sistemas@bancamarch.es)
+        </p>
       </div>
     </div>
   );
 };
 
-// Componente de loading global
-const GlobalLoading = () => (
-  <div style={{
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100vh',
-    backgroundColor: theme.colors.backgroundLight,
-    background: theme.colors.gradients.primary
-  }}>
-    <div style={{
-      animation: 'spin 1s linear infinite',
-      width: '40px',
-      height: '40px',
-      border: `4px solid rgba(255,255,255,0.3)`,
-      borderTop: `4px solid white`,
-      borderRadius: '50%',
-      marginBottom: theme.spacing.lg
-    }} />
-    <p style={{
-      color: 'white',
-      fontSize: '16px',
-      fontWeight: theme.typography.fontWeights.medium
-    }}>
-      Inicializando Sistema CDG...
-    </p>
-  </div>
+// ============================================================================
+// 🛣️ RUTAS PRINCIPALES DEL SISTEMA (CORREGIDAS CON FUTURE FLAGS)
+// ============================================================================
+
+const AppRoutes = () => (
+  <Router
+    future={{
+      v7_startTransition: true,
+      v7_relativeSplatPath: true
+    }}
+  >
+    <Routes>
+      {/* Página Principal */}
+      <Route path="/" element={<LandingPage />} />
+      
+      {/* Dashboard Gestor Comercial - CORREGIDO para usar query params */}
+      <Route path="/gestor-dashboard" element={<GestorView />} />
+      
+      {/* Dashboard Control de Gestión */}
+      <Route path="/direccion-dashboard" element={<DireccionView />} />
+      
+      {/* Rutas alternativas más amigables */}
+      <Route path="/gestor" element={<Navigate to="/gestor-dashboard" replace />} />
+      <Route path="/direccion" element={<Navigate to="/direccion-dashboard" replace />} />
+      <Route path="/control-gestion" element={<Navigate to="/direccion-dashboard" replace />} />
+      
+      {/* Rutas específicas de gestor (parámetro URL) */}
+      <Route path="/gestor/:gestorId" element={<Navigate to={(location) => `/gestor-dashboard?gestor=${location.pathname.split('/')[2]}`} replace />} />
+      
+      {/* Catch-all: redirigir a inicio */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  </Router>
 );
 
-// ✅ NUEVO: Componente interno que contiene las rutas
-const AppContent = () => {
-  const [systemHealth, setSystemHealth] = useState({
-    api: false,
-    chat: false
-  });
-
-  // Inicialización de la aplicación
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        // Verificar estado de los servicios
-        const [apiAvailable, chatAvailable] = await Promise.all([
-          api.getHealth().then(() => true).catch(() => false),
-          chatService.isServiceAvailable().catch(() => false)
-        ]);
-
-        setSystemHealth({
-          api: apiAvailable,
-          chat: chatAvailable
-        });
-
-        // Configurar notificaciones globales
-        message.config({
-          top: 100,
-          duration: 3,
-          maxCount: 3,
-        });
-
-        notification.config({
-          placement: 'topRight',
-          duration: 4.5,
-          rtl: false,
-        });
-
-        // Mostrar estado de servicios si hay problemas
-        if (!apiAvailable) {
-          notification.warning({
-            message: 'Servicio Principal',
-            description: 'API principal no disponible. Algunas funcionalidades pueden estar limitadas.',
-            duration: 6,
-          });
-        }
-
-        if (!chatAvailable) {
-          console.warn('Chat service not available');
-        }
-
-        // Log de inicialización exitosa
-        console.log(`🚀 CDG App initialized successfully`, {
-          api: apiAvailable,
-          chat: chatAvailable,
-          timestamp: new Date().toISOString()
-        });
-
-      } catch (error) {
-        console.error('Error initializing app:', error);
-        notification.error({
-          message: 'Error de Inicialización',
-          description: 'Error al inicializar la aplicación. Algunas funcionalidades pueden no estar disponibles.',
-          duration: 0,
-        });
-      }
-    };
-
-    initializeApp();
-
-    // Cleanup al desmontar
-    return () => {
-      chatService.cleanup();
-    };
-  }, []);
-
-  return (
-    <Router>
-      <div 
-        className="App" 
-        style={{ 
-          fontFamily: theme.token.fontFamily,
-          minHeight: '100vh',
-          backgroundColor: theme.colors.backgroundLight
-        }}
-      >
-        <Routes>
-          {/* Página de selección de roles */}
-          <Route path="/" element={<LandingPage />} />
-          
-          {/* Dashboard de gestor comercial */}
-          <Route path="/gestor-dashboard" element={<GestorView />} />
-          <Route path="/gestor-dashboard/:gestorId" element={<GestorView />} />
-          
-          {/* Dashboard de dirección/control de gestión */}
-          <Route path="/direccion-dashboard" element={<DireccionView />} />
-          
-          {/* Redirecciones de compatibilidad */}
-          <Route path="/gestor" element={<Navigate to="/gestor-dashboard" replace />} />
-          <Route path="/direccion" element={<Navigate to="/direccion-dashboard" replace />} />
-          <Route path="/dashboard" element={<Navigate to="/" replace />} />
-          
-          {/* Ruta catch-all - redirige a landing page */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        
-        {/* Indicador de estado de servicios en desarrollo */}
-        {process.env.NODE_ENV === 'development' && (
-          <div style={{
-            position: 'fixed',
-            bottom: theme.spacing.sm,
-            right: theme.spacing.sm,
-            padding: theme.spacing.xs,
-            backgroundColor: theme.colors.background,
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: theme.token.borderRadiusSM,
-            fontSize: '10px',
-            color: theme.colors.textSecondary,
-            zIndex: theme.zIndex.toast,
-            boxShadow: theme.token.boxShadow
-          }}>
-            API: <span style={{ color: systemHealth.api ? theme.colors.success : theme.colors.error }}>
-              {systemHealth.api ? '🟢' : '🔴'}
-            </span>
-            {' '}
-            Chat: <span style={{ color: systemHealth.chat ? theme.colors.success : theme.colors.warning }}>
-              {systemHealth.chat ? '🟡' : '🟢'}
-            </span>
-          </div>
-        )}
-      </div>
-    </Router>
-  );
-};
+// ============================================================================
+// 🏠 COMPONENTE PRINCIPAL DE LA APLICACIÓN
+// ============================================================================
 
 const App = () => {
-  const [isInitializing, setIsInitializing] = useState(true);
-
-  // Control de inicialización
-  useEffect(() => {
-    // Simular tiempo de carga mínimo para UX
-    const timer = setTimeout(() => {
-      setIsInitializing(false);
-    }, 1500);
-
-    return () => clearTimeout(timer);
+  // Log de inicio en desarrollo
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('%c🏦 CDG - Sistema Control de Gestión Banca March', 
+        'color: #1B5E55; font-size: 18px; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);');
+      console.log('%c🔗 API URL:', 'font-weight: bold; color: #2563eb;', process.env.REACT_APP_API_URL || 'http://localhost:8000');
+      console.log('%c🌍 Environment:', 'font-weight: bold; color: #059669;', process.env.NODE_ENV);
+      console.log('%c📦 Theme loaded:', 'font-weight: bold; color: #7c3aed;', theme.colors.bmGreenPrimary);
+      console.log('%c✅ Sistema inicializado correctamente', 'color: #16a34a; font-weight: bold;');
+    }
   }, []);
 
-  // Mostrar loading durante inicialización
-  if (isInitializing) {
-    return <GlobalLoading />;
-  }
-
   return (
-    <ErrorBoundary 
+    <ErrorBoundary
       FallbackComponent={ErrorFallback}
-      onReset={() => {
-        // Limpiar estado y recargar
-        window.location.reload();
-      }}
       onError={(error, errorInfo) => {
-        // Log detallado para debugging
-        console.error('ErrorBoundary caught an error:', error, errorInfo);
+        console.error('❌ CDG App Critical Error:', error, errorInfo);
+        
+        // En producción, enviar error a sistema de monitoreo
+        if (process.env.NODE_ENV === 'production') {
+          // TODO: Integrar con sistema de logging (Sentry, LogRocket, etc.)
+          console.log('📨 Error reportado al sistema de monitoreo');
+        }
+      }}
+      onReset={() => {
+        console.log('🔄 Reseteando aplicación CDG...');
+        // Limpiar localStorage si es necesario
+        try {
+          localStorage.removeItem('cdg-temp-state');
+          sessionStorage.clear();
+        } catch (e) {
+          console.warn('⚠️ Error limpiando storage:', e);
+        }
       }}
     >
       <ConfigProvider 
-        theme={antdThemeConfig}
+        theme={antdTheme} 
         locale={esES}
       >
-        {/* ✅ CAMBIO PRINCIPAL: Envolver con App de Ant Design */}
         <AntdApp>
-          <AppContent />
+          <div className="cdg-app" style={{ minHeight: '100vh' }}>
+            <AppRoutes />
+          </div>
         </AntdApp>
       </ConfigProvider>
     </ErrorBoundary>
   );
 };
-
-// Añadir estilos de animación
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  
-  /* Scrollbar personalizado para Banca March */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: ${theme.colors.backgroundLight};
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: ${theme.colors.bmGreenLight};
-    border-radius: 3px;
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: ${theme.colors.bmGreenPrimary};
-  }
-  
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-`;
-document.head.appendChild(style);
 
 export default App;

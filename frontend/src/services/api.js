@@ -1,594 +1,729 @@
-// src/services/api.js
-// API Service para Agente Control de Gestión de Banca March - 100% integrado con main.py v2.0
-// Versión: 2.1 - Con endpoints avanzados de Chat Agent v6.1 + System Prompts Profesionales
+// frontend/src/services/api.js
+/* eslint-disable no-console */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+/**
+ * CDG Frontend API Client v11.0 (Chat Agent v10.0 + CDG Agent v6.0)
+ * --------------------------------------------------------------------
+ * - Perfect Integration con backend main.py v11.0
+ * - Chat Agent v10.0: Clasificación inteligente + 6 catálogos
+ * - CDG Agent v6.0: Análisis complejos especializados
+ * - Desenvelope automático: devuelve { data, meta, ts } por defecto
+ * - Retries con backoff para 429/502/503/504
+ * - Cancelación de requests (AbortController)
+ * - WebSocket optimizado para Chat Agent v10.0
+ * - SDK completo con TODOS los endpoints del backend
+ */
 
-class ApiService {
-  constructor() {
-    this.baseUrl = API_BASE_URL;
-    this._availablePeriods = null;
-    this._defaultPeriod = null;
-    this._currentUserId = 'frontend_user'; // Usuario por defecto para frontend
-  }
+import axios from "axios";
 
-  async _request(path, options = {}) {
-    const url = `${this.baseUrl}${path}`;
-    const config = {
-      headers: { 'Content-Type': 'application/json', ...options.headers },
-      ...options
-    };
+/* ============================
+ * Configuración base
+ * ============================ */
 
-    try {
-      console.log(`🔄 API Request: ${options.method || 'GET'} ${url}`);
-      const response = await fetch(url, config);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log(`✅ API Response:`, data);
-      return data;
-    } catch (error) {
-      console.error(`❌ API Error for ${path}:`, error);
-      throw error;
-    }
-  }
+const BASE_URL =
+  process.env.REACT_APP_API_BASE_URL?.replace(/\/+$/, "") ||
+  `${window.location.protocol}//${window.location.hostname}:8000`;
 
-  // ========================================
-  // 🔧 UTILIDADES DE FORMATO
-  // ========================================
+const DEFAULT_TIMEOUT =
+  Number(process.env.REACT_APP_API_TIMEOUT) > 0
+    ? Number(process.env.REACT_APP_API_TIMEOUT)
+    : 30000; // 30s para análisis complejos
 
-  _formatPeriod(period) {
-    if (!period) return null;
-    if (typeof period === 'string' && period.length > 7) {
-      return period.substring(0, 7);
-    }
-    return period;
-  }
+const JSON_HEADERS = {
+  "Content-Type": "application/json",
+  Accept: "application/json",
+};
 
-  setCurrentUserId(userId) {
-    this._currentUserId = userId;
-  }
+// Helper: construir qs limpio
+const buildQuery = (params = {}) => {
+  const esc = encodeURIComponent;
+  const qs = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `${esc(k)}=${esc(v)}`)
+    .join("&");
+  return qs ? `?${qs}` : "";
+};
 
-  getCurrentUserId() {
-    return this._currentUserId;
-  }
-
-  // ========================================
-  // 📅 ENDPOINTS DE PERÍODOS
-  // ========================================
-
-  async getAvailablePeriods() {
-    try {
-      const response = await this._request('/periods/available');
-      this._availablePeriods = response.periods || [];
-      this._defaultPeriod = response.latest || this._availablePeriods[0] || '2025-10';
-      
-      return {
-        data: {
-          periods: this._availablePeriods,
-          latest: this._defaultPeriod
-        },
-        success: true
-      };
-    } catch (error) {
-      console.warn('Error obteniendo períodos, usando fallback');
-      this._availablePeriods = ['2025-10', '2025-09'];
-      this._defaultPeriod = '2025-10';
-      
-      return {
-        data: {
-          periods: this._availablePeriods,
-          latest: this._defaultPeriod
-        },
-        success: false,
-        source: 'fallback'
-      };
-    }
-  }
-
-  async getDefaultPeriod() {
-    if (!this._defaultPeriod) {
-      await this.getAvailablePeriods();
-    }
-    return this._defaultPeriod;
-  }
-
-  async isValidPeriod(period) {
-    if (!this._availablePeriods) {
-      await this.getAvailablePeriods();
-    }
-    return this._availablePeriods.includes(this._formatPeriod(period));
-  }
-
-  // ========================================
-  // 📊 ENDPOINTS DE DASHBOARD
-  // ========================================
-
-  async getDashboardData(period) {
-    const activePeriod = this._formatPeriod(period) || await this.getDefaultPeriod();
-    return this._request(`/api/dashboard/${activePeriod}`);
-  }
-
-  async getKpisConsolidados(periodo = null) {
-    const activePeriod = this._formatPeriod(periodo) || await this.getDefaultPeriod();
-    return this._request(`/kpis/consolidados?periodo=${activePeriod}`);
-  }
-
-  async getTotales(periodo = null) {
-    const activePeriod = this._formatPeriod(periodo) || await this.getDefaultPeriod();
-    return this._request(`/totales?periodo=${activePeriod}`);
-  }
-
-  async getAnalisisComparativo(periodo = null) {
-    const activePeriod = this._formatPeriod(periodo) || await this.getDefaultPeriod();
-    return this._request(`/analisis-comparativo?periodo=${activePeriod}`);
-  }
-
-  // ========================================
-  // 🚨 ENDPOINTS DE ALERTAS Y DESVIACIONES
-  // ========================================
-
-  async getDeviationAlerts(periodo = null, threshold = 15) {
-    const activePeriod = this._formatPeriod(periodo) || await this.getDefaultPeriod();
-    return this._request(`/deviations/alerts?periodo=${activePeriod}&threshold=${threshold}`);
-  }
-
-  // ========================================
-  // 👥 ENDPOINTS DE GESTORES
-  // ========================================
-
-  async getGestores() {
-    console.log('🎯 DEBUG: Obteniendo gestores...');
-    try {
-      const response = await this._request('/gestores');
-      let gestoresData = [];
-      
-      if (response) {
-        if (Array.isArray(response)) {
-          gestoresData = response;
-        } else if (response.gestores) {
-          gestoresData = response.gestores;
-        } else if (response.data) {
-          gestoresData = response.data;
-        }
-      }
-
-      const mapped = gestoresData.map(g => ({
-        id: g.gestor_id || g.GESTOR_ID || g.id,
-        nombre: g.nombre || g.desc_gestor || g.DESC_GESTOR,
-        centro: g.centro || g.desc_centro || g.DESC_CENTRO,
-        segmento: g.segmento || g.desc_segmento || g.DESC_SEGMENTO || 'No especificado'
-      })).filter(g => g.id && g.nombre);
-
-      console.log(`✅ Gestores procesados: ${mapped.length}`);
-      return { data: { gestores: mapped, total: mapped.length }, success: true };
-    } catch (error) {
-      console.error('❌ Error en /gestores:', error);
-      throw error;
-    }
-  }
-
-  async getComparativeRanking(periodo = null, orderBy = 'margen_neto') {
-    const activePeriod = this._formatPeriod(periodo) || await this.getDefaultPeriod();
-    return this._request(`/comparative/ranking?periodo=${activePeriod}&metric=${orderBy}`);
-  }
-
-  async getGestorPerformance(gestorId, period) {
-    const activePeriod = this._formatPeriod(period) || await this.getDefaultPeriod();
-    return this._request(`/gestor/${gestorId}/performance?periodo=${activePeriod}`);
-  }
-
-  // ========================================
-  // 💰 ENDPOINTS DE INCENTIVOS
-  // ========================================
-
-  async getIncentiveSummary(periodo = null, gestorId = null) {
-    const activePeriod = this._formatPeriod(periodo) || await this.getDefaultPeriod();
-    let params = `periodo=${activePeriod}`;
-    if (gestorId) params += `&gestor_id=${gestorId}`;
-    return this._request(`/incentives/summary?${params}`);
-  }
-
-  // ========================================
-  // 📋 ENDPOINTS DE REPORTES
-  // ========================================
-
-  async generateBusinessReview(userId, gestorId, period) {
-    return this._request('/reports/business_review', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: userId,
-        gestor_id: gestorId,
-        periodo: this._formatPeriod(period)
-      })
-    });
-  }
-
-  async generateExecutiveSummary(userId, period) {
-    return this._request('/reports/executive_summary', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: userId,
-        periodo: this._formatPeriod(period)
-      })
-    });
-  }
-
-  // ========================================
-  // 💬 ENDPOINTS DE CHAT BÁSICO
-  // ========================================
-
-  async sendChatMessage(message, gestorId = null, context = {}) {
-    const activePeriod = this._formatPeriod(context.periodo) || await this.getDefaultPeriod();
-    return this._request('/chat', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: this._currentUserId,
-        message,
-        gestor_id: gestorId,
-        periodo: activePeriod,
-        include_charts: true,
-        include_recommendations: true,
-        context,
-        timestamp: new Date().toISOString()
-      })
-    });
-  }
-
-  /**
-   * Procesa mensaje con análisis inteligente automático (completamente genérico)
-   * @param {string} message - Mensaje del usuario
-   * @param {object} context - Contexto adicional
-   * @returns {Promise<Object>} Respuesta procesada
-   */
-  async sendIntelligentMessage(message, context = {}) {
-    try {
-      // 🎯 PREPARAR PAYLOAD ENRIQUECIDO GENÉRICO
-      const intelligentPayload = {
-        user_id: this._currentUserId,
-        message: message.trim(),
-        context: {
-          ...context,
-          // 🚀 METADATOS PARA MEJORAR CLASIFICACIÓN AUTOMÁTICA
-          frontend_source: true,
-          api_version: '2.1',
-          request_timestamp: new Date().toISOString(),
-          enhanced_processing: true,
-          // Permitir que el backend haga toda la detección inteligente
-          allow_auto_detection: true,
-          allow_intent_enhancement: true
-        },
-        // 🎯 CONFIGURACIONES GENÉRICAS PARA MEJOR PROCESAMIENTO
-        include_charts: true,
-        include_recommendations: true,
-        timestamp: new Date().toISOString()
-      };
-    
-      console.log('🧠 Enviando para procesamiento inteligente:', intelligentPayload);
-      
-      return await this._request('/chat/intelligent', {
-        method: 'POST',
-        body: JSON.stringify(intelligentPayload)
-      });
-      
-    } catch (error) {
-      console.error('❌ Error en procesamiento inteligente:', error);
-      
-      // 🔄 FALLBACK AUTOMÁTICO AL MÉTODO ESTÁNDAR
-      console.log('🔄 Fallback a método estándar...');
-      return await this.sendChatMessage(message, null, { 
-        context: {
-          ...context,
-          fallback_from_intelligent: true,
-          fallback_reason: error.message
-        }
-      });
-    }
-  }
-
-
-  async getChatStatus() {
-    return this._request('/chat/status');
-  }
-
-  async getChatHistory(userId = null) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/chat/history/${activeUserId}`);
-  }
-
-  async resetChatSession(userId = null) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/chat/reset/${activeUserId}`, { method: 'POST' });
-  }
-
-  // ========================================
-  // 🚀 ENDPOINTS DE CHAT AVANZADO v6.1
-  // ========================================
-
-  /**
-   * Envía feedback específico del chat usando System Prompts Profesionales
-   * @param {string} userId - ID del usuario
-   * @param {Object} feedback - Datos del feedback (rating, comments, categories)
-   */
-  async sendChatFeedback(userId = null, feedback) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/chat/feedback/${activeUserId}`, {
-      method: 'POST',
-      body: JSON.stringify(feedback)
-    });
-  }
-
-  /**
-   * Obtiene sugerencias personalizadas dinámicas usando IA
-   * @param {string} userId - ID del usuario
-   */
-  async getChatSuggestions(userId = null) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/chat/suggestions/${activeUserId}`);
-  }
-
-  /**
-   * Obtiene preferencias de personalización del chat
-   * @param {string} userId - ID del usuario
-   */
-  async getChatPreferences(userId = null) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/chat/preferences/${activeUserId}`);
-  }
-
-  /**
-   * Actualiza preferencias de personalización del chat
-   * @param {string} userId - ID del usuario
-   * @param {Object} preferences - Nuevas preferencias
-   */
-  async updateChatPreferences(userId = null, preferences) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/chat/preferences/${activeUserId}`, {
-      method: 'PUT',
-      body: JSON.stringify(preferences)
-    });
-  }
-
-  /**
-   * Clasifica intención de mensaje usando System Prompts Profesionales
-   * @param {string} message - Mensaje a clasificar
-   * @param {string} userId - ID del usuario (opcional)
-   */
-  async classifyChatIntent(message, userId = null) {
-    let url = `/chat/intent/classify?message=${encodeURIComponent(message)}`;
-    if (userId) url += `&user_id=${userId}`;
-    return this._request(url);
-  }
-
-  // ========================================
-  // 🔧 ENDPOINTS DE PERSONALIZACIÓN BÁSICA
-  // ========================================
-
-  async getUserPersonalization(userId = null) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/personalization/${activeUserId}`);
-  }
-
-  async updateUserPersonalization(userId = null, preferences) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/personalization/${activeUserId}`, {
-      method: 'POST',
-      body: JSON.stringify(preferences)
-    });
-  }
-
-  async sendFeedback(query, response, rating = null, comments = null) {
-    return this._request('/feedback', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: this._currentUserId,
-        query,
-        response,
-        rating,
-        comments,
-        categories: {},
-        timestamp: new Date().toISOString()
-      })
-    });
-  }
-
-  // ========================================
-  // 🧠 ENDPOINTS DE REFLECTION PATTERN
-  // ========================================
-
-  /**
-   * Obtiene insights organizacionales del Reflection Pattern
-   */
-  async getOrganizationalInsights() {
-    return this._request('/reflection/organizational-insights');
-  }
-
-  /**
-   * Obtiene patrones de uso específicos de un usuario
-   * @param {string} userId - ID del usuario
-   */
-  async getUserPatterns(userId = null) {
-    const activeUserId = userId || this._currentUserId;
-    return this._request(`/reflection/user-patterns/${activeUserId}`);
-  }
-
-  /**
-   * Integra feedback del chat en el sistema de reflection
-   * @param {Object} feedbackData - Datos de feedback para integración
-   */
-  async integrateFeedbackFromChat(feedbackData) {
-    return this._request('/reflection/feedback-integration', {
-      method: 'POST',
-      body: JSON.stringify(feedbackData)
-    });
-  }
-
-  // ========================================
-  // 🏥 ENDPOINTS DE SISTEMA Y SALUD
-  // ========================================
-
-  async getHealth() {
-    try {
-      return await this._request('/health');
-    } catch {
-      return { status: 'ok', fallback: true };
-    }
-  }
-
-  async getSystemStatus() {
-    return this._request('/status');
-  }
-
-  async getDatabaseHealth() {
-    return this._request('/database/health');
-  }
-
-  /**
-   * Health check detallado de todos los componentes
-   */
-  async getDetailedHealth() {
-    return this._request('/admin/health-detailed');
-  }
-
-  /**
-   * Limpieza de sesiones del sistema
-   */
-  async cleanupSessions() {
-    return this._request('/admin/session-cleanup');
-  }
-
-  // ========================================
-  // 🌐 WEBSOCKET MEJORADO
-  // ========================================
-
-  createWebSocketConnection(userId = null) {
-    const activeUserId = userId || this._currentUserId;
-    const wsUrl = this.baseUrl.replace(/^http/, 'ws') + `/ws/${activeUserId}`;
-    console.log(`🔗 Conectando WebSocket: ${wsUrl}`);
-    
-    const ws = new WebSocket(wsUrl);
-    
-    // Añadir manejo de errores mejorado
-    ws.addEventListener('error', (error) => {
-      console.error('❌ WebSocket Error:', error);
-    });
-    
-    ws.addEventListener('open', () => {
-      console.log('✅ WebSocket Connected');
-    });
-    
-    ws.addEventListener('close', (event) => {
-      console.log(`🔌 WebSocket Closed: ${event.code} - ${event.reason}`);
-    });
-    
-    return ws;
-  }
-
-  // ========================================
-  // 🚧 ENDPOINTS DRILL-DOWN (SIMULADOS)
-  // ========================================
-
-  async getClientesPorGestor(gestorId) {
-    console.warn('Simulating getClientesPorGestor - endpoint not available in main.py');
-    return { data: { clientes: [], total: 0 } };
-  }
-
-  async getContratosPorCliente(clienteId) {
-    console.warn('Simulating getContratosPorCliente - endpoint not available in main.py');
-    return { data: { contratos: [], total: 0 } };
-  }
-
-  async getMovimientosPorContrato(contratoId) {
-    console.warn('Simulating getMovimientosPorContrato - endpoint not available in main.py');
-    return { data: { movimientos: [], total: 0 } };
+// Error normalizado para el front
+class ApiClientError extends Error {
+  constructor(message, { status = 0, code = 0, detail = null } = {}) {
+    super(message);
+    this.name = "ApiClientError";
+    this.status = status;
+    this.code = code || status;
+    this.detail = detail;
   }
 }
 
-// ========================================
-// 📤 EXPORTACIONES
-// ========================================
+/* ============================
+ * Axios instance + interceptors
+ * ============================ */
 
-const api = new ApiService();
+const instance = axios.create({
+  baseURL: BASE_URL,
+  timeout: DEFAULT_TIMEOUT,
+  headers: JSON_HEADERS,
+  withCredentials: false,
+});
 
-export default api;
-export { api };
-
-// ========================================
-// 🛠️ UTILIDADES MEJORADAS
-// ========================================
-
-export const apiUtils = {
-  formatPeriod: (period) => {
-    if (!period) return null;
-    if (typeof period === 'string' && period.length > 7) {
-      return period.substring(0, 7);
-    }
-    return period;
-  },
-  
-  formatGestorData: (gestor) => ({
-    id: gestor.gestor_id || gestor.GESTOR_ID || gestor.id,
-    nombre: gestor.nombre || gestor.desc_gestor || gestor.DESC_GESTOR,
-    centro: gestor.centro || gestor.desc_centro || gestor.DESC_CENTRO,
-    segmento: gestor.segmento || gestor.desc_segmento || gestor.DESC_SEGMENTO || 'No especificado'
-  }),
-  
-  handleApiError: (error) => ({
-    success: false,
-    error: error.message || 'Error desconocido',
-    timestamp: new Date().toISOString()
-  }),
-
-  // 🆕 Nuevas utilidades para endpoints avanzados
-  formatChatPreferences: (prefs) => ({
-    communication_style: prefs.communication_style || 'professional',
-    technical_level: prefs.technical_level || 'intermediate',
-    preferred_format: prefs.preferred_format || 'combined',
-    response_length: prefs.response_length || 'medium'
-  }),
-
-  formatFeedbackData: (rating, comments, categories = {}) => ({
-    rating,
-    comments,
-    categories,
-    timestamp: new Date().toISOString()
-  }),
-
-  validateIntentResponse: (response) => {
-    return {
-      intent: response.intent_analysis?.intent || 'general_inquiry',
-      confidence: response.intent_analysis?.confidence || 0.5,
-      requires_cdg_agent: response.intent_analysis?.requires_cdg_agent || false,
-      recommended_approach: response.intent_analysis?.recommended_approach || 'simple'
-    };
-  }
+// Exponential backoff
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const shouldRetry = (error) => {
+  if (!error || !error.response) return false;
+  const { status } = error.response;
+  return [429, 502, 503, 504].includes(status);
 };
 
-// ========================================
-// 🎯 CONSTANTES PARA EL FRONTEND
-// ========================================
-
-export const API_CONSTANTS = {
-  CHAT_INTENTS: {
-    PERFORMANCE_ANALYSIS: 'performance_analysis',
-    COMPARATIVE_ANALYSIS: 'comparative_analysis',
-    DEVIATION_DETECTION: 'deviation_detection',
-    INCENTIVE_ANALYSIS: 'incentive_analysis',
-    BUSINESS_REVIEW: 'business_review',
-    EXECUTIVE_SUMMARY: 'executive_summary',
-    GENERAL_INQUIRY: 'general_inquiry'
+// Interceptor de respuesta: desenvelope + retry
+instance.interceptors.response.use(
+  (res) => {
+    const payload = res.data;
+    if (payload && typeof payload === "object" && "status" in payload) {
+      if (payload.status !== "success") {
+        throw new ApiClientError(payload.message || "Error API", {
+          status: res.status,
+          code: payload.code || res.status,
+          detail: payload,
+        });
+      }
+      return {
+        data: payload.data,
+        meta: payload.meta || null,
+        ts: payload.timestamp || null,
+        raw: payload,
+      };
+    }
+    return { data: payload, meta: null, ts: null, raw: payload };
   },
+  async (error) => {
+    const config = error.config || {};
+    config.__retryCount = config.__retryCount || 0;
+
+    if (shouldRetry(error) && config.__retryCount < 3) {
+      config.__retryCount += 1;
+      const backoff = 400 * 2 ** (config.__retryCount - 1);
+      await sleep(backoff);
+      return instance(config);
+    }
+
+    const status = error.response?.status || 0;
+    const backend = error.response?.data;
+    const messageFromBackend =
+      backend?.message ||
+      backend?.detail ||
+      backend?.error ||
+      error.message ||
+      "Error de red";
+
+    throw new ApiClientError(messageFromBackend, {
+      status,
+      code: backend?.code || status,
+      detail: backend || null,
+    });
+  }
+);
+
+/* ============================
+ * Core HTTP helpers
+ * ============================ */
+
+const withAbort = (config = {}) => {
+  if (config.signal) return config;
+  const controller = new AbortController();
+  return { ...config, signal: controller.signal, __controller: controller };
+};
+
+const http = {
+  get: (url, { params, ...cfg } = {}) =>
+    instance.get(`${url}${buildQuery(params)}`, withAbort(cfg)),
+  post: (url, body = {}, cfg = {}) =>
+    instance.post(url, body, withAbort(cfg)),
+  put: (url, body = {}, cfg = {}) => instance.put(url, body, withAbort(cfg)),
+  del: (url, cfg = {}) => instance.delete(url, withAbort(cfg)),
+  raw: instance,
+  baseURL: BASE_URL,
+};
+
+/* ============================
+ * Helpers utilitarios
+ * ============================ */
+
+const unwrap = async (promise, { returnMeta = false } = {}) => {
+  const { data, meta } = await promise;
+  return returnMeta ? { data, meta } : data;
+};
+
+const toQueryBody = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj || {}).filter(
+      ([, v]) => v !== undefined && v !== null && v !== ""
+    )
+  );
+
+/* ============================
+ * WebSocket optimizado para Chat Agent v10.0
+ * ============================ */
+
+const makeWsUrl = (path) => {
+  const base = BASE_URL.replace(/^http/, 'ws').replace(/\/$/, '');
+  return `${base}${path}`;
+};
+
+/**
+ * ✅ WebSocket optimizado para Chat Agent v10.0 con Perfect Integration
+ * Heartbeat compatible con configuración del servidor (30s ping, 15s timeout)
+ */
+const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) => {
+  if (!userId) throw new Error("userId requerido para WS");
+  const url = makeWsUrl(`/ws/chat/${encodeURIComponent(userId)}`);
   
-  PREFERENCE_OPTIONS: {
-    COMMUNICATION_STYLE: ['professional', 'concise', 'detailed'],
-    TECHNICAL_LEVEL: ['basic', 'intermediate', 'advanced'],
-    PREFERRED_FORMAT: ['text', 'charts', 'combined'],
-    RESPONSE_LENGTH: ['short', 'medium', 'detailed']
-  },
+  console.log(`[WS] 🔌 Conectando a Chat Agent v10.0: ${url}`);
+  const socket = new WebSocket(url);
+  
+  let heartbeatInterval;
+  let isAlive = false;
 
-  DEFAULT_PERIODO: '2025-10',
-  DEFAULT_USER_ID: 'frontend_user'
+  socket.onopen = (evt) => {
+    console.log('[WS] ✅ Chat Agent v10.0 conectado exitosamente');
+    isAlive = true;
+
+    // ✅ Heartbeat cada 25s (más conservador que el servidor)
+    heartbeatInterval = setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) {
+        console.log('[WS] 💓 Enviando ping a Chat Agent v10.0');
+        try {
+          socket.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+        } catch (error) {
+          console.warn('[WS] ⚠️ Error sending ping:', error);
+          clearInterval(heartbeatInterval);
+        }
+
+
+        // Timeout de 10s para recibir pong
+        isAlive = false;
+        setTimeout(() => {
+          if (!isAlive && socket.readyState === WebSocket.OPEN) {
+            console.log('[WS] ❌ Ping timeout, reconectando...');
+            socket.close(1000, 'Ping timeout'); 
+          }
+        }, 10000);
+      }
+    }, 25000);
+
+    onOpen && onOpen(evt);
+  };
+
+  socket.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      
+      // ✅ Manejar ready de Chat Agent v10.0 + CDG Agent v6.0
+      if (msg.type === 'ready') {
+        console.log(`[WS] 🎯 Ready: ${msg.chat_agent} + ${msg.cdg_agent} (${msg.integration})`);
+        return;
+      }
+      
+      // Manejar pong del servidor
+      if (msg.type === 'pong') {
+        console.log('[WS] 💚 Pong recibido de Chat Agent v10.0');
+        isAlive = true;
+        return;
+      }
+      
+      onMessage && onMessage(msg);
+    } catch (e) {
+      console.warn('[WS] Parse error:', e);
+    }
+  };
+  
+  socket.onerror = (evt) => {
+    console.error('[WS] ❌ Error en Chat Agent v10.0:', evt);
+    onError && onError(evt);
+  };
+  
+  socket.onclose = (evt) => {
+    console.log(`[WS] 🔌 Chat Agent v10.0 cerrado: ${evt.code} - ${evt.reason || 'Sin razón'}`);
+    
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    
+    onClose && onClose(evt);
+  };
+
+  const sendJson = (obj) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(obj));
+    } else {
+      console.warn('[WS] ⚠️ Cannot send, socket not open:', socket.readyState);
+    }
+  };
+
+  const close = () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    socket.close();
+  };
+
+  return { socket, sendJson, close };
+};
+
+/* ============================
+ * SDK por módulos - COMPLETAMENTE ACTUALIZADO
+ * ============================ */
+
+// ✅ System
+const system = {
+  root: (cfg) => unwrap(http.get("/", cfg), { returnMeta: true }),
+  health: (cfg) => unwrap(http.get("/health", cfg)),
+  version: (cfg) => unwrap(http.get("/version", cfg)),
+};
+
+// ✅ Catalogs / Periods
+const catalogs = {
+  periods: (cfg) => unwrap(http.get("/periods", cfg)),
+  latestPeriod: (cfg) => unwrap(http.get("/periods/latest", cfg)),
+  catalogs: (cfg) => unwrap(http.get("/catalogs", cfg)),
+};
+
+// ✅ Basic - COMPLETAMENTE EXTENDIDO
+const basic = {
+  // Core básicos
+  summary: (cfg) => unwrap(http.get("/basic/summary", cfg)),
+  gestoresRanking: (metric = "contratos", cfg) =>
+    unwrap(http.get("/basic/gestores-ranking", { params: { metric }, ...cfg })),
+  // ✅ NUEVO: Todos los gestores
+  allGestores: (cfg) => unwrap(http.get("/basic/gestores", cfg)),
+  centros: (cfg) => unwrap(http.get("/basic/centros", cfg)),
+  productos: (cfg) => unwrap(http.get("/basic/productos", cfg)),
+  
+  // ✅ NUEVOS: Gastos
+  gastosByFecha: (fecha, cfg) =>
+    unwrap(http.get("/basic/gastos/by-fecha", { params: { fecha }, ...cfg })),
+
+  // ✅ NUEVOS: Contratos extendidos
+  allContracts: (cfg) => unwrap(http.get("/basic/contracts", cfg)),
+  contractsCount: (cfg) => unwrap(http.get("/basic/contracts/count", cfg)),
+  contractsByGestor: (gestorId, cfg) =>
+    unwrap(http.get(`/basic/contracts/by-gestor/${gestorId}`, cfg)),
+  contractsByCliente: (clienteId, cfg) =>
+    unwrap(http.get(`/basic/contracts/by-cliente/${clienteId}`, cfg)),
+  contractsByProducto: (productoId, cfg) =>
+    unwrap(http.get(`/basic/contracts/by-producto/${encodeURIComponent(productoId)}`, cfg)),
+  contractsByCentro: (centroId, cfg) =>
+    unwrap(http.get(`/basic/contracts/by-centro/${centroId}`, cfg)),
+
+  // ✅ NUEVOS: Gestores extendidos
+  gestoresByCentro: (centroId, cfg) =>
+    unwrap(http.get(`/basic/gestores/by-centro/${centroId}`, cfg)),
+  gestoresBySegmento: (segmentoId, cfg) =>
+    unwrap(http.get(`/basic/gestores/by-segmento/${encodeURIComponent(segmentoId)}`, cfg)),
+  gestorInfo: (gestorId, cfg) =>
+    unwrap(http.get(`/basic/gestores/${gestorId}`, cfg)),
+  gestorSegmento: (gestorId, cfg) =>
+    unwrap(http.get(`/basic/gestores/${gestorId}/segmento`, cfg)),
+  countGestoresByCentro: (cfg) =>
+    unwrap(http.get("/basic/gestores/count-by-centro", cfg)),
+  countGestoresBySegmento: (cfg) =>
+    unwrap(http.get("/basic/gestores/count-by-segmento", cfg)),
+
+  // ✅ NUEVOS: Clientes extendidos
+  clientesByGestor: (gestorId, cfg) =>
+    unwrap(http.get(`/basic/clientes/by-gestor/${gestorId}`, cfg)),
+  clientesByCentro: (centroId, cfg) =>
+    unwrap(http.get(`/basic/clientes/by-centro/${centroId}`, cfg)),
+  clientMetricsByGestor: (gestorId, cfg) =>
+    unwrap(http.get(`/basic/clientes/metrics/${gestorId}`, cfg)),
+
+  // ✅ NUEVOS: Productos extendidos
+  productosByGestor: (gestorId, cfg) =>
+    unwrap(http.get(`/basic/productos/by-gestor/${gestorId}`, cfg)),
+  productosTop: (cfg) => unwrap(http.get("/basic/productos/top", cfg)),
+
+  // ✅ NUEVOS: Precios completos
+  preciosStd: (cfg) => unwrap(http.get("/basic/precios/std", cfg)),
+  preciosStdBySegmento: (segmentoId, cfg) =>
+    unwrap(http.get(`/basic/precios/std/by-segmento/${encodeURIComponent(segmentoId)}`, cfg)),
+  precioStdBySP: (segmentoId, productoId, cfg) =>
+    unwrap(
+      http.get(
+        `/basic/precios/std/by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
+        cfg
+      )
+    ),
+  preciosReal: (cfg) => unwrap(http.get("/basic/precios/real", cfg)),
+  preciosRealByFecha: (fechaCalculo, cfg) =>
+    unwrap(
+      http.get("/basic/precios/real/by-fecha", {
+        params: { fecha_calculo: fechaCalculo },
+        ...cfg,
+      })
+    ),
+  preciosRealBySP: (segmentoId, productoId, cfg) =>
+    unwrap(
+      http.get(
+        `/basic/precios/real/by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
+        cfg
+      )
+    ),
+  preciosCompare: (fechaCalculo, cfg) =>
+    unwrap(
+      http.get("/basic/precios/compare", {
+        params: { fecha_calculo: fechaCalculo || undefined },
+        ...cfg,
+      })
+    ),
+
+  // ✅ NUEVOS: CDR y cuentas
+  cdrLineas: (cfg) => unwrap(http.get("/basic/cdr/lineas", cfg)),
+  cdrLineasCount: (cfg) => unwrap(http.get("/basic/cdr/lineas/count", cfg)),
+  cuentas: (cfg) => unwrap(http.get("/basic/cuentas", cfg)),
+  cuentasByLinea: (lineaCdr, cfg) =>
+    unwrap(http.get(`/basic/cuentas/by-linea/${encodeURIComponent(lineaCdr)}`, cfg)),
+
+  // ✅ NUEVOS: Conteos adicionales
+  countContractsByCentro: (cfg) =>
+    unwrap(http.get("/basic/contracts/count-by-centro", cfg)),
+  countContractsByProducto: (cfg) =>
+    unwrap(http.get("/basic/contracts/count-by-producto", cfg)),
+  countContractsByGestor: (cfg) =>
+    unwrap(http.get("/basic/contracts/count-by-gestor", cfg)),
+};
+
+// ✅ Data Queries - ACTUALIZADO
+const dataQueries = {
+  pricesComparison: ({ gestorId, productoId, periodo } = {}, cfg) =>
+    unwrap(
+      http.get("/prices/comparison", {
+        params: {
+          gestor_id: gestorId || undefined,
+          producto_id: productoId || undefined,
+          periodo: periodo || undefined,
+        },
+        ...cfg,
+      })
+    ),
+  pricesComparisonBySegment: (segmentoId, periodo, cfg) =>
+    unwrap(
+      http.get("/prices/comparison-by-segment", {
+        params: { segmento_id: segmentoId, periodo },
+        ...cfg,
+      })
+    ),
+};
+
+// ✅ Comparatives - EXTENDIDO
+const comparatives = {
+  gestoresMargen: (periodo, cfg) =>
+    unwrap(http.get("/comparatives/gestores/margen", { params: { periodo }, ...cfg })),
+  centrosMargen: (periodo, cfg) =>
+    unwrap(http.get("/comparatives/centros/margen", { params: { periodo }, ...cfg })),
+  segmentosMargen: (periodo, cfg) =>
+    unwrap(http.get("/comparatives/segmentos/margen", { params: { periodo }, ...cfg })),
+  custom: (payload, cfg) => unwrap(http.post("/comparatives/custom", toQueryBody(payload), cfg)),
+  // ✅ NUEVO: Ranking extendido
+  gestoresRanking: (periodo = "2025-10", cfg) =>
+    unwrap(http.get("/comparatives/gestores-ranking", { params: { periodo }, ...cfg })),
+};
+
+// ✅ Deviations - COMPLETAMENTE EXTENDIDO
+const deviations = {
+  pricing: (periodo, umbral = 15.0, cfg) =>
+    unwrap(
+      http.get("/deviations/pricing", { params: { periodo, umbral }, ...cfg }),
+      { returnMeta: true }
+    ),
+  summary: (periodo, cfg) =>
+    unwrap(http.get("/deviations/summary", { params: { periodo }, ...cfg })),
+  // ✅ NUEVOS: Margen y volumen
+  margen: (periodo, { z = 2.0, enhanced = true } = {}, cfg) =>
+    unwrap(http.get("/deviations/margen", { params: { periodo, z, enhanced }, ...cfg })),
+  volumen: (periodo, { factor = 3.0, enhanced = true } = {}, cfg) =>
+    unwrap(http.get("/deviations/volumen", { params: { periodo, factor, enhanced }, ...cfg })),
+  // ✅ NUEVO: Critical
+  critical: (periodo, umbral = 15.0, cfg) =>
+    unwrap(http.get("/deviations/critical", { params: { periodo, umbral }, ...cfg })),
+};
+
+// ✅ Incentives - EXTENDIDO
+const incentives = {
+  scorecard: (gestorId, periodo, cfg) =>
+    unwrap(http.get(`/incentives/gestor/${encodeURIComponent(gestorId)}`, { params: { periodo }, ...cfg })),
+  bonusMargen: (periodo, umbral = 15.0, cfg) =>
+    unwrap(http.get("/incentives/bonus-margen", { params: { periodo, umbral_margen: umbral }, ...cfg })),
+  bonusPool: (periodo, pool = 50000.0, cfg) =>
+    unwrap(http.get("/incentives/bonus-pool", { params: { periodo, pool }, ...cfg })),
+  simulate: (payload, cfg) =>
+    unwrap(http.post("/incentives/simulate", toQueryBody(payload), cfg)),
+  // ✅ NUEVO: Calculate
+  calculate: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get("/incentives/calculate", { 
+      params: { gestor_id: gestorId || undefined, periodo }, 
+      ...cfg 
+    })),
+};
+
+// ✅ KPIs - MANTENIDO
+const kpis = {
+  gestor: (gestorId, periodo, cfg) =>
+    unwrap(
+      http.get(`/kpis/gestor/${encodeURIComponent(gestorId)}`, {
+        params: { periodo },
+        ...cfg,
+      })
+    ),
+  evolution: (gestorId, fromPeriod, toPeriod, cfg) =>
+    unwrap(
+      http.get(`/kpis/gestor/${encodeURIComponent(gestorId)}/evolution`, {
+        params: { from_period: fromPeriod, to_period: toPeriod },
+        ...cfg,
+      })
+    ),
+};
+
+// ✅ Analytics - MANTENIDO
+const analytics = {
+  variance: ({ scope, id, periodo, vs = "budget" }, cfg) =>
+    unwrap(
+      http.get("/analytics/variance", {
+        params: { scope, id: id || undefined, periodo, vs },
+        ...cfg,
+      })
+    ),
+};
+
+// ✅ Charts - ACTUALIZADO CON NUEVOS MÉTODOS
+const charts = {
+  fromData: (data, config = {}, cfg) =>
+    unwrap(http.post("/charts/from-data", { data, config }, cfg)),
+  pivot: ({ userId, message, currentChartConfig, chartInteractionType = "pivot" }, cfg) =>
+    unwrap(
+      http.post("/charts/pivot", {
+        user_id: userId,
+        message,
+        current_chart_config: currentChartConfig || {},
+        chart_interaction_type: chartInteractionType,
+      }, cfg)
+    ),
+  quick: ({ queryMethod, chartType = "bar", kwargs = {} }, cfg) =>
+    unwrap(http.post("/charts/quick", { query_method: queryMethod, chart_type: chartType, kwargs }, cfg)),
+  supportedTypes: (cfg) => unwrap(http.get("/charts/supported-types", cfg)),
+  validate: (cfg) => unwrap(http.get("/charts/validate", cfg)),
+  availableQueries: (cfg) => unwrap(http.get("/charts/available-queries", cfg)),
+  availableTypes: (cfg) => unwrap(http.get("/charts/available-types", cfg)),
+  meta: (cfg) => unwrap(http.get("/charts/meta", cfg)),
+  summaryDashboard: (cfg) => unwrap(http.get("/charts/summary-dashboard", cfg)),
+  gestoresRanking: ({ metric = "CONTRATOS", chartType = "horizontal_bar" } = {}, cfg) =>
+    unwrap(http.get("/charts/gestores-ranking", { params: { metric, chart_type: chartType }, ...cfg })),
+  centrosDistribution: ({ chartType = "donut" } = {}, cfg) =>
+    unwrap(http.get("/charts/centros-distribution", { params: { chart_type: chartType }, ...cfg })),
+  productosPopularity: ({ chartType = "horizontal_bar" } = {}, cfg) =>
+    unwrap(http.get("/charts/productos-popularity", { params: { chart_type: chartType }, ...cfg })),
+  preciosComparison: ({ fechaCalculo = null, chartType = "bar" } = {}, cfg) =>
+    unwrap(
+      http.get("/charts/precios-comparison", {
+        params: { fecha_calculo: fechaCalculo || undefined, chart_type: chartType },
+        ...cfg,
+      })
+    ),
+  gastosByCentro: ({ fecha, chartType = "stacked_bar" }, cfg) =>
+    unwrap(http.get("/charts/gastos-by-centro", { params: { fecha, chart_type: chartType }, ...cfg })),
+};
+
+// ✅ Dashboards - EXTENDIDO
+const dashboards = {
+  templates: (cfg) => unwrap(http.get("/dashboards/templates", cfg)),
+  build: (payload, cfg) => unwrap(http.post("/dashboards/build", toQueryBody(payload), cfg)),
+  generate: (payload, cfg) => unwrap(http.post("/dashboards/generate", toQueryBody(payload), cfg)),
+};
+
+// ✅ Reports - EXTENDIDO
+const reports = {
+  businessReview: ({ userId, gestorId, periodo, options, reportType = "business_review" }, cfg) =>
+    unwrap(
+      http.post("/reports/business-review", {
+        user_id: userId,
+        gestor_id: gestorId || undefined,
+        periodo,
+        report_type: reportType,
+        options: options || {},
+      }, cfg)
+    ),
+  executiveSummary: ({ userId, periodo, options }, cfg) =>
+    unwrap(
+      http.post("/reports/executive-summary", {
+        user_id: userId,
+        periodo,
+        options: options || {},
+      }, cfg)
+    ),
+  deviationAnalysis: (periodo, cfg) =>
+    unwrap(http.post("/reports/deviation-analysis", null, { params: { periodo }, ...cfg })),
+  export: ({ format = "pdf", ...rest } = {}, cfg) =>
+    unwrap(http.post("/reports/export", { format, ...rest }, cfg)),
+  meta: (cfg) => unwrap(http.get("/reports/meta", cfg)),
+};
+
+// ✅ KPI Calculator - ACTUALIZADO
+const kpiCalc = {
+  margen: ({ ingresos, gastos }, cfg) =>
+    unwrap(http.post("/kpi/margen", { ingresos, gastos }, cfg)),
+  roe: ({ beneficioNeto, patrimonio }, cfg) =>
+    unwrap(http.post("/kpi/roe", { beneficio_neto: beneficioNeto, patrimonio }, cfg)),
+  // ✅ CORREGIDO: from-data → calculate
+  calculate: (row, cfg) => unwrap(http.post("/kpi/calculate", { row }, cfg)),
+};
+
+// ✅ Security - MANTENIDO
+const security = {
+  validateSQL: (sql, context = "general", cfg) =>
+    unwrap(http.post("/security/sql/validate", { sql, context }, cfg)),
+};
+
+// ✅ SQL - NUEVO MÓDULO
+const sql = {
+  dynamic: (sql, context = "general", cfg) =>
+    unwrap(http.post("/sql/dynamic", { sql, context }, cfg)),
+  validate: (sql, context = "general", cfg) =>
+    unwrap(http.post("/sql/validate", { sql, context }, cfg)),
+};
+
+// ✅ Gestor Analysis - NUEVO MÓDULO  
+const gestorAnalysis = {
+  performance: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/gestor/${encodeURIComponent(gestorId)}/performance`, { 
+      params: { periodo }, 
+      ...cfg 
+    })),
+};
+
+// ✅ Reflection - NUEVO MÓDULO
+const reflection = {
+  insights: (cfg) => unwrap(http.get("/reflection/insights", cfg)),
+};
+
+// ✅ Feedback - NUEVO MÓDULO
+const feedback = {
+  process: (payload, cfg) => unwrap(http.post("/feedback/process", toQueryBody(payload), cfg)),
+};
+
+// ✅ Chat Agent v10.0 - COMPLETAMENTE ACTUALIZADO
+const chat = {
+  message: (payload, cfg) => unwrap(http.post("/chat/message", toQueryBody(payload), cfg)),
+  status: (cfg) => unwrap(http.get("/chat/status", cfg)),
+  // ✅ NUEVO: Capabilities
+  capabilities: (cfg) => unwrap(http.get("/chat/capabilities", cfg)),
+  history: (userId, cfg) => unwrap(http.get(`/chat/history/${encodeURIComponent(userId)}`, cfg)),
+  suggestions: (userId, cfg) =>
+    unwrap(http.get(`/chat/suggestions/${encodeURIComponent(userId)}`, cfg)),
+  // ✅ CORREGIDO: reset como POST
+  reset: (userId, cfg) =>
+    unwrap(http.post(`/chat/reset/${encodeURIComponent(userId)}`, {}, cfg)),
+  // WebSocket optimizado
+  openSocket: openChatSocket,
+};
+
+// ✅ CDG Agent v6.0 - COMPLETAMENTE ACTUALIZADO  
+const agent = {
+  process: (payload, cfg) =>
+    unwrap(http.post("/agent/process", toQueryBody(payload), cfg)),
+  // ✅ NUEVO: Complex Analysis
+  complexAnalysis: (payload, cfg) =>
+    unwrap(http.post("/agent/complex-analysis", toQueryBody(payload), cfg)),
+  status: (cfg) => unwrap(http.get("/agent/status", cfg)),
+  // ✅ NUEVO: Specializations
+  specializations: (cfg) => unwrap(http.get("/agent/specializations", cfg)),
+  suggestQuestions: (userId, cfg) =>
+    unwrap(http.get("/agent/suggest-questions", { params: { user_id: userId || undefined }, ...cfg })),
+};
+
+// ✅ Integration - MÓDULO COMPLETAMENTE NUEVO
+const integration = {
+  classifyAndRoute: (payload, cfg) =>
+    unwrap(http.post("/integration/classify-and-route", toQueryBody(payload), cfg)),
+  executePredefined: (payload, cfg) =>
+    unwrap(http.post("/integration/execute-predefined", toQueryBody(payload), cfg)),
+  queryCatalogs: (cfg) => unwrap(http.get("/integration/query-catalogs", cfg)),
+  agentCoordination: (cfg) => unwrap(http.get("/integration/agent-coordination", cfg)),
+};
+
+// ✅ User - MANTENIDO
+const user = {
+  personalization: (userId, cfg) =>
+    unwrap(http.get(`/user/${encodeURIComponent(userId)}/personalization`, cfg)),
+  feedback: (userId, payload, cfg) =>
+    unwrap(http.post(`/user/${encodeURIComponent(userId)}/feedback`, toQueryBody(payload), cfg)),
+};
+
+/* ============================
+ * Export público - COMPLETAMENTE ACTUALIZADO
+ * ============================ */
+
+const api = {
+  // low-level
+  http,
+  buildQuery,
+  ApiClientError,
+
+  // módulos actualizados
+  system,
+  catalogs,
+  basic,                  // ✅ 35+ endpoints
+  kpis,
+  comparatives,           // ✅ +1 endpoint
+  deviations,             // ✅ +3 endpoints  
+  incentives,             // ✅ +1 endpoint
+  analytics,
+  dataQueries,
+  charts,                 // ✅ +1 endpoint
+  dashboards,             // ✅ +1 endpoint
+  reports,
+  kpiCalc,                // ✅ corregido
+  security,
+  
+  // ✅ NUEVOS MÓDULOS
+  sql,                    // ✅ 2 endpoints
+  gestorAnalysis,         // ✅ 1 endpoint
+  reflection,             // ✅ 1 endpoint  
+  feedback,               // ✅ 1 endpoint
+  integration,            // ✅ 4 endpoints
+  
+  // agentes actualizados
+  chat,                   // ✅ Chat Agent v10.0
+  agent,                  // ✅ CDG Agent v6.0
+  user,
+};
+
+export default api;
+
+// Exports individuales
+export {
+  api,
+  http,
+  system,
+  catalogs,
+  basic,
+  kpis,
+  comparatives,
+  deviations,
+  incentives,
+  analytics,
+  dataQueries,
+  charts,
+  dashboards,
+  reports,
+  kpiCalc,
+  security,
+  sql,
+  gestorAnalysis,
+  reflection,
+  feedback,
+  integration,
+  chat,
+  agent,
+  user,
+  ApiClientError,
 };

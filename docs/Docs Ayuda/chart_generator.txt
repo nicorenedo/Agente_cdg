@@ -1,0 +1,652 @@
+# chart_generator.py — V4.1 (fixes integración y passthrough)
+
+import json
+import logging
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+
+logger = logging.getLogger(__name__)
+
+# Importar basic_queries con tolerancia a ruta de ejecución
+try:
+    from queries.basic_queries import basic_queries
+except Exception:
+    from ..queries.basic_queries import basic_queries  # type: ignore
+
+CDG_CHART_CONFIGS = {
+    'colors': {
+        'primary': '#1f77b4',
+        'secondary': '#ff7f0e',
+        'success': '#2ca02c',
+        'danger': '#d62728',
+        'warning': '#ff9800',
+        'info': '#17a2b8',
+        'light': '#f8f9fa',
+        'dark': '#343a40',
+        'banca_march_blue': '#003366',
+        'banca_march_gold': '#FFD700'
+    },
+    'chart_types': {
+        'bar': 'Gráfico de Barras',
+        'line': 'Gráfico de Líneas',
+        'pie': 'Gráfico Circular',
+        'area': 'Gráfico de Área',
+        'scatter': 'Gráfico de Dispersión',
+        'horizontal_bar': 'Barras Horizontales',
+        'donut': 'Gráfico Donut',
+        'stacked_bar': 'Barras Apiladas'
+    },
+    'dimensions': {
+        'gestor': 'Gestor',
+        'centro': 'Centro',
+        'segmento': 'Segmento',
+        'producto': 'Producto',
+        'periodo': 'Período',
+        'cliente': 'Cliente',
+        'contrato': 'Contrato'
+    },
+    'metrics': {
+        'ROE': 'Rentabilidad sobre Patrimonio',
+        'MARGEN_NETO': 'Margen Neto',
+        'INGRESOS': 'Ingresos Totales',
+        'EFICIENCIA': 'Eficiencia Operativa',
+        'CONTRATOS': 'Número de Contratos',
+        'PERFORMANCE': 'Performance General',
+        'PRECIO_STD': 'Precio Estándar',
+        'PRECIO_REAL': 'Precio Real',
+        'DESVIACION': 'Desviación vs Estándar',
+        'GASTOS': 'Gastos Totales',
+        'CLIENTES': 'Número de Clientes'
+    }
+}
+
+class QueryIntegratedChartGenerator:
+    def __init__(self):
+        self.chart_configs = CDG_CHART_CONFIGS
+        self.supported_types = list(self.chart_configs['chart_types'].keys())
+        self.current_charts: Dict[str, Dict[str, Any]] = {}
+        self.basic_queries = basic_queries
+        logger.info("✅ QueryIntegratedChartGenerator V4.1 inicializado con Basic Queries")
+
+    # ---------- Utilidades internas ----------
+    def _coerce_rows(self, query_data: Any) -> List[Dict[str, Any]]:
+        """Acepta List[dict] o QueryResult y devuelve List[dict]."""
+        if query_data is None:
+            return []
+        # QueryResult-like
+        if hasattr(query_data, "data") and isinstance(getattr(query_data, "data"), list):
+            return query_data.data  # type: ignore[attr-defined]
+        return query_data if isinstance(query_data, list) else []
+
+    def _is_label_value_dataset(self, rows: List[Dict[str, Any]]) -> bool:
+        """Detecta si el dataset está ya en forma [{'label','value',...}]."""
+        if not rows:
+            return False
+        sample = rows[0]
+        return isinstance(sample, dict) and 'label' in sample and 'value' in sample
+
+    # ---------- Generación principal ----------
+    def generate_chart_from_data(self, query_data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            rows = self._coerce_rows(query_data)
+            if not rows:
+                return self._create_empty_chart("No hay datos disponibles")
+
+            chart_type = config.get('chart_type', 'bar')
+            dimension = config.get('dimension', 'gestor')
+            metric = config.get('metric', 'PERFORMANCE')
+
+            # Passthrough si ya viene como [{'label','value'}]
+            if self._is_label_value_dataset(rows):
+                processed = [
+                    {
+                        'label': str(r.get('label')),
+                        'value': float(r.get('value', 0) or 0),
+                        'dimension': dimension,
+                        'metric': metric,
+                        'original_data': r.get('original_data', r)
+                    }
+                    for r in rows[:25]
+                    if r.get('label') is not None
+                ]
+                processed.sort(key=lambda x: x['value'], reverse=True)
+            else:
+                processed = self._process_data_for_chart(rows, dimension, metric)
+
+            if not processed:
+                return self._create_empty_chart("Datos no compatibles con el gráfico solicitado")
+
+            chart_id = f"chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            chart = {
+                'id': chart_id,
+                'type': chart_type,
+                'title': self._generate_chart_title(chart_type, dimension, metric),
+                'data': processed,
+                'config': {**config},
+                'dimension': dimension,
+                'metric': metric,
+                'created_at': datetime.now().isoformat(),
+                'interactive': True,
+                'pivot_enabled': True,
+                'data_source': 'basic_queries'
+            }
+            self.current_charts[chart_id] = chart
+            logger.info(f"✅ Gráfico generado: {chart_id} ({chart_type})")
+            return chart
+
+        except Exception as e:
+            logger.exception("Error generando gráfico desde datos")
+            return self._create_error_chart(str(e))
+
+    # ---------- Gráficos integrados con Basic Queries ----------
+    def generate_gestores_ranking_chart(self, metric: str = 'CONTRATOS', chart_type: str = 'bar') -> Dict[str, Any]:
+        try:
+            if metric == 'CONTRATOS':
+                q = self.basic_queries.count_contratos_by_gestor()
+                rows = self._coerce_rows(q)
+                data_field = 'num_contratos'
+            elif metric == 'CLIENTES':
+                q = self.basic_queries.count_clientes_by_gestor()
+                rows = self._coerce_rows(q)
+                data_field = 'num_clientes'
+            else:
+                q = self.basic_queries.get_ranking_gestores_por_contratos()
+                rows = self._coerce_rows(q)
+                data_field = 'num_contratos'
+
+            # Transformar a label/value y pasar en modo passthrough
+            chart_data = [
+                {
+                    'label': item.get('DESC_GESTOR', f"Gestor {item.get('GESTOR_ID', '')}"),
+                    'value': float(item.get(data_field, 0) or 0),
+                    'center': item.get('DESC_CENTRO', ''),
+                    'segment': item.get('DESC_SEGMENTO', ''),
+                    'original_data': item
+                }
+                for item in rows[:15]
+                if (item.get(data_field, 0) or 0) != 0
+            ]
+
+            config = {
+                'chart_type': chart_type,
+                'dimension': 'gestor',
+                'metric': metric,
+                'auto_generated': True
+            }
+            chart = self.generate_chart_from_data(chart_data, config)
+            chart['title'] = f"Ranking de Gestores por {self.chart_configs['metrics'].get(metric, metric)}"
+            return chart
+
+        except Exception as e:
+            logger.exception("Error generando ranking de gestores")
+            return self._create_error_chart(str(e))
+
+    def generate_centros_distribution_chart(self, chart_type: str = 'pie') -> Dict[str, Any]:
+        try:
+            q = self.basic_queries.count_contratos_by_centro()
+            rows = self._coerce_rows(q)
+
+            chart_data = [
+                {
+                    'label': item.get('DESC_CENTRO', f"Centro {item.get('CENTRO_ID', '')}"),
+                    'value': float(item.get('num_contratos', 0) or 0),
+                    'center_id': item.get('CENTRO_ID'),
+                    'original_data': item
+                }
+                for item in rows if (item.get('num_contratos', 0) or 0) > 0
+            ]
+
+            config = {'chart_type': chart_type, 'dimension': 'centro', 'metric': 'CONTRATOS', 'auto_generated': True}
+            chart = self.generate_chart_from_data(chart_data, config)
+            chart['title'] = "Distribución de Contratos por Centro"
+            return chart
+
+        except Exception as e:
+            logger.exception("Error generando distribución por centros")
+            return self._create_error_chart(str(e))
+
+    def generate_productos_popularity_chart(self, chart_type: str = 'horizontal_bar') -> Dict[str, Any]:
+        try:
+            q = self.basic_queries.count_contratos_by_producto()
+            rows = self._coerce_rows(q)
+
+            chart_data = [
+                {
+                    'label': item.get('DESC_PRODUCTO', f"Producto {item.get('PRODUCTO_ID', '')}"),
+                    'value': float(item.get('num_contratos', 0) or 0),
+                    'product_id': item.get('PRODUCTO_ID'),
+                    'original_data': item
+                }
+                for item in rows
+            ]
+
+            config = {'chart_type': chart_type, 'dimension': 'producto', 'metric': 'CONTRATOS', 'auto_generated': True}
+            chart = self.generate_chart_from_data(chart_data, config)
+            chart['title'] = "Popularidad de Productos (Contratos)"
+            return chart
+
+        except Exception as e:
+            logger.exception("Error generando popularidad de productos")
+            return self._create_error_chart(str(e))
+
+    def generate_precios_comparison_chart(self, fecha_calculo: Optional[str] = None, chart_type: str = 'bar') -> Dict[str, Any]:
+        try:
+            q = self.basic_queries.compare_precios_std_vs_real(fecha_calculo)
+            rows = self._coerce_rows(q)
+
+            chart_data = []
+            for item in rows:
+                segment_product = f"{item.get('DESC_SEGMENTO', 'N/A')} - {item.get('DESC_PRODUCTO', 'N/A')}"
+                chart_data.append({
+                    'label': segment_product,
+                    'precio_std': abs(float(item.get('precio_std', 0) or 0)),
+                    'precio_real': abs(float(item.get('precio_real', 0) or 0)),
+                    'diferencia': float(item.get('diferencia', 0) or 0),
+                    'desviacion_pct': float(item.get('porcentaje_desviacion', 0) or 0),
+                    'original_data': item
+                })
+
+            chart_id = f"chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            chart = {
+                'id': chart_id,
+                'type': 'comparison',
+                'chart_type': chart_type,
+                'title': f"Comparación Precios Estándar vs Reales{' - ' + fecha_calculo if fecha_calculo else ''}",
+                'data': chart_data,
+                'config': {
+                    'chart_type': chart_type,
+                    'dimension': 'segmento_producto',
+                    'metric': 'PRECIO_COMPARISON',
+                    'auto_generated': True
+                },
+                'created_at': datetime.now().isoformat(),
+                'interactive': True,
+                'data_source': 'basic_queries'
+            }
+            self.current_charts[chart_id] = chart
+            return chart
+
+        except Exception as e:
+            logger.exception("Error generando comparación de precios")
+            return self._create_error_chart(str(e))
+
+    def generate_gastos_by_centro_chart(self, fecha: str, chart_type: str = 'stacked_bar') -> Dict[str, Any]:
+        try:
+            q = self.basic_queries.get_gastos_by_fecha(fecha)
+            rows = self._coerce_rows(q)
+
+            centro_gastos: Dict[str, Dict[str, Any]] = {}
+            for item in rows:
+                centro_desc = item.get('DESC_CENTRO', f"Centro {item.get('CENTRO_CONTABLE')}")
+                concepto = item.get('CONCEPTO_COSTE', 'Sin concepto')
+                importe = float(item.get('IMPORTE', 0) or 0)
+
+                if centro_desc not in centro_gastos:
+                    centro_gastos[centro_desc] = {'total': 0.0, 'conceptos': {}}
+                centro_gastos[centro_desc]['total'] += importe
+                centro_gastos[centro_desc]['conceptos'][concepto] = centro_gastos[centro_desc]['conceptos'].get(concepto, 0.0) + importe
+
+            chart_data = [
+                {'label': centro, 'value': data['total'], 'conceptos': data['conceptos'], 'original_data': data}
+                for centro, data in centro_gastos.items()
+            ]
+
+            config = {'chart_type': chart_type, 'dimension': 'centro', 'metric': 'GASTOS', 'auto_generated': True}
+            chart = self.generate_chart_from_data(chart_data, config)
+            chart['title'] = f"Gastos por Centro - {fecha}"
+            return chart
+
+        except Exception as e:
+            logger.exception("Error generando gastos por centro")
+            return self._create_error_chart(str(e))
+
+    def generate_summary_dashboard(self) -> Dict[str, Any]:
+        try:
+            resumen = {}
+            try:
+                resumen_q = self.basic_queries.get_resumen_general()
+                resumen = resumen_q.data if hasattr(resumen_q, "data") and isinstance(resumen_q.data, dict) else resumen_q  # soporta dict o QueryResult
+            except Exception:
+                resumen = {}
+
+            dashboard_charts = []
+
+            # Chart 1
+            summary_data = [
+                {'label': 'Gestores', 'value': (resumen or {}).get('total_gestores', 0)},
+                {'label': 'Clientes', 'value': (resumen or {}).get('total_clientes', 0)},
+                {'label': 'Contratos', 'value': (resumen or {}).get('total_contratos', 0)},
+                {'label': 'Productos', 'value': (resumen or {}).get('total_productos', 0)},
+                {'label': 'Centros', 'value': (resumen or {}).get('total_centros', 0)}
+            ]
+            summary_chart = self.generate_chart_from_data(summary_data, {'chart_type': 'bar', 'dimension': 'metric', 'metric': 'count'})
+            summary_chart['title'] = 'Resumen General del Sistema'
+            dashboard_charts.append(summary_chart)
+
+            # Chart 2
+            dashboard_charts.append(self.generate_gestores_ranking_chart('CONTRATOS', 'horizontal_bar'))
+
+            # Chart 3
+            dashboard_charts.append(self.generate_centros_distribution_chart('donut'))
+
+            dashboard_id = f"dashboard_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            return {
+                'id': dashboard_id,
+                'type': 'dashboard',
+                'title': 'Dashboard Resumen CDG',
+                'charts': dashboard_charts,
+                'summary_data': resumen,
+                'created_at': datetime.now().isoformat(),
+                'interactive': True,
+                'data_source': 'basic_queries'
+            }
+
+        except Exception as e:
+            logger.exception("Error generando dashboard resumen")
+            return self._create_error_chart(str(e))
+
+    # ---------- Interpretación y auxiliares ----------
+    def interpret_chart_change(self, user_message: str, current_config: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            message_lower = user_message.lower()
+            new_config = current_config.copy()
+            changes_made: List[str] = []
+
+            type_changes = {
+                'barras': 'bar', 'bar': 'bar',
+                'líneas': 'line', 'linea': 'line', 'line': 'line',
+                'circular': 'pie', 'pie': 'pie', 'torta': 'pie',
+                'área': 'area', 'area': 'area',
+                'dispersión': 'scatter', 'scatter': 'scatter',
+                'horizontal': 'horizontal_bar',
+                'donut': 'donut', 'rosquilla': 'donut',
+                'apiladas': 'stacked_bar', 'stacked': 'stacked_bar'
+            }
+            for keyword, ctype in type_changes.items():
+                if keyword in message_lower and ctype != current_config.get('chart_type'):
+                    new_config['chart_type'] = ctype
+                    changes_made.append(f"Tipo de gráfico cambiado a {self.chart_configs['chart_types'][ctype]}")
+                    break
+
+            dimension_changes = {
+                'gestores': 'gestor', 'gestor': 'gestor',
+                'centros': 'centro', 'centro': 'centro',
+                'segmentos': 'segmento', 'segmento': 'segmento',
+                'productos': 'producto', 'producto': 'producto',
+                'período': 'periodo', 'periodo': 'periodo', 'tiempo': 'periodo',
+                'clientes': 'cliente', 'cliente': 'cliente',
+                'contratos': 'contrato', 'contrato': 'contrato'
+            }
+            for keyword, dim in dimension_changes.items():
+                if keyword in message_lower and dim != current_config.get('dimension'):
+                    new_config['dimension'] = dim
+                    changes_made.append(f"Dimensión cambiada a {self.chart_configs['dimensions'].get(dim, dim)}")
+                    break
+
+            metric_changes = {
+                'roe': 'ROE', 'rentabilidad': 'ROE',
+                'margen': 'MARGEN_NETO',
+                'ingresos': 'INGRESOS',
+                'eficiencia': 'EFICIENCIA',
+                'contratos': 'CONTRATOS',
+                'performance': 'PERFORMANCE',
+                'precio': 'PRECIO_STD', 'precios': 'PRECIO_STD',
+                'gastos': 'GASTOS',
+                'clientes': 'CLIENTES',
+                'desviación': 'DESVIACION'
+            }
+            for keyword, m in metric_changes.items():
+                if keyword in message_lower and m != current_config.get('metric'):
+                    new_config['metric'] = m
+                    changes_made.append(f"Métrica cambiada a {self.chart_configs['metrics'].get(m, m)}")
+                    break
+
+            return {
+                'status': 'success' if changes_made else 'no_changes',
+                'new_config': new_config,
+                'changes_made': changes_made,
+                'message': '; '.join(changes_made) if changes_made else 'No se detectaron cambios específicos',
+                'original_config': current_config,
+                'user_message': user_message
+            }
+        except Exception as e:
+            logger.exception("Error interpretando cambio de gráfico")
+            return {'status': 'error', 'message': f'Error procesando cambio: {str(e)}', 'new_config': current_config, 'changes_made': []}
+
+    def _process_data_for_chart(self, rows: List[Dict[str, Any]], dimension: str, metric: str) -> List[Dict[str, Any]]:
+        try:
+            processed: List[Dict[str, Any]] = []
+
+            # Fallback si ya viene 'label'/'value'
+            if self._is_label_value_dataset(rows):
+                for r in rows[:25]:
+                    processed.append({
+                        'label': str(r.get('label')),
+                        'value': float(r.get('value', 0) or 0),
+                        'dimension': dimension,
+                        'metric': metric,
+                        'original_data': r.get('original_data', r)
+                    })
+                processed.sort(key=lambda x: x['value'], reverse=True)
+                return processed
+
+            for item in rows[:25]:
+                if not isinstance(item, dict):
+                    continue
+                dim_value = self._extract_dimension_value(item, dimension)
+                if dim_value is None:
+                    # último intento: usar cualquier etiqueta “amigable”
+                    dim_value = str(item.get('label')) if item.get('label') is not None else None
+                if dim_value is None:
+                    continue
+
+                metric_value = self._extract_metric_value(item, metric)
+                if metric_value is None and 'value' in item:
+                    # fallback
+                    try:
+                        metric_value = float(item['value'])
+                    except Exception:
+                        metric_value = None
+                if metric_value is None:
+                    continue
+
+                processed.append({
+                    'label': str(dim_value),
+                    'value': float(metric_value or 0),
+                    'dimension': dimension,
+                    'metric': metric,
+                    'original_data': item
+                })
+
+            processed.sort(key=lambda x: x['value'], reverse=True)
+            return processed
+        except Exception as e:
+            logger.exception("Error procesando datos para gráfico")
+            return []
+
+    def _extract_dimension_value(self, item: Dict[str, Any], dimension: str) -> Optional[str]:
+        dimension_fields = {
+            'gestor': ['DESC_GESTOR', 'desc_gestor', 'gestor_name', 'gestor', 'nombre_gestor'],
+            'centro': ['DESC_CENTRO', 'desc_centro', 'centro_name', 'centro', 'nombre_centro'],
+            'segmento': ['DESC_SEGMENTO', 'desc_segmento', 'segmento_name', 'segmento', 'nombre_segmento'],
+            'producto': ['DESC_PRODUCTO', 'desc_producto', 'producto_name', 'producto', 'nombre_producto'],
+            'periodo': ['periodo', 'FECHA_CALCULO', 'fecha', 'date', 'month'],
+            'cliente': ['NOMBRE_CLIENTE', 'nombre_cliente', 'cliente_name', 'cliente'],
+            'contrato': ['CONTRATO_ID', 'contrato_id', 'contrato']
+        }
+        for field in dimension_fields.get(dimension, [dimension]):
+            if field in item and item[field] is not None:
+                return str(item[field])
+        return None
+
+    def _extract_metric_value(self, item: Dict[str, Any], metric: str) -> Optional[float]:
+        metric_fields = {
+            'ROE': ['roe_pct', 'roe', 'rentabilidad', 'return_on_equity'],
+            'MARGEN_NETO': ['margen_neto_pct', 'margen_neto', 'margin', 'net_margin'],
+            'INGRESOS': ['total_ingresos', 'ingresos', 'revenue', 'income'],
+            'EFICIENCIA': ['eficiencia_pct', 'eficiencia', 'efficiency', 'ratio_eficiencia'],
+            'CONTRATOS': ['num_contratos', 'contratos', 'contracts', 'count'],
+            'PERFORMANCE': ['performance_score', 'performance', 'score', 'rating'],
+            'PRECIO_STD': ['PRECIO_MANTENIMIENTO', 'precio_std', 'precio_estandar'],
+            'PRECIO_REAL': ['PRECIO_MANTENIMIENTO_REAL', 'precio_real'],
+            'DESVIACION': ['diferencia', 'desviacion', 'porcentaje_desviacion'],
+            'GASTOS': ['IMPORTE', 'importe', 'gastos', 'gasto_total'],
+            'CLIENTES': ['num_clientes', 'clientes', 'cliente_count']
+        }
+        fields = metric_fields.get(metric, [metric.lower()])
+        for f in fields:
+            if f in item and item[f] is not None:
+                try:
+                    return float(item[f])
+                except (ValueError, TypeError):
+                    continue
+        # fallback numérico
+        for k, v in item.items():
+            if isinstance(v, (int, float)):
+                try:
+                    return float(v)
+                except Exception:
+                    continue
+        return None
+
+    def _generate_chart_title(self, chart_type: str, dimension: str, metric: str) -> str:
+        type_name = self.chart_configs['chart_types'].get(chart_type, 'Gráfico')
+        dim_name = self.chart_configs['dimensions'].get(dimension, dimension)
+        metric_name = self.chart_configs['metrics'].get(metric, metric)
+        return f"{type_name}: {metric_name} por {dim_name}"
+
+    def _create_empty_chart(self, message: str) -> Dict[str, Any]:
+        return {
+            'id': f"empty_{datetime.now().strftime('%H%M%S')}",
+            'type': 'empty',
+            'title': 'Sin datos',
+            'message': message,
+            'data': [],
+            'created_at': datetime.now().isoformat(),
+            'interactive': False,
+            'data_source': 'basic_queries'
+        }
+
+    def _create_error_chart(self, error_message: str) -> Dict[str, Any]:
+        return {
+            'id': f"error_{datetime.now().strftime('%H%M%S')}",
+            'type': 'error',
+            'title': 'Error en gráfico',
+            'message': error_message,
+            'data': [],
+            'created_at': datetime.now().isoformat(),
+            'interactive': False,
+            'data_source': 'basic_queries'
+        }
+
+# ---- Alias de compatibilidad y Factory se mantienen sin cambios sustanciales ----
+class CDGDashboardGenerator(QueryIntegratedChartGenerator):
+    def __init__(self):
+        super().__init__()
+        logger.info("✅ CDGDashboardGenerator (alias) inicializado")
+
+    def generate_gestor_dashboard(self, gestor_data: Dict[str, Any], kpi_data: Dict[str, Any], periodo: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            query_data = [gestor_data] if gestor_data else []
+            config = {'chart_type': 'bar', 'dimension': 'gestor', 'metric': 'ROE', 'period': periodo or datetime.now().strftime('%Y-%m')}
+            chart = self.generate_chart_from_data(query_data, config)
+            return {'charts': [chart] if chart.get('type') != 'error' else [], 'dashboard_data': {'gestor': gestor_data, 'kpis': kpi_data, 'periodo': periodo}}
+        except Exception as e:
+            logger.exception("Error generando dashboard de gestor")
+            return {'charts': [], 'error': str(e)}
+
+    def generate_comparative_dashboard(self, ranking_data: List[Dict[str, Any]], metric: str = 'margen_neto', titulo: str = 'Comparativo') -> Dict[str, Any]:
+        try:
+            config = {'chart_type': 'bar', 'dimension': 'gestor', 'metric': 'MARGEN_NETO' if 'margen' in (metric or '').lower() else 'PERFORMANCE', 'period': datetime.now().strftime('%Y-%m')}
+            return self.generate_chart_from_data(ranking_data, config)
+        except Exception as e:
+            logger.exception("Error generando dashboard comparativo")
+            return self._create_error_chart(str(e))
+
+    def generate_trend_dashboard(self, trend_data: List[Dict[str, Any]], title: str = 'Tendencia') -> Dict[str, Any]:
+        try:
+            config = {'chart_type': 'line', 'dimension': 'periodo', 'metric': 'PERFORMANCE', 'period': datetime.now().strftime('%Y-%m')}
+            return self.generate_chart_from_data(trend_data, config)
+        except Exception as e:
+            logger.exception("Error generando dashboard de tendencia")
+            return self._create_error_chart(str(e))
+
+class ChartFactory:
+    @staticmethod
+    def create_chart(chart_type: str, data: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
+        try:
+            generator = QueryIntegratedChartGenerator()
+            config = {'chart_type': chart_type, 'dimension': kwargs.get('dimension', 'gestor'), 'metric': kwargs.get('metric', 'PERFORMANCE'), 'period': kwargs.get('period', datetime.now().strftime('%Y-%m'))}
+            return generator.generate_chart_from_data(data, config)
+        except Exception as e:
+            logger.exception("Error en ChartFactory.create_chart")
+            return {'id': 'factory_error', 'type': 'error', 'title': 'Error Factory', 'message': str(e), 'data': [], 'data_source': 'basic_queries'}
+
+    @staticmethod
+    def create_from_basic_queries(query_method: str, chart_type: str = 'bar', **kwargs) -> Dict[str, Any]:
+        try:
+            generator = QueryIntegratedChartGenerator()
+            method_map = {
+                'gestores_ranking': 'generate_gestores_ranking_chart',
+                'centros_distribution': 'generate_centros_distribution_chart',
+                'productos_popularity': 'generate_productos_popularity_chart',
+                'precios_comparison': 'generate_precios_comparison_chart',
+                'summary_dashboard': 'generate_summary_dashboard'
+            }
+            if query_method in method_map:
+                method = getattr(generator, method_map[query_method])
+                # algunos métodos aceptan chart_type; otros no (summary_dashboard)
+                return method(chart_type=chart_type, **kwargs) if 'chart_type' in method.__code__.co_varnames else method(**kwargs)
+            raise ValueError(f"Método de query no soportado: {query_method}")
+        except Exception as e:
+            logger.exception("Error en ChartFactory.create_from_basic_queries")
+            return ChartFactory.create_chart('bar', [], error=str(e))
+
+    @staticmethod
+    def get_supported_chart_types() -> List[str]:
+        return list(CDG_CHART_CONFIGS['chart_types'].keys())
+
+    @staticmethod
+    def get_available_queries() -> List[str]:
+        return ['gestores_ranking', 'centros_distribution', 'productos_popularity', 'precios_comparison', 'summary_dashboard']
+
+def create_chart_from_query_data(query_data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        generator = QueryIntegratedChartGenerator()
+        return generator.generate_chart_from_data(query_data, config)
+    except Exception as e:
+        logger.exception("Error en create_chart_from_query_data")
+        return {'id': 'error', 'type': 'error', 'title': 'Error', 'message': str(e), 'data': [], 'data_source': 'basic_queries'}
+
+def create_quick_chart(query_method: str, chart_type: str = 'bar', **kwargs) -> Dict[str, Any]:
+    return ChartFactory.create_from_basic_queries(query_method, chart_type, **kwargs)
+
+def pivot_chart_with_query_integration(user_message: str, current_config: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        generator = QueryIntegratedChartGenerator()
+        return generator.interpret_chart_change(user_message, current_config)
+    except Exception as e:
+        logger.exception("Error en pivot_chart_with_query_integration")
+        return {'status': 'error', 'message': str(e), 'new_config': current_config, 'changes_made': []}
+
+def validate_chart_generator() -> Dict[str, Any]:
+    try:
+        generator = QueryIntegratedChartGenerator()
+        test_data = [{'label': 'Test Gestor', 'value': 15}, {'label': 'Test Gestor 2', 'value': 12}]
+        test_config = {'chart_type': 'bar', 'dimension': 'gestor', 'metric': 'CONTRATOS'}
+        test_chart = generator.generate_chart_from_data(test_data, test_config)
+        try:
+            resumen_q = generator.basic_queries.get_resumen_general()
+            basic_queries_working = True if resumen_q is not None else False
+        except Exception:
+            basic_queries_working = False
+        if test_chart and test_chart.get('type') != 'error' and basic_queries_working:
+            return {'status': 'OK', 'message': 'Chart Generator V4.1 con Basic Queries validado correctamente', 'basic_queries_integration': basic_queries_working, 'test_chart_id': test_chart.get('id')}
+        return {'status': 'ERROR', 'message': 'Error en validación', 'basic_queries_integration': basic_queries_working}
+    except Exception as e:
+        logger.exception("Error validando Chart Generator")
+        return {'status': 'ERROR', 'message': str(e)}
+
+if __name__ == "__main__":
+    # demo opcional: evita prints extensos en producción
+    print(validate_chart_generator())

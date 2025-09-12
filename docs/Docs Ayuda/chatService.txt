@@ -1,0 +1,479 @@
+// frontend/src/services/chatService.js
+/* eslint-disable no-console */
+
+/**
+ * ChatService — CDG v6.2
+ * -------------------------------------------------
+ * - Envoltura de endpoints /chat/* y atajos del Agent.
+ * - Cliente WS con auto-reconexión exponencial y heartbeats.
+ * - Cola de salida si el socket aún no está listo.
+ * - API de eventos: on('open'|'ready'|'message'|'error'|'close'|'reconnect').
+ *
+ * Requisitos:
+ *   - api.js en frontend/src/services/api.js
+ */
+
+import api, { chat as chatApi, agent as agentApi, ApiClientError } from "./api";
+
+/* =========================================
+ * Utilidades
+ * ========================================= */
+
+// Generador id pseudo-único (evita dependencia externa)
+const uid = () =>
+  `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+// Validación y saneado del payload ChatRequest (según main.py)
+const buildChatPayload = ({
+  user_id,
+  message,
+  gestor_id = undefined,
+  periodo = undefined,
+  include_charts = true,
+  include_recommendations = true,
+  context = {},
+  user_feedback = undefined,
+  current_chart_config = undefined,
+  chart_interaction_type = undefined,
+  use_basic_queries = true,
+  quick_mode = false,
+} = {}) => {
+  if (!user_id) throw new Error("user_id es obligatorio en ChatRequest");
+  if (!message || !String(message).trim()) {
+    throw new Error("message no puede estar vacío");
+  }
+  return {
+    user_id,
+    message,
+    gestor_id,
+    periodo,
+    include_charts,
+    include_recommendations,
+    context,
+    user_feedback,
+    current_chart_config,
+    chart_interaction_type,
+    use_basic_queries,
+    quick_mode,
+  };
+};
+
+// Normaliza respuesta del chat agent (HTTP/WS) a una forma cómoda
+const normalizeChatData = (raw = {}) => {
+  const text =
+    raw.text ||
+    raw.response ||
+    (typeof raw === "string" ? raw : raw?.data?.response) ||
+    "";
+  const charts = raw.charts || raw?.data?.charts || [];
+  const recommendations =
+    raw.recommendations || raw?.data?.recommendations || [];
+  const metadata = raw.metadata || raw?.data?.metadata || {};
+  return { text, charts, recommendations, metadata, raw };
+};
+
+/* =========================================
+ * Cliente HTTP (endpoints /chat/*)
+ * ========================================= */
+
+const httpChat = {
+  /**
+   * Envía un mensaje al chat por HTTP (no streaming).
+   * Devuelve { text, charts, recommendations, metadata, raw }
+   */
+  async sendMessage(req) {
+    const payload = buildChatPayload(req);
+    const data = await chatApi.message(payload);
+    return normalizeChatData(data);
+  },
+
+  /** Estado del chat agent */
+  status(cfg) {
+    return chatApi.status(cfg);
+  },
+
+  /** Historial por usuario */
+  history(userId, cfg) {
+    if (!userId) throw new Error("userId requerido");
+    return chatApi.history(userId, cfg);
+  },
+
+  /** Sugerencias dinámicas (ideas de preguntas) */
+  suggestions(userId, cfg) {
+    if (!userId) throw new Error("userId requerido");
+    return chatApi.suggestions(userId, cfg);
+  },
+
+  /** Resetea la sesión del chat */
+  reset(userId, cfg) {
+    if (!userId) throw new Error("userId requerido");
+    return chatApi.reset(userId, cfg);
+  },
+
+  /* ------- Atajos útiles al Agent para experiencias de chat ------- */
+
+  /** Quick answer del Agent (rápida, sin tanta orquestación) */
+  async askAgentQuick({ user_message, gestor_id, periodo, user_id }, cfg) {
+    const data = await agentApi.quick(
+      { user_message, gestor_id, periodo, user_id, include_charts: true },
+      cfg
+    );
+    return data; // ya viene desenvuelto por api.js
+  },
+
+  /** Orquestación completa del Agent (producirá charts y recomendaciones) */
+  async askAgentProcess(payload, cfg) {
+    const data = await agentApi.process(payload, cfg);
+    return data;
+  },
+};
+
+/* =========================================
+ * Cliente WebSocket
+ * ========================================= */
+
+/**
+ * Opciones por defecto del ChatSocketClient
+ */
+const DEFAULT_WS_OPTS = {
+  // Reintentos de reconexión: exponencial con jitter
+  reconnect: true,
+  maxRetries: 5,
+  backoffBaseMs: 1000, // ~0.6s, 1.2s, 2.4s, ...
+  heartbeatIntervalMs: 25000, // ping/keep-alive
+  // Pistas visuales (opcional): 'typing' fake local mientras esperamos la respuesta
+  typingTimeoutMs: 1200,
+};
+
+/**
+ * ChatSocketClient
+ * -----------------
+ * API:
+ *   - constructor(userId, { onMessage, onOpen, onClose, onError, ...opts })
+ *   - connect()
+ *   - send(message, { context, gestor_id, periodo, ... })
+ *   - close()
+ *   - on(event, handler) / off(event, handler)
+ *
+ * Eventos:
+ *   - 'open'      : socket abierto
+ *   - 'ready'     : server READY (mensaje inicial)
+ *   - 'message'   : { text, charts, recommendations, metadata, raw }
+ *   - 'error'     : Error | ApiClientError
+ *   - 'close'     : { code, reason, wasClean }
+ *   - 'reconnect' : { attempt, delayMs }
+ *   - 'typing'    : { active: boolean }
+ */
+class ChatSocketClient {
+  constructor(userId, opts = {}) {
+    if (!userId) throw new Error("userId requerido para ChatSocketClient");
+
+    this.userId = userId;
+    this.opts = { ...DEFAULT_WS_OPTS, ...opts };
+
+    // Event listeners
+    this.listeners = new Map(); // event => Set<fn>
+    ["open", "ready", "message", "error", "close", "reconnect", "typing"].forEach(
+      (e) => this.listeners.set(e, new Set())
+    );
+
+    // Estado WS
+    this.socket = null;
+    this.connected = false;
+    this.retries = 0;
+    this.heartbeat = null;
+    this.typingTimer = null;
+
+    // Cola de mensajes mientras no está OPEN
+    this.outbox = [];
+
+    // Callbacks opcionales pasados en opts
+    if (opts.onMessage) this.on("message", opts.onMessage);
+    if (opts.onOpen) this.on("open", opts.onOpen);
+    if (opts.onClose) this.on("close", opts.onClose);
+    if (opts.onError) this.on("error", opts.onError);
+  }
+
+  /* ====== Pub/Sub ====== */
+
+  on(event, fn) {
+    const set = this.listeners.get(event);
+    if (!set) throw new Error(`Evento desconocido: ${event}`);
+    set.add(fn);
+    return () => this.off(event, fn);
+  }
+
+  off(event, fn) {
+    const set = this.listeners.get(event);
+    if (set) set.delete(fn);
+  }
+
+  emit(event, payload) {
+    const set = this.listeners.get(event);
+    if (set && set.size) {
+      set.forEach((fn) => {
+        try {
+          fn(payload);
+        } catch (e) {
+          console.error(`[ChatSocketClient] listener error (${event})`, e);
+        }
+      });
+    }
+  }
+
+  /* ====== Conexión ====== */
+
+  connect() {
+    if (this.socket && this.connected) return this.socket;
+
+    const { socket, sendJson, close } = chatApi.openSocket(this.userId, {
+      onOpen: () => {
+        this.socket = socket;
+        this.connected = true;
+        this.retries = 0;
+
+        // Heartbeat
+        this._startHeartbeat();
+
+        // Vaciamos outbox
+        this._flushOutbox();
+
+        this.emit("open");
+      },
+      onMessage: (msg) => {
+        // msg: { type: 'ready'|'message'|'fallback'|'error'|'pong', ... }
+        if (msg?.type === "ready") {
+          this.emit("ready", { user_id: this.userId, ts: msg.ts });
+          return;
+        }
+
+        // Manejar pong (si decides implementar ping desde chatService)
+        if (msg?.type === "pong") {
+          console.log('[ChatService] 💚 Recibido pong del servidor');
+          return;
+        }
+
+        if (msg?.type === "message") {
+          // Detenemos "typing" fake
+          this._toggleTyping(false);
+          const normalized = normalizeChatData(msg.data);
+          this.emit("message", normalized);
+          return;
+        }
+
+        if (msg?.type === "fallback") {
+          this._toggleTyping(false);
+          this.emit(
+            "error",
+            new ApiClientError(msg?.message || "fallback", { status: 200 })
+          );
+          return;
+        }
+
+        if (msg?.type === "error") {
+          this._toggleTyping(false);
+          this.emit(
+            "error",
+            new ApiClientError(msg?.message || "error WS", { status: 400 })
+          );
+          return;
+        }
+
+        // Mensaje desconocido
+        console.warn('[ChatService] Tipo de mensaje desconocido:', msg?.type);
+      },
+      onError: (evt) => {
+        this.emit("error", evt instanceof Error ? evt : new Error("WS error"));
+      },
+      onClose: (evt) => {
+        this.connected = false;
+        this._stopHeartbeat();
+        this.emit("close", {
+          code: evt?.code,
+          reason: evt?.reason,
+          wasClean: evt?.wasClean,
+        });
+
+        if (this.opts.reconnect) {
+          this._scheduleReconnect();
+        }
+      },
+    });
+
+    // Guardamos helpers
+    this.socket = socket;
+    this._sendJson = sendJson;
+    this._closeWs = close;
+    return this.socket;
+  }
+
+  close() {
+    this.opts.reconnect = false;
+    this._stopHeartbeat();
+    if (this.socket) {
+      try {
+        this._closeWs?.();
+      } catch (_) {}
+    }
+    this.socket = null;
+    this.connected = false;
+  }
+
+  /* ====== Mensajería ====== */
+
+  /**
+   * Envía un mensaje al WS.
+   * El servidor espera: { message, context? }
+   * Para unificar UX, aceptamos el mismo shape que buildChatPayload (tomando sólo message/context).
+   */
+  send(input) {
+    const message =
+      typeof input === "string" ? input : String(input?.message || "").trim();
+    if (!message) throw new Error("message vacío");
+
+    const context =
+      typeof input === "object" && input?.context ? input.context : {};
+
+    const packet = { message, context };
+
+    console.log('[ChatService] Enviando mensaje:', packet);
+
+    // “typing” local mientras esperamos respuesta
+    this._toggleTyping(true);
+
+    if (this.connected && this.socket?.readyState === 1) {
+      this._sendJson(packet);
+    } else {console.log('[ChatService] Socket no conectado, añadiendo a outbox');
+      this.outbox.push(packet);
+      this.connect(); // asegura conexión
+    }
+  }
+
+  _flushOutbox() {
+    if (!this.outbox.length) return;
+    if (!this.connected || this.socket?.readyState !== 1) return;
+
+    const queued = [...this.outbox];
+    this.outbox = [];
+    queued.forEach((pkt) => this._sendJson(pkt));
+  }
+
+  /* ====== Reconexión ====== */
+
+  _scheduleReconnect() {
+    if (!this.opts.reconnect) return;
+    const attempt = Math.min(this.retries + 1, this.opts.maxRetries);
+    this.retries = attempt;
+
+    // backoff exponencial con jitter
+    const base = this.opts.backoffBaseMs || 600;
+    const delay =
+      Math.floor(base * 2 ** (attempt - 1)) + Math.floor(Math.random() * 250);
+
+    this.emit("reconnect", { attempt, delayMs: delay });
+
+    setTimeout(() => {
+      if (!this.opts.reconnect) return;
+      this.connect();
+    }, delay);
+  }
+
+  /* ====== Heartbeat ====== */
+
+  _startHeartbeat() {
+    this._stopHeartbeat();
+    const iv = Number(this.opts.heartbeatIntervalMs) || 15000;
+    this.heartbeat = setInterval(() => {
+      try {
+        if (this.socket?.readyState === 1) {
+          // ping light; el backend no requiere protocolo, pero evita idle timeouts intermedios
+          this._sendJson({ type: "ping", ts: Date.now() });
+        }
+      } catch (_) {}
+    }, iv);
+  }
+
+  _stopHeartbeat() {
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.heartbeat = null;
+  }
+
+  /* ====== Typing UX ====== */
+
+  _toggleTyping(active) {
+    // Emite typing true/false; los componentes pueden mostrar un indicador
+    this.emit("typing", { active });
+
+    // Si active, programa apagado automático por si no llega respuesta
+    if (active) {
+      if (this.typingTimer) clearTimeout(this.typingTimer);
+      this.typingTimer = setTimeout(() => {
+        this.emit("typing", { active: false });
+      }, this.opts.typingTimeoutMs);
+    } else if (this.typingTimer) {
+      clearTimeout(this.typingTimer);
+      this.typingTimer = null;
+    }
+  }
+}
+
+/* =========================================
+ * API de alto nivel para el dashboard
+ * ========================================= */
+
+/**
+ * Crea una sesión de chat lista para usar.
+ * Devuelve helpers HTTP + cliente WS con la misma userId.
+ */
+function createChatSession(userId = uid(), options = {}) {
+  const wsClient = new ChatSocketClient(userId, options);
+
+  return {
+    userId,
+
+    // HTTP
+    sendHttp: (req) => httpChat.sendMessage({ user_id: userId, ...req }),
+    status: (cfg) => httpChat.status(cfg),
+    history: (cfg) => httpChat.history(userId, cfg),
+    suggestions: (cfg) => httpChat.suggestions(userId, cfg),
+    reset: (cfg) => httpChat.reset(userId, cfg),
+
+    // Agent atajos (útiles desde el chat UI)
+    askAgentQuick: (args = {}, cfg) =>
+      httpChat.askAgentQuick({ user_id: userId, ...args }, cfg),
+    askAgentProcess: (payload = {}, cfg) =>
+      httpChat.askAgentProcess({ user_id: userId, ...payload }, cfg),
+
+    // WS
+    ws: wsClient,
+    connect: () => wsClient.connect(),
+    send: (messageOrObj) => wsClient.send(messageOrObj),
+    close: () => wsClient.close(),
+
+    // Pub/Sub
+    on: (event, fn) => wsClient.on(event, fn),
+    off: (event, fn) => wsClient.off(event, fn),
+  };
+}
+
+/* =========================================
+ * Exports
+ * ========================================= */
+
+const chatService = {
+  http: httpChat,
+  ChatSocketClient,
+  createChatSession,
+  normalizeChatData,
+  buildChatPayload,
+};
+
+export default chatService;
+export {
+  chatService,
+  httpChat,
+  ChatSocketClient,
+  createChatSession,
+  normalizeChatData,
+  buildChatPayload,
+};
