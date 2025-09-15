@@ -11,6 +11,7 @@
  * ✅ OPTIMIZADO: Cache inteligente y manejo de errores mejorado
  * ✅ CORREGIDO: Funciones async para manejo de segmentos dinámicos
  * ✅ AÑADIDO: Soporte completo para Dashboard de Dirección usando endpoints reales
+ * ✅ ACTUALIZADO: +40 nuevos endpoints de analytics, kpis, incentives, dashboards
  */
 
 import api, {
@@ -21,10 +22,14 @@ import api, {
   kpis as kpisAPI,
   comparatives as comparativesAPI,
   deviations as deviationsAPI,
+  incentives as incentivesAPI,
+  dashboards as dashboardsAPI,
+  catalogs as catalogsAPI,
   gestorAnalysis as gestorAnalysisAPI,
   reflection as reflectionAPI,
   feedback as feedbackAPI,
   integration as integrationAPI,
+  sql as sqlAPI,
   ApiClientError,
 } from "./api";
 
@@ -344,6 +349,923 @@ function filterDataBySegment(data, targetSegmentId) {
   }
   
   return filtered;
+}
+
+/* =========================================
+ * ✅ NUEVAS FUNCIONES PARA ANALYTICS v11.0 - MÉTRICAS FINANCIERAS
+ * ========================================= */
+
+/**
+ * ✅ NUEVO: Métricas financieras por centro
+ */
+async function getCentroMetricas(centroId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🏢 Fetching metrics for centro ${centroId}, period ${periodo}`);
+  
+  const cacheKey = { centroId, periodo, type: 'centro_metricas' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached centro metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.centroMetricas(centroId, periodo, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Centro metrics loaded for ${centroId}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching centro metrics:`, error.message);
+    return {
+      centro_id: centroId,
+      periodo,
+      error: error.message,
+      metricas: {}
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Gestores con métricas por centro
+ */
+async function getCentroGestoresMetricas(centroId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 👥 Fetching gestores metrics for centro ${centroId}`);
+  
+  const cacheKey = { centroId, periodo, type: 'centro_gestores_metricas' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached centro gestores metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.centroGestoresMetricas(centroId, periodo, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Centro gestores metrics loaded: ${result.length} gestores`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching centro gestores metrics:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * ✅ NUEVO: Métricas financieras por segmento
+ */
+async function getSegmentoMetricas(segmentoId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🎯 Fetching metrics for segmento ${segmentoId}, period ${periodo}`);
+  
+  const cacheKey = { segmentoId, periodo, type: 'segmento_metricas' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached segmento metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.segmentoMetricas(segmentoId, periodo, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Segmento metrics loaded for ${segmentoId}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching segmento metrics:`, error.message);
+    return {
+      segmento_id: segmentoId,
+      periodo,
+      error: error.message,
+      metricas: {}
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Métricas completas por gestor
+ */
+async function getGestorMetricasCompletas(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 👤 Fetching complete metrics for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'gestor_metricas_completas' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor complete metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.gestorMetricasCompletas(gestorId, periodo, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor complete metrics loaded for ${gestorId}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor complete metrics:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      error: error.message,
+      metricas: {}
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Clientes con métricas por gestor
+ */
+async function getGestorClientesMetricas(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🤝 Fetching client metrics for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'gestor_clientes_metricas' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor client metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.gestorClientesMetricas(gestorId, periodo, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor client metrics loaded: ${result.length} clients`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor client metrics:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * ✅ NUEVO: Métricas por cliente
+ */
+async function getClienteMetricas(clienteId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🤝 Fetching metrics for cliente ${clienteId}`);
+  
+  const cacheKey = { clienteId, periodo, type: 'cliente_metricas' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached cliente metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.clienteMetricas(clienteId, periodo, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Cliente metrics loaded for ${clienteId}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching cliente metrics:`, error.message);
+    return {
+      cliente_id: clienteId,
+      periodo,
+      error: error.message,
+      metricas: {}
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Contratos con métricas por cliente
+ */
+async function getClienteContratosMetricas(clienteId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 📋 Fetching contract metrics for cliente ${clienteId}`);
+  
+  const cacheKey = { clienteId, periodo, type: 'cliente_contratos_metricas' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached cliente contract metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.clienteContratosMetricas(clienteId, periodo, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Cliente contract metrics loaded: ${result.length} contracts`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching cliente contract metrics:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * ✅ NUEVO: Detalle completo por contrato
+ */
+async function getContratoDetalleCompleto(contratoId, options = {}) {
+  console.log(`[Analytics] 📄 Fetching complete detail for contrato ${contratoId}`);
+  
+  const cacheKey = { contratoId, type: 'contrato_detalle_completo' };
+  const cached = _getCached("analytics", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached contrato complete detail`);
+    return cached;
+  }
+
+  try {
+    const result = await analyticsAPI.contratoDetalleCompleto(contratoId, options);
+    
+    _setCached("analytics", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Contrato complete detail loaded for ${contratoId}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching contrato complete detail:`, error.message);
+    return {
+      contrato_id: contratoId,
+      error: error.message,
+      detalle: {}
+    };
+  }
+}
+
+/* =========================================
+ * ✅ NUEVAS FUNCIONES PARA KPIs v11.0 - FINANCIEROS ESPECÍFICOS
+ * ========================================= */
+
+/**
+ * ✅ NUEVO: KPIs financieros por centro
+ */
+async function getCentroKPIsFinancieros(centroId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 📊 Fetching financial KPIs for centro ${centroId}`);
+  
+  const cacheKey = { centroId, periodo, type: 'centro_kpis_financieros' };
+  const cached = _getCached("kpis", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached centro financial KPIs`);
+    return cached;
+  }
+
+  try {
+    const result = await kpisAPI.centroFinancieros(centroId, periodo, options);
+    
+    _setCached("kpis", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Centro financial KPIs loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching centro financial KPIs:`, error.message);
+    return {
+      centro_id: centroId,
+      periodo,
+      error: error.message,
+      kpis_financieros: {}
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: KPIs financieros por gestor
+ */
+async function getGestorKPIsFinancieros(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 📊 Fetching financial KPIs for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'gestor_kpis_financieros' };
+  const cached = _getCached("kpis", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor financial KPIs`);
+    return cached;
+  }
+
+  try {
+    const result = await kpisAPI.gestorFinancieros(gestorId, periodo, options);
+    
+    _setCached("kpis", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor financial KPIs loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor financial KPIs:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      error: error.message,
+      kpis_financieros: {}
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: ROE específico por gestor
+ */
+async function getGestorROE(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 📈 Fetching ROE for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'gestor_roe' };
+  const cached = _getCached("kpis", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor ROE`);
+    return cached;
+  }
+
+  try {
+    const result = await kpisAPI.gestorROE(gestorId, periodo, options);
+    
+    _setCached("kpis", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor ROE loaded: ${result.roe_pct}%`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor ROE:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      roe_pct: 0,
+      clasificacion: 'ERROR',
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Eficiencia específica por gestor
+ */
+async function getGestorEficiencia(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] ⚡ Fetching efficiency for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'gestor_eficiencia' };
+  const cached = _getCached("kpis", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor efficiency`);
+    return cached;
+  }
+
+  try {
+    const result = await kpisAPI.gestorEficiencia(gestorId, periodo, options);
+    
+    _setCached("kpis", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor efficiency loaded: ${result.ratio_eficiencia}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor efficiency:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      ratio_eficiencia: 0,
+      clasificacion: 'ERROR',
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Margen específico por centro
+ */
+async function getCentroMargen(centroId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 💰 Fetching margin for centro ${centroId}`);
+  
+  const cacheKey = { centroId, periodo, type: 'centro_margen' };
+  const cached = _getCached("kpis", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached centro margin`);
+    return cached;
+  }
+
+  try {
+    const result = await kpisAPI.centroMargen(centroId, periodo, options);
+    
+    _setCached("kpis", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Centro margin loaded: ${result.margen_neto_pct}%`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching centro margin:`, error.message);
+    return {
+      centro_id: centroId,
+      periodo,
+      margen_neto_pct: 0,
+      clasificacion: 'ERROR',
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Total bonus por centro
+ */
+async function getCentroBonusTotal(centroId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🎁 Fetching total bonus for centro ${centroId}`);
+  
+  const cacheKey = { centroId, periodo, type: 'centro_bonus_total' };
+  const cached = _getCached("kpis", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached centro total bonus`);
+    return cached;
+  }
+
+  try {
+    const result = await kpisAPI.centroBonusTotal(centroId, periodo, options);
+    
+    _setCached("kpis", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Centro total bonus loaded: €${result.bonus_total}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching centro total bonus:`, error.message);
+    return {
+      centro_id: centroId,
+      periodo,
+      bonus_total: 0,
+      gestores_con_bonus: 0,
+      error: error.message
+    };
+  }
+}
+
+/* =========================================
+ * ✅ NUEVAS FUNCIONES PARA INCENTIVES v11.0 - DETALLADOS
+ * ========================================= */
+
+/**
+ * ✅ NUEVO: Total incentivos por centro
+ */
+async function getIncentivesCentroTotal(centroId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🏆 Fetching total incentives for centro ${centroId}`);
+  
+  const cacheKey = { centroId, periodo, type: 'incentives_centro_total' };
+  const cached = _getCached("incentives", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached centro total incentives`);
+    return cached;
+  }
+
+  try {
+    const result = await incentivesAPI.centroTotal(centroId, periodo, options);
+    
+    _setCached("incentives", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Centro total incentives loaded: €${result.total_incentivos}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching centro total incentives:`, error.message);
+    return {
+      centro_id: centroId,
+      periodo,
+      total_incentivos: 0,
+      gestores_elegibles: 0,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Detalle completo incentivos por gestor
+ */
+async function getIncentivesGestorDetalle(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🎯 Fetching detailed incentives for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'incentives_gestor_detalle' };
+  const cached = _getCached("incentives", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor detailed incentives`);
+    return cached;
+  }
+
+  try {
+    const result = await incentivesAPI.gestorDetalle(gestorId, periodo, options);
+    
+    _setCached("incentives", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor detailed incentives loaded: €${result.total_incentivos}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor detailed incentives:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      total_incentivos: 0,
+      detalle_incentivos: {},
+      error: error.message
+    };
+  }
+}
+
+/* =========================================
+ * ✅ NUEVAS FUNCIONES PARA DASHBOARDS v11.0 - ESPECÍFICOS
+ * ========================================= */
+
+/**
+ * ✅ NUEVO: Dashboard resumen por gestor
+ */
+async function getDashboardGestorSummary(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 📊 Fetching dashboard summary for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_summary' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor summary dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.gestorSummary(gestorId, periodo, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor summary dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor summary dashboard:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      charts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Dashboard evolución por gestor
+ */
+async function getDashboardGestorEvolution(gestorId, options = {}) {
+  console.log(`[Analytics] 📈 Fetching evolution dashboard for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, type: 'dashboard_gestor_evolution' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor evolution dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.gestorEvolution(gestorId, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor evolution dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor evolution dashboard:`, error.message);
+    return {
+      gestor_id: gestorId,
+      charts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Dashboard productos por gestor
+ */
+async function getDashboardGestorProductos(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🛍️ Fetching products dashboard for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_productos' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor products dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.gestorProductos(gestorId, periodo, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor products dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor products dashboard:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      charts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Dashboard alertas por gestor
+ */
+async function getDashboardGestorAlertas(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🚨 Fetching alerts dashboard for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_alertas' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor alerts dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.gestorAlertas(gestorId, periodo, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor alerts dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor alerts dashboard:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      alerts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Dashboard comparativo por gestor
+ */
+async function getDashboardGestorComparative(gestorId, periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] ⚖️ Fetching comparative dashboard for gestor ${gestorId}`);
+  
+  const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_comparative' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached gestor comparative dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.gestorComparative(gestorId, periodo, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Gestor comparative dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching gestor comparative dashboard:`, error.message);
+    return {
+      gestor_id: gestorId,
+      periodo,
+      charts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Dashboard resumen incentivos
+ */
+async function getDashboardIncentivosSummary(periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🏆 Fetching incentives summary dashboard`);
+  
+  const cacheKey = { periodo, type: 'dashboard_incentivos_summary' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached incentives summary dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.incentivosSummary(periodo, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Incentives summary dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching incentives summary dashboard:`, error.message);
+    return {
+      periodo,
+      charts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Dashboard tendencia incentivos
+ */
+async function getDashboardIncentivosTendencia(options = {}) {
+  console.log(`[Analytics] 📊 Fetching incentives trend dashboard`);
+  
+  const cacheKey = { type: 'dashboard_incentivos_tendencia' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached incentives trend dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.incentivosTendencia(options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Incentives trend dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching incentives trend dashboard:`, error.message);
+    return {
+      charts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Dashboard comparativo summary
+ */
+async function getDashboardComparativeSummary(periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 📊 Fetching comparative summary dashboard`);
+  
+  const cacheKey = { periodo, type: 'dashboard_comparative_summary' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached comparative summary dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.comparativeSummary(periodo, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Comparative summary dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching comparative summary dashboard:`, error.message);
+    return {
+      periodo,
+      charts: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Matriz comparativa segmentos
+ */
+async function getDashboardMatrizSegmentos(periodo = "2025-10", options = {}) {
+  console.log(`[Analytics] 🎯 Fetching segments matrix dashboard`);
+  
+  const cacheKey = { periodo, type: 'dashboard_matriz_segmentos' };
+  const cached = _getCached("dashboards", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached segments matrix dashboard`);
+    return cached;
+  }
+
+  try {
+    const result = await dashboardsAPI.matrizSegmentos(periodo, options);
+    
+    _setCached("dashboards", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Segments matrix dashboard loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching segments matrix dashboard:`, error.message);
+    return {
+      periodo,
+      matriz: [],
+      error: error.message
+    };
+  }
+}
+
+/* =========================================
+ * ✅ NUEVAS FUNCIONES PARA CATALOGS v11.0 - PERÍODOS CON MÉTRICAS
+ * ========================================= */
+
+/**
+ * ✅ NUEVO: Métricas financieras por período
+ */
+async function getPeriodMetricas(periodo, options = {}) {
+  console.log(`[Analytics] 📅 Fetching period metrics for ${periodo}`);
+  
+  const cacheKey = { periodo, type: 'period_metricas' };
+  const cached = _getCached("catalogs", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached period metrics`);
+    return cached;
+  }
+
+  try {
+    const result = await catalogsAPI.periodMetricas(periodo, options);
+    
+    _setCached("catalogs", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Period metrics loaded for ${periodo}`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching period metrics:`, error.message);
+    return {
+      periodo,
+      error: error.message,
+      metricas: {}
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Comparación entre períodos
+ */
+async function getComparePeriods(periodoActual, periodoAnterior, options = {}) {
+  console.log(`[Analytics] 📊 Comparing periods ${periodoAnterior} vs ${periodoActual}`);
+  
+  const cacheKey = { periodoActual, periodoAnterior, type: 'compare_periods' };
+  const cached = _getCached("catalogs", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached period comparison`);
+    return cached;
+  }
+
+  try {
+    const result = await catalogsAPI.comparePeriods(periodoActual, periodoAnterior, options);
+    
+    _setCached("catalogs", cacheKey, result, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Period comparison loaded`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error comparing periods:`, error.message);
+    return {
+      periodo_actual: periodoActual,
+      periodo_anterior: periodoAnterior,
+      error: error.message,
+      comparacion: {}
+    };
+  }
+}
+
+/* =========================================
+ * ✅ NUEVAS FUNCIONES PARA SQL v11.0
+ * ========================================= */
+
+/**
+ * ✅ NUEVO: Ejecutar SQL dinámico validado
+ */
+async function executeDynamicSQL(sql, context = "general", options = {}) {
+  console.log(`[Analytics] 🔍 Executing dynamic SQL (${context})`);
+  
+  try {
+    const result = await sqlAPI.dynamic(sql, context, options);
+    
+    console.log(`[Analytics] ✅ Dynamic SQL executed successfully`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error executing dynamic SQL:`, error.message);
+    return {
+      error: error.message,
+      sql: sql.substring(0, 100) + (sql.length > 100 ? '...' : ''),
+      context,
+      rows: []
+    };
+  }
+}
+
+/**
+ * ✅ NUEVO: Validar SQL
+ */
+async function validateSQL(sql, context = "general", options = {}) {
+  console.log(`[Analytics] ✅ Validating SQL (${context})`);
+  
+  try {
+    const result = await sqlAPI.validate(sql, context, options);
+    
+    console.log(`[Analytics] ✅ SQL validation completed`);
+    return result;
+    
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error validating SQL:`, error.message);
+    return {
+      is_safe: false,
+      error: error.message,
+      sql: sql.substring(0, 100) + (sql.length > 100 ? '...' : ''),
+      context
+    };
+  }
 }
 
 /* =========================================
@@ -1927,6 +2849,47 @@ const analyticsService = {
   // ✅ NUEVA FUNCIÓN OPTIMIZADA
   getUnifiedKPIData,
 
+  // ✅ NUEVAS FUNCIONES ANALYTICS v11.0 - MÉTRICAS FINANCIERAS
+  getCentroMetricas,
+  getCentroGestoresMetricas,
+  getSegmentoMetricas,
+  getGestorMetricasCompletas,
+  getGestorClientesMetricas,
+  getClienteMetricas,
+  getClienteContratosMetricas,
+  getContratoDetalleCompleto,
+
+  // ✅ NUEVAS FUNCIONES KPIs v11.0 - FINANCIEROS ESPECÍFICOS
+  getCentroKPIsFinancieros,
+  getGestorKPIsFinancieros,
+  getGestorROE,
+  getGestorEficiencia,
+  getCentroMargen,
+  getCentroBonusTotal,
+
+  // ✅ NUEVAS FUNCIONES INCENTIVES v11.0 - DETALLADOS
+  getIncentivesCentroTotal,
+  getIncentivesGestorDetalle,
+
+  // ✅ NUEVAS FUNCIONES DASHBOARDS v11.0 - ESPECÍFICOS
+  getDashboardGestorSummary,
+  getDashboardGestorEvolution,
+  getDashboardGestorProductos,
+  getDashboardGestorAlertas,
+  getDashboardGestorComparative,
+  getDashboardIncentivosSummary,
+  getDashboardIncentivosTendencia,
+  getDashboardComparativeSummary,
+  getDashboardMatrizSegmentos,
+
+  // ✅ NUEVAS FUNCIONES CATALOGS v11.0 - PERÍODOS CON MÉTRICAS
+  getPeriodMetricas,
+  getComparePeriods,
+
+  // ✅ NUEVAS FUNCIONES SQL v11.0
+  executeDynamicSQL,
+  validateSQL,
+
   // ✅ NUEVAS FUNCIONES DEVIATIONS v11.0
   getMargenDeviations,
   getVolumenDeviations,
@@ -2008,6 +2971,47 @@ export {
   transformBackendChartData,
   pivotChart,
   getChartMeta,
+
+  // ✅ NUEVAS EXPORTACIONES ANALYTICS v11.0 - MÉTRICAS FINANCIERAS
+  getCentroMetricas,
+  getCentroGestoresMetricas,
+  getSegmentoMetricas,
+  getGestorMetricasCompletas,
+  getGestorClientesMetricas,
+  getClienteMetricas,
+  getClienteContratosMetricas,
+  getContratoDetalleCompleto,
+
+  // ✅ NUEVAS EXPORTACIONES KPIs v11.0 - FINANCIEROS ESPECÍFICOS
+  getCentroKPIsFinancieros,
+  getGestorKPIsFinancieros,
+  getGestorROE,
+  getGestorEficiencia,
+  getCentroMargen,
+  getCentroBonusTotal,
+
+  // ✅ NUEVAS EXPORTACIONES INCENTIVES v11.0 - DETALLADOS
+  getIncentivesCentroTotal,
+  getIncentivesGestorDetalle,
+
+  // ✅ NUEVAS EXPORTACIONES DASHBOARDS v11.0 - ESPECÍFICOS
+  getDashboardGestorSummary,
+  getDashboardGestorEvolution,
+  getDashboardGestorProductos,
+  getDashboardGestorAlertas,
+  getDashboardGestorComparative,
+  getDashboardIncentivosSummary,
+  getDashboardIncentivosTendencia,
+  getDashboardComparativeSummary,
+  getDashboardMatrizSegmentos,
+
+  // ✅ NUEVAS EXPORTACIONES CATALOGS v11.0 - PERÍODOS CON MÉTRICAS
+  getPeriodMetricas,
+  getComparePeriods,
+
+  // ✅ NUEVAS EXPORTACIONES SQL v11.0
+  executeDynamicSQL,
+  validateSQL,
   
   // ✅ NUEVAS EXPORTACIONES DEVIATIONS v11.0
   getMargenDeviations,

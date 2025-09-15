@@ -897,6 +897,206 @@ class IncentiveQueries:
         )
 
     # =================================================================
+    # 7. MÉTRICAS ESPECÍFICAS PARA DASHBOARDS DE INCENTIVOS (NUEVAS)
+    # =================================================================
+
+    def get_incentivos_dashboard_summary(self, periodo: str = "2025-10") -> QueryResult:
+        """
+        ✅ MÉTODO CRÍTICO: Resumen de incentivos para dashboard principal
+        """
+        try:
+            # Datos de cumplimiento de objetivos
+            objetivos_result = self.calculate_incentivo_cumplimiento_objetivos_enhanced(periodo, 80.0)
+
+            # Datos de bonus por margen
+            bonus_result = self.analyze_bonus_margen_neto_enhanced(periodo, 12.0)
+
+            # Datos de ranking pool
+            pool_result = self.calculate_ranking_bonus_pool_enhanced(periodo, 50000.0)
+
+            summary_data = {
+                'resumen_general': {
+                    'periodo': periodo,
+                    'gestores_evaluados': len(objetivos_result.data) if objetivos_result.data else 0,
+                    'gestores_con_bonus': len(bonus_result.data) if bonus_result.data else 0,
+                    'gestores_top_pool': len(pool_result.data) if pool_result.data else 0,
+                    'pool_total_asignado': sum(r.get('incentivo_final_eur', 0) for r in (pool_result.data or []))
+                },
+                'distribucion_cumplimiento': {
+                    'excelente': len([r for r in (objetivos_result.data or []) if r.get('categoria_cumplimiento') == 'EXCELENTE']),
+                    'cumple': len([r for r in (objetivos_result.data or []) if r.get('categoria_cumplimiento') == 'CUMPLE']),
+                    'parcial': len([r for r in (objetivos_result.data or []) if r.get('categoria_cumplimiento') == 'PARCIAL']),
+                    'incumple': len([r for r in (objetivos_result.data or []) if r.get('categoria_cumplimiento') == 'INCUMPLE'])
+                },
+                'metricas_incentivos': {
+                    'incentivo_promedio': round(sum(r.get('incentivo_calculado_eur', 0) for r in (objetivos_result.data or [])) / max(len(objetivos_result.data or []), 1), 2),
+                    'incentivo_maximo': max([r.get('incentivo_calculado_eur', 0) for r in (objetivos_result.data or [])], default=0),
+                    'incentivo_total_pagado': sum(r.get('incentivo_calculado_eur', 0) for r in (objetivos_result.data or []))
+                },
+                'top_performers': (pool_result.data[:5] if pool_result.data else [])
+            }
+
+            return QueryResult(
+                data=[summary_data],
+                query_type="incentivos_dashboard_summary",
+                execution_time=0.1,
+                row_count=1,
+                query_sql="-- Resumen de incentivos generado dinámicamente"
+            )
+        except Exception as e:
+            logger.error(f"❌ Error generando resumen de incentivos: {e}")
+            return QueryResult(
+                data=[{"error": str(e)}],
+                query_type="incentivos_dashboard_error",
+                execution_time=0,
+                row_count=0,
+                query_sql=""
+            )
+
+    def get_incentivos_por_centro(self, periodo: str = "2025-10") -> QueryResult:
+        """
+        ✅ Análisis de incentivos agregado por centro
+        """
+        query = """
+        WITH incentivos_centro AS (
+            SELECT
+                c.CENTRO_ID,
+                c.DESC_CENTRO,
+                COUNT(DISTINCT g.GESTOR_ID) as total_gestores,
+                COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
+                AVG(CASE WHEN ingresos > 0 THEN (ingresos - gastos) / ingresos * 100 ELSE 0 END) as margen_promedio_centro,
+                SUM(ingresos) as ingresos_centro,
+                SUM(gastos) as gastos_centro
+            FROM MAESTRO_CENTROS c
+            JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
+            LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+            LEFT JOIN (
+                SELECT
+                    cont.GESTOR_ID,
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR001104') 
+                             THEN mov.IMPORTE ELSE 0 END) as ingresos,
+                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR001302', 'CR001301', 'CR00121', 'CR00131') 
+                             THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos
+                FROM MOVIMIENTOS_CONTRATOS mov
+                JOIN MAESTRO_CONTRATOS cont ON mov.CONTRATO_ID = cont.CONTRATO_ID
+                JOIN MAESTRO_CUENTAS mct ON mov.CUENTA_ID = mct.CUENTA_ID
+                JOIN MAESTRO_LINEA_CDR cdr ON mct.LINEA_CDR = cdr.COD_LINEA_CDR
+                WHERE strftime('%Y-%m', mov.FECHA) = ?
+                GROUP BY cont.GESTOR_ID
+            ) fin ON g.GESTOR_ID = fin.GESTOR_ID
+            WHERE c.IND_CENTRO_FINALISTA = 1
+            GROUP BY c.CENTRO_ID, c.DESC_CENTRO
+        )
+        SELECT
+            CENTRO_ID,
+            DESC_CENTRO,
+            total_gestores,
+            total_contratos,
+            ROUND(margen_promedio_centro, 2) as margen_promedio_centro,
+            ROUND(ingresos_centro, 2) as ingresos_centro,
+            ROUND(gastos_centro, 2) as gastos_centro,
+            ROUND(ingresos_centro - gastos_centro, 2) as beneficio_centro,
+            CASE 
+                WHEN margen_promedio_centro >= 20.0 THEN 'EXCELENTE'
+                WHEN margen_promedio_centro >= 15.0 THEN 'BUENO'
+                WHEN margen_promedio_centro >= 10.0 THEN 'ACEPTABLE'
+                ELSE 'NECESITA_MEJORA'
+            END as categoria_performance_centro,
+            ROUND(
+                CASE 
+                    WHEN margen_promedio_centro >= 20.0 THEN total_gestores * 3000 * 1.3
+                    WHEN margen_promedio_centro >= 15.0 THEN total_gestores * 3000 * 1.1
+                    WHEN margen_promedio_centro >= 10.0 THEN total_gestores * 3000 * 0.9
+                    ELSE total_gestores * 3000 * 0.7
+                END, 2
+            ) as pool_estimado_centro
+        FROM incentivos_centro
+        ORDER BY margen_promedio_centro DESC
+        """
+
+        start_time = datetime.now()
+        results = execute_query(query, (periodo,))
+        execution_time = (datetime.now() - start_time).total_seconds()
+
+        return QueryResult(
+            data=results,
+            query_type="incentivos_por_centro",
+            execution_time=execution_time,
+            row_count=len(results) if results else 0,
+            query_sql=query
+        )
+
+    def get_tendencia_incentivos(self) -> QueryResult:
+        """
+        ✅ Tendencia de incentivos últimos 6 meses
+        """
+        query = """
+        WITH incentivos_mensuales AS (
+            SELECT
+                strftime('%Y-%m', mov.FECHA) as periodo,
+                COUNT(DISTINCT cont.GESTOR_ID) as gestores_activos,
+                SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR001104') 
+                         THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
+                SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR001302', 'CR001301', 'CR00121', 'CR00131') 
+                         THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos_total,
+                AVG(CASE WHEN ingresos_gestor > 0 
+                         THEN (ingresos_gestor - gastos_gestor) / ingresos_gestor * 100 
+                         ELSE 0 END) as margen_promedio_mes
+            FROM MOVIMIENTOS_CONTRATOS mov
+            JOIN MAESTRO_CONTRATOS cont ON mov.CONTRATO_ID = cont.CONTRATO_ID
+            JOIN MAESTRO_CUENTAS mct ON mov.CUENTA_ID = mct.CUENTA_ID
+            JOIN MAESTRO_LINEA_CDR cdr ON mct.LINEA_CDR = cdr.COD_LINEA_CDR
+            LEFT JOIN (
+                SELECT
+                    cont2.GESTOR_ID,
+                    strftime('%Y-%m', mov2.FECHA) as mes,
+                    SUM(CASE WHEN cdr2.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR001104') 
+                             THEN mov2.IMPORTE ELSE 0 END) as ingresos_gestor,
+                    SUM(CASE WHEN cdr2.COD_LINEA_CDR IN ('CR001302', 'CR001301', 'CR00121', 'CR00131') 
+                             THEN ABS(mov2.IMPORTE) ELSE 0 END) as gastos_gestor
+                FROM MOVIMIENTOS_CONTRATOS mov2
+                JOIN MAESTRO_CONTRATOS cont2 ON mov2.CONTRATO_ID = cont2.CONTRATO_ID
+                JOIN MAESTRO_CUENTAS mct2 ON mov2.CUENTA_ID = mct2.CUENTA_ID
+                JOIN MAESTRO_LINEA_CDR cdr2 ON mct2.LINEA_CDR = cdr2.COD_LINEA_CDR
+                GROUP BY cont2.GESTOR_ID, strftime('%Y-%m', mov2.FECHA)
+            ) gestores ON cont.GESTOR_ID = gestores.GESTOR_ID 
+                        AND strftime('%Y-%m', mov.FECHA) = gestores.mes
+            WHERE strftime('%Y-%m', mov.FECHA) >= '2025-05'
+              AND strftime('%Y-%m', mov.FECHA) <= '2025-10'
+            GROUP BY strftime('%Y-%m', mov.FECHA)
+        )
+        SELECT
+            periodo,
+            gestores_activos,
+            ROUND(ingresos_total, 2) as ingresos_total,
+            ROUND(gastos_total, 2) as gastos_total,
+            ROUND(ingresos_total - gastos_total, 2) as beneficio_total,
+            ROUND(margen_promedio_mes, 2) as margen_promedio_mes,
+            ROUND(
+                CASE 
+                    WHEN margen_promedio_mes >= 18.0 THEN gestores_activos * 4000
+                    WHEN margen_promedio_mes >= 15.0 THEN gestores_activos * 3500
+                    WHEN margen_promedio_mes >= 12.0 THEN gestores_activos * 3000
+                    ELSE gestores_activos * 2500
+                END, 2
+            ) as pool_estimado_mes
+        FROM incentivos_mensuales
+        ORDER BY periodo
+        """
+
+        start_time = datetime.now()
+        results = execute_query(query)
+        execution_time = (datetime.now() - start_time).total_seconds()
+
+        return QueryResult(
+            data=results,
+            query_type="tendencia_incentivos",
+            execution_time=execution_time,
+            row_count=len(results) if results else 0,
+            query_sql=query
+        )
+
+    # =================================================================
     # FUNCIONES HELPER PARA CLASIFICACIONES MEJORADAS
     # =================================================================
 
@@ -1133,3 +1333,11 @@ def analyze_bonus_margen_enhanced(periodo: str = "2025-10", umbral_margen: float
 
 def calculate_ranking_bonus_enhanced(periodo: str = "2025-10", pool: float = 50000.0):
     return incentive_queries.calculate_ranking_bonus_pool_enhanced(periodo, pool)
+
+# Funciones de conveniencia para dashboards de incentivos
+def get_dashboard_incentivos_summary(periodo: str = "2025-10"):
+    return incentive_queries.get_incentivos_dashboard_summary(periodo)
+def get_incentivos_centro(periodo: str = "2025-10"):
+    return incentive_queries.get_incentivos_por_centro(periodo)
+def get_incentivos_tendencia():
+    return incentive_queries.get_tendencia_incentivos()

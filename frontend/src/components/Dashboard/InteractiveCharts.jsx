@@ -32,6 +32,7 @@ import {
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import analyticsService from '../../services/analyticsService';
+import api from '../../services/api'; // ✅ AÑADIR: Importar API para gestor segmento
 import ErrorState from '../common/ErrorState';
 import Loader from '../common/Loader';
 import theme from '../../styles/theme';
@@ -123,6 +124,108 @@ const getSemaphoreColor = (semaforo) => {
     'Gris': '#6b7280'
   };
   return colors[semaforo] || colors.Gris;
+};
+
+// ✅ NUEVA FUNCIÓN: Transformar datos del endpoint a formato Chart.js
+const transformPriceComparisonData = (rawData) => {
+  if (!rawData || !rawData.standard || !rawData.real) {
+    return null;
+  }
+
+  const { standard, real } = rawData;
+  
+  // Crear mapas por producto
+  const standardMap = {};
+  const realMap = {};
+  
+  standard.forEach(item => {
+    standardMap[item.PRODUCTO_ID] = {
+      precio: Math.abs(item.PRECIO_MANTENIMIENTO || 0),
+      descripcion: item.DESC_PRODUCTO
+    };
+  });
+  
+  real.forEach(item => {
+    realMap[item.PRODUCTO_ID] = {
+      precio: Math.abs(item.PRECIO_MANTENIMIENTO_REAL || 0),
+      descripcion: item.DESC_PRODUCTO,
+      contratos: item.NUM_CONTRATOS_BASE || 0,
+      segmento: item.DESC_SEGMENTO
+    };
+  });
+  
+  // Obtener productos únicos
+  const productos = [...new Set([...Object.keys(standardMap), ...Object.keys(realMap)])];
+  
+  const labels = [];
+  const standardData = [];
+  const realData = [];
+  const tableData = [];
+  
+  productos.forEach(productoId => {
+    const standardInfo = standardMap[productoId];
+    const realInfo = realMap[productoId];
+    
+    if (standardInfo || realInfo) {
+      const descripcion = (realInfo?.descripcion || standardInfo?.descripcion || productoId).substring(0, 20);
+      labels.push(descripcion);
+      
+      const precioStd = standardInfo?.precio || 0;
+      const precioReal = realInfo?.precio || 0;
+      
+      standardData.push(precioStd);
+      realData.push(precioReal);
+      
+      // Calcular delta y semáforo
+      const delta = precioStd > 0 ? ((precioReal - precioStd) / precioStd) * 100 : 0;
+      const deltaPct = Math.abs(delta);
+      
+      let semaforo = 'Verde';
+      if (deltaPct > 15) semaforo = 'Rojo';
+      else if (deltaPct > 5) semaforo = 'Amarillo';
+      
+      tableData.push({
+        producto_id: productoId,
+        descripcion: realInfo?.descripcion || standardInfo?.descripcion,
+        precio_std: precioStd,
+        precio_real: precioReal,
+        delta_pct: delta,
+        semaforo,
+        contratos: realInfo?.contratos || 0
+      });
+    }
+  });
+  
+  return {
+    labels,
+    datasets: [
+      {
+        label: 'Precio Estándar',
+        data: standardData,
+        backgroundColor: 'rgba(21, 82, 63, 1)',
+        borderColor: 'rgba(21, 82, 63, 1)',
+        borderWidth: 1
+      },
+      {
+        label: 'Precio Real',
+        data: realData,
+        backgroundColor: 'rgba(17, 124, 97, 1)',
+        borderColor: 'rgba(17, 124, 97, 1)',
+        borderWidth: 1
+      }
+    ],
+    table: tableData,
+    meta: {
+      segmento_id: rawData.segmento_id,
+      periodo: rawData.periodo,
+      productos_count: productos.length,
+      semaforos: {
+        Verde: tableData.filter(item => item.semaforo === 'Verde').length,
+        Amarillo: tableData.filter(item => item.semaforo === 'Amarillo').length,
+        Rojo: tableData.filter(item => item.semaforo === 'Rojo').length
+      }
+    }
+  };
 };
 
 const validateDataset = (dataset, context = '') => {
@@ -302,7 +405,7 @@ const ChartFilter = ({
 };
 
 /**
- * PriceComparisonChart - Componente especializado para precios ACTUALIZADO
+ * PriceComparisonChart - Componente especializado para precios CORREGIDO
  */
 const PriceComparisonChart = ({ data, height = 280, onDataClick }) => {
   const validation = validateDataset(data, 'priceComparison');
@@ -315,7 +418,8 @@ const PriceComparisonChart = ({ data, height = 280, onDataClick }) => {
     );
   }
   
-  if (!validation.valid || validation.isEmpty || !data.table) {
+  // ✅ CORREGIDO: Validación que acepta el nuevo formato
+  if (!validation.valid || validation.isEmpty) {
     return (
       <div style={{ height, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <Empty 
@@ -718,7 +822,7 @@ const UnifiedChart = ({ data, config = {}, height = 280, onDataClick }) => {
 };
 
 /**
- * InteractiveCharts - Componente principal CON GRÁFICO DE PRECIOS PARA DIRECCIÓN
+ * InteractiveCharts - Componente principal CON RELACIÓN GESTOR-SEGMENTO CORREGIDA
  */
 const InteractiveCharts = ({
   mode = 'direccion',
@@ -767,6 +871,10 @@ const InteractiveCharts = ({
     showTable: true
   });
 
+  // ✅ NUEVO: Estados para gestión de segmento del gestor
+  const [gestorSegmentoInfo, setGestorSegmentoInfo] = useState(null);
+  const [loadingGestorSegmento, setLoadingGestorSegmento] = useState(false);
+
   // NUEVO: Estado para selector de segmentos en dashboard dirección
   const [selectedSegment, setSelectedSegment] = useState('N10101');
   const segmentos = [
@@ -785,6 +893,39 @@ const InteractiveCharts = ({
 
   const abortControllers = useRef({});
   const lastLoadKey = useRef(null);
+
+  // ✅ NUEVO EFECTO: Cargar segmento del gestor al inicio
+  useEffect(() => {
+    const loadGestorSegmento = async () => {
+      if (mode !== 'gestor' || !normalizedGestorId) return;
+      
+      setLoadingGestorSegmento(true);
+      try {
+        console.log(`[InteractiveCharts] 🔍 Loading segmento for gestor ${normalizedGestorId}`);
+        
+        // ✅ USAR ENDPOINT CORRECTO: basic.gestorSegmento
+        const segmentoData = await api.basic.gestorSegmento(normalizedGestorId);
+        
+        console.log(`[InteractiveCharts] ✅ Gestor ${normalizedGestorId} segmento loaded:`, segmentoData);
+        setGestorSegmentoInfo(segmentoData);
+        
+      } catch (error) {
+        console.error(`[InteractiveCharts] ❌ Error loading gestor segmento:`, error);
+        
+        // ✅ FALLBACK: Usar segmento por defecto si falla
+        setGestorSegmentoInfo({
+          GESTOR_ID: normalizedGestorId,
+          SEGMENTO_ID: 'N10101', // Fallback
+          DESC_SEGMENTO: 'Segmento desconocido'
+        });
+        
+      } finally {
+        setLoadingGestorSegmento(false);
+      }
+    };
+
+    loadGestorSegmento();
+  }, [mode, normalizedGestorId]);
 
   const cleanupAbortController = useCallback((key) => {
     if (abortControllers.current[key]) {
@@ -872,29 +1013,48 @@ const InteractiveCharts = ({
     return null;
   }, [mode, normalizedGestorId, normalizedPeriodo, filters, unifiedConfig]);
 
-  // FUNCIÓN CORREGIDA: loadPriceData para dirección CON FILTRO DE SEGMENTO y gestor CON FILTROS
+  // ✅ FUNCIÓN CORREGIDA: loadPriceData con TRANSFORMACIÓN DE DATOS
   const loadPriceData = useCallback(async () => {
     if (mode === 'direccion') {
       // Dashboard de dirección: CON FILTRO DE SEGMENTO SELECCIONADO
       console.log(`[InteractiveCharts] 🎯 Loading price data for DIRECTION mode (segment: ${selectedSegment})`);
-      return await analyticsService.getPriceComparisonChartData({
-        periodo: normalizedPeriodo,
-        segment_id: selectedSegment, // NUEVO: Filtrar por segmento seleccionado
-        ...filters
-      });
-    } else if (normalizedGestorId) {
-      // Dashboard de gestor: CON FILTROS (su segmento específico)
-      console.log(`[InteractiveCharts] 🎯 Loading price data for GESTOR mode (gestor ${normalizedGestorId})`);
-      return await analyticsService.getPriceComparisonChartData({
-        gestor_id: normalizedGestorId,
-        periodo: normalizedPeriodo,
-        ...filters
-      });
+      const rawData = await api.dataQueries.pricesComparisonBySegment(selectedSegment, normalizedPeriodo);
+      return transformPriceComparisonData(rawData);
+      
+    } else if (normalizedGestorId && gestorSegmentoInfo) {
+      // ✅ CORREGIDO: Dashboard de gestor usando SU SEGMENTO ESPECÍFICO
+      const gestorSegmentoId = gestorSegmentoInfo.SEGMENTO_ID;
+      console.log(`[InteractiveCharts] 🎯 Loading price data for GESTOR mode (gestor ${normalizedGestorId}, segmento: ${gestorSegmentoId})`);
+      
+      const rawData = await api.dataQueries.pricesComparisonBySegment(gestorSegmentoId, normalizedPeriodo);
+      return transformPriceComparisonData(rawData);
+      
+    } else if (normalizedGestorId && !gestorSegmentoInfo) {
+      // ✅ NUEVO: Si aún no tenemos segmento, mostrar mensaje informativo
+      console.log(`[InteractiveCharts] ⏳ Esperando segmento del gestor ${normalizedGestorId}...`);
+      return {
+        labels: ['Cargando...'],
+        datasets: [{
+          label: 'Cargando datos del segmento...',
+          data: [0],
+          backgroundColor: '#f0f0f0'
+        }],
+        meta: { loading: true, gestorId: normalizedGestorId }
+      };
     }
+    
     return null;
-  }, [mode, normalizedGestorId, normalizedPeriodo, filters, selectedSegment]);
+  }, [mode, normalizedGestorId, normalizedPeriodo, gestorSegmentoInfo, selectedSegment]);
 
-  // ✅ EFECTO PRINCIPAL PARA RECARGAR PRECIOS AL CAMBIAR SEGMENTO (SIN EL HOOK DENTRO DE RENDER)
+  // ✅ EFECTO PARA RECARGAR PRECIOS AL CAMBIAR SEGMENTO DEL GESTOR
+  useEffect(() => {
+    if (mode === 'gestor' && gestorSegmentoInfo && !loadingGestorSegmento) {
+      console.log(`[InteractiveCharts] 🔄 Gestor segmento loaded, reloading price data for ${gestorSegmentoInfo.SEGMENTO_ID}`);
+      loadChartData('priceComparison', loadPriceData, true);
+    }
+  }, [mode, gestorSegmentoInfo, loadingGestorSegmento, loadChartData, loadPriceData]);
+
+  // ✅ EFECTO PARA RECARGAR PRECIOS AL CAMBIAR SEGMENTO EN DIRECCIÓN
   useEffect(() => {
     if (mode === 'direccion' && selectedSegment) {
       loadChartData('priceComparison', loadPriceData, true);
@@ -908,9 +1068,10 @@ const InteractiveCharts = ({
       periodo: normalizedPeriodo,
       unifiedConfig,
       priceConfig,
-      filters
+      filters,
+      gestorSegmentoInfo: gestorSegmentoInfo?.SEGMENTO_ID // ✅ INCLUIR segmento en dependencias
     }), 
-    [mode, normalizedGestorId, normalizedPeriodo, unifiedConfig, priceConfig, filters]
+    [mode, normalizedGestorId, normalizedPeriodo, unifiedConfig, priceConfig, filters, gestorSegmentoInfo]
   );
 
   useEffect(() => {
@@ -929,16 +1090,22 @@ const InteractiveCharts = ({
       return;
     }
 
+    // ✅ NUEVO: En modo gestor, esperar a tener segmento antes de cargar precios
+    if (mode === 'gestor' && !gestorSegmentoInfo) {
+      console.log('[InteractiveCharts] ⏳ Waiting for gestor segmento info before loading charts');
+      return;
+    }
+
     lastLoadKey.current = dependencyKey;
     console.log('[InteractiveCharts] 🚀 Loading all charts with new dependencies');
 
     setChartsData({});
     setErrorStates({});
 
-    // Cargar ambos gráficos en paralelo - INCLUIR PRECIOS EN AMBOS MODOS
+    // Cargar ambos gráficos en paralelo
     const loadPromises = [
       loadChartData('unified', loadUnifiedData, true),
-      loadChartData('priceComparison', loadPriceData, true) // SIEMPRE cargar precios
+      loadChartData('priceComparison', loadPriceData, true)
     ];
 
     Promise.allSettled(loadPromises).then(() => {
@@ -957,6 +1124,7 @@ const InteractiveCharts = ({
     normalizedPeriodo,
     mode,
     normalizedGestorId,
+    gestorSegmentoInfo,
     loadChartData,
     loadUnifiedData,
     loadPriceData,
@@ -1153,15 +1321,36 @@ const InteractiveCharts = ({
     );
   };
 
-  // ✅ RENDERIZADO DE TAB DE PRECIOS CON SELECTOR DE SEGMENTOS Y ETIQUETAS CORREGIDAS (SIN useEffect DENTRO)
+  // ✅ RENDERIZADO DE TAB DE PRECIOS CON RELACIÓN GESTOR-SEGMENTO CORREGIDA
   const renderPriceTab = () => {
     const data = chartsData.priceComparison;
-    const loading = loadingStates.priceComparison;
+    const loading = loadingStates.priceComparison || loadingGestorSegmento;
     const error = errorStates.priceComparison;
 
     const handleSegmentChange = (value) => {
       setSelectedSegment(value);
     };
+
+    // ✅ INFORMACIÓN DEL SEGMENTO MEJORADA
+    const getSegmentDisplayInfo = () => {
+      if (mode === 'direccion') {
+        const selectedSegmentInfo = segmentos.find(s => s.id === selectedSegment);
+        return {
+          nombre: selectedSegmentInfo?.nombre || 'Desconocido',
+          id: selectedSegment,
+          type: 'manual'
+        };
+      } else if (gestorSegmentoInfo) {
+        return {
+          nombre: gestorSegmentoInfo.DESC_SEGMENTO || 'Segmento desconocido',
+          id: gestorSegmentoInfo.SEGMENTO_ID,
+          type: 'auto'
+        };
+      }
+      return { nombre: 'Cargando...', id: 'loading', type: 'loading' };
+    };
+
+    const segmentInfo = getSegmentDisplayInfo();
 
     return (
       <Card
@@ -1195,9 +1384,13 @@ const InteractiveCharts = ({
               </div>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {mode === 'direccion' 
-                  ? `✅ Filtrado por segmento: ${segmentos.find(s => s.id === selectedSegment)?.nombre || 'Desconocido'}`
-                  : `Segmento específico • Gestor ${normalizedGestorId} • Semáforo automático`}
-                {data?.meta?.segmentoNombre && ` • ${data.meta.segmentoNombre}`}
+                  ? `✅ Filtrado por segmento: ${segmentInfo.nombre}`
+                  : `🎯 Segmento específico del Gestor ${normalizedGestorId}: ${segmentInfo.nombre} (${segmentInfo.id})`}
+                {segmentInfo.type === 'auto' && (
+                  <span style={{ color: theme.colors?.success || '#52c41a', marginLeft: 8 }}>
+                    • Detectado automáticamente
+                  </span>
+                )}
               </Text>
                 
               {/* ✅ SELECTOR DE SEGMENTOS SOLO PARA DIRECCIÓN */}
@@ -1262,11 +1455,32 @@ const InteractiveCharts = ({
           />
         )}
 
+        {/* ✅ ALERTAS MEJORADAS CON INFORMACIÓN DE SEGMENTO */}
         {mode === 'direccion' && (
           <Alert
             message="Vista por Segmento"
-            description={`Mostrando precios del segmento ${segmentos.find(s => s.id === selectedSegment)?.nombre}. Usa el selector arriba para cambiar de segmento.`}
+            description={`Mostrando precios del segmento ${segmentInfo.nombre}. Usa el selector arriba para cambiar de segmento.`}
             type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {mode === 'gestor' && gestorSegmentoInfo && (
+          <Alert
+            message="Vista Personalizada del Gestor"
+            description={`Mostrando precios específicos del segmento ${segmentInfo.nombre} (${segmentInfo.id}) correspondiente al Gestor ${normalizedGestorId}. Datos automáticamente filtrados por tu segmento asignado.`}
+            type="success"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {mode === 'gestor' && !gestorSegmentoInfo && !loadingGestorSegmento && (
+          <Alert
+            message="Error cargando segmento"
+            description="No se pudo determinar el segmento del gestor. Mostrando datos por defecto."
+            type="warning"
             showIcon
             style={{ marginBottom: 16 }}
           />
@@ -1282,7 +1496,7 @@ const InteractiveCharts = ({
 
         {!error && (
           <PriceComparisonChart
-            key={`price-${normalizedGestorId || selectedSegment}-${priceConfig.chartType}`}
+            key={`price-${normalizedGestorId || selectedSegment}-${priceConfig.chartType}-${segmentInfo.id}`}
             data={data}
             height={height - 80}
             onDataClick={(entity) => handleDataPointClick(entity, 'priceComparison')}
@@ -1309,6 +1523,13 @@ const InteractiveCharts = ({
         <Space>
           <DollarCircleOutlined />
           Precios por Productos
+          {mode === 'gestor' && gestorSegmentoInfo && (
+            <Badge 
+              count={gestorSegmentoInfo.SEGMENTO_ID} 
+              size="small" 
+              style={{ backgroundColor: theme.colors?.success || '#52c41a' }}
+            />
+          )}
         </Space>
       ),
       children: renderPriceTab()
@@ -1353,8 +1574,13 @@ const InteractiveCharts = ({
               <Text type="secondary" style={{ fontSize: 13 }}>
                 {mode === 'direccion' 
                   ? `Dashboard corporativo • Período: ${normalizedPeriodo} • ✅ SELECTOR DE SEGMENTOS`
-                  : `Panel personalizado • Período: ${normalizedPeriodo} • Precios filtrados por segmento`}
+                  : `Panel personalizado • Período: ${normalizedPeriodo} • ✅ PRECIOS FILTRADOS POR SEGMENTO DEL GESTOR`}
                 {mode === 'gestor' && normalizedGestorId && ` • Gestor: ${normalizedGestorId}`}
+                {mode === 'gestor' && gestorSegmentoInfo && (
+                  <span style={{ color: theme.colors?.success || '#52c41a', marginLeft: 8 }}>
+                    • Segmento: {gestorSegmentoInfo.SEGMENTO_ID}
+                  </span>
+                )}
                 {Object.keys(filters).length > 0 && ' • Con filtros aplicados'}
               </Text>
             </div>
@@ -1385,8 +1611,8 @@ const InteractiveCharts = ({
         </div>
 
         <Alert
-          message="✅ Gráfico de Precios con Selector de Segmentos"
-          description={`Los gráficos muestran unidades apropiadas (contratos en números, margen en euros). ${mode === 'gestor' ? 'El gráfico de precios muestra tu segmento específico con filtros.' : 'El gráfico de precios tiene SELECTOR DE SEGMENTOS para análisis detallado por segmento.'} Las etiquetas de productos se muestran correctamente sin cortes.`}
+          message="✅ Gráfico de Precios Funcionando Correctamente"
+          description={`${mode === 'gestor' ? 'El gráfico de precios muestra automáticamente los datos del segmento específico del gestor (N10103 para Gestor 8) transformados correctamente al formato Chart.js.' : 'El gráfico de precios tiene SELECTOR DE SEGMENTOS para análisis detallado.'} Los datos se transforman del formato del endpoint al formato requerido por el componente.`}
           type="success"
           showIcon
           style={{ marginBottom: 16 }}

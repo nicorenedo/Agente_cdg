@@ -180,12 +180,13 @@ class IntelligentQueryClassifier:
         # 🎯 INSTANCIAS DE QUERIES PREDEFINIDAS
         self.query_engines = {
             'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
-            'comparative': ComparativeQueries if IMPORTS_SUCCESSFUL else None,
-            'deviation': DeviationQueries if IMPORTS_SUCCESSFUL else None,
-            'gestor': GestorQueries if IMPORTS_SUCCESSFUL else None,
-            'incentive': IncentiveQueries if IMPORTS_SUCCESSFUL else None,
-            'period': PeriodQueries if IMPORTS_SUCCESSFUL else None
+            'comparative': ComparativeQueries() if IMPORTS_SUCCESSFUL else None,
+            'deviation': DeviationQueries() if IMPORTS_SUCCESSFUL else None,
+            'gestor': GestorQueries() if IMPORTS_SUCCESSFUL else None,
+            'incentive': IncentiveQueries() if IMPORTS_SUCCESSFUL else None,
+            'period': PeriodQueries() if IMPORTS_SUCCESSFUL else None
         }
+
     
     async def classify_and_route(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
         """
@@ -369,9 +370,18 @@ class IntelligentQueryClassifier:
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
+                
+                # ✅ CORRECCIÓN: Limpiar nombre de catálogo
+                catalog = result.get('catalog', '').lower()
+                # Remover extensiones .py y limpiar
+                if '.py' in catalog:
+                    catalog = catalog.replace('_queries.py', '').replace('.py', '')
+                if catalog.endswith('_queries'):
+                    catalog = catalog.replace('_queries', '')
+                
                 return {
                     'found': result.get('found', False),
-                    'catalog': result.get('catalog', ''),
+                    'catalog': catalog,  # ✅ Catálogo limpio
                     'function_name': result.get('function_name', ''),
                     'parameters': result.get('parameters', {}),
                     'confidence': float(result.get('confidence', 0.0)),
@@ -381,6 +391,7 @@ class IntelligentQueryClassifier:
             pass
         
         return {'found': False, 'confidence': 0.0}
+    
     
     def _fallback_classification(self, user_message: str) -> Dict[str, Any]:
         """Clasificación fallback básica por palabras clave"""
@@ -438,11 +449,11 @@ class PredefinedQueryExecutor:
     def __init__(self):
         self.query_engines = {
             'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
-            'comparative': ComparativeQueries if IMPORTS_SUCCESSFUL else None,
-            'deviation': DeviationQueries if IMPORTS_SUCCESSFUL else None,
-            'gestor': GestorQueries if IMPORTS_SUCCESSFUL else None,
-            'incentive': IncentiveQueries if IMPORTS_SUCCESSFUL else None,
-            'period': PeriodQueries if IMPORTS_SUCCESSFUL else None
+            'comparative': ComparativeQueries() if IMPORTS_SUCCESSFUL else None,  # Con ()
+            'deviation': DeviationQueries() if IMPORTS_SUCCESSFUL else None,      # Con ()
+            'gestor': GestorQueries() if IMPORTS_SUCCESSFUL else None,            # Con ()
+            'incentive': IncentiveQueries() if IMPORTS_SUCCESSFUL else None,      # Con ()
+            'period': PeriodQueries() if IMPORTS_SUCCESSFUL else None             # Con ()
         }
     
     async def execute_predefined_query(self, match_info: Dict[str, Any], user_message: str, context: Dict = None) -> Dict[str, Any]:
@@ -450,7 +461,7 @@ class PredefinedQueryExecutor:
         🎯 EJECUTA la query predefinida identificada por el clasificador
         """
         try:
-            catalog = match_info.get('catalog', '')
+            catalog = match_info.get('catalog', '').lower()
             function_name = match_info.get('function_name', '')
             parameters = match_info.get('parameters', {})
             
@@ -702,27 +713,55 @@ class EnhancedQueryBuilder:
             schema_context = self._build_banking_schema_context(database_schema)
             
             sql_generation_prompt = f"""
-            Genera una consulta SQL para esta pregunta de Control de Gestión:
-
-            PREGUNTA: "{user_message}"
-
-            {schema_context}
-
-            CONTEXTO BANCARIO BANCA MARCH:
-            - Sistema de Control de Gestión para análisis de rentabilidad
-            - Códigos CDR: Ingresos ('CR0001','CR0008','CR0012'), Gastos ('CR0014','CR0016','CR0017')  
-            - KPIs clave: Margen neto, ROE, eficiencia operativa
-            - Segmentos: Banca Privada, Banca Personal, Empresas
-            - Productos: Fondos, Depósitos, Créditos, Seguros
+            Eres un especialista en Control de Gestión de Banca March. Genera SQL considerando nuestra lógica de negocio:
             
-            RESPONDE SOLO EN JSON:
+            PREGUNTA: "{user_message}"
+            
+            {schema_context}
+            
+            🏦 LÓGICA DE NEGOCIO BANCA MARCH:
+            
+            📊 CÁLCULO DE GASTOS POR CENTRO:
+            - USA PRECIO_POR_PRODUCTO_REAL (ya incluye redistribución automática)
+            - Fórmula: GastoRedistribuido = GastoCentral × (Contratos_Centro_i / Total_Contratos_Finalistas)
+            - Solo centros finalistas (IND_CENTRO_FINALISTA = 1, centros 1-5)
+            - Centros soporte (6-8) se redistribuyen automáticamente
+            
+            💰 PRECIOS POR PRODUCTO:
+            - PRECIO_POR_PRODUCTO_REAL: Costes reales mensuales (recalculados cada mes)
+            - PRECIO_POR_PRODUCTO_STD: Estándares presupuestarios (fijos todo el año)
+            - Desviación crítica: >15% entre real vs estándar
+            - Valores NEGATIVOS = costes para el banco
+            
+            📈 MÁRGENES Y KPIs:
+            - Margen Neto = (Ingresos - Gastos) / Ingresos × 100
+            - ROE = Beneficio Neto / Patrimonio × 100
+            - Eficiencia = Ingresos / Gastos
+            
+            🎯 ESTRUCTURA ORGANIZATIVA:
+            - 5 centros finalistas (1-5) con contratos directos
+            - 3 centros soporte (6-8) sin contratos, gastos se redistribuyen
+            - 30 gestores especializados por segmento único
+            - 5 segmentos: N10101(Minorista), N10102(Privada), N10103(Empresas), N10104(Personal), N20301(Fondos)
+            
+            📅 PERÍODOS:
+            - Actual: 2025-10-01 (FECHA_CALCULO para precios reales)
+            - Formato estándar: YYYY-MM
+            
+            ⚠️ CONSULTAS TÍPICAS:
+            - "Gastos por centro" → Usar PRECIO_POR_PRODUCTO_REAL con JOINs correctos
+            - "Centros con problemas" → Analizar DESVIACIONES, no valores absolutos
+            - "Ranking gestores" → Incluir cálculo de margen real basado en ingresos-gastos
+            
+            RESPONDE EN JSON:
             {{
                 "sql": "SELECT...",
-                "explanation": "explicación clara",
+                "explanation": "explicación de la lógica aplicada",
                 "tables_used": ["TABLA1", "TABLA2"],
                 "intent": "data_query",
                 "confidence": 0.8
             }}
+
             
             IMPORTANTE:
             - SQL válido y ejecutable
@@ -998,7 +1037,7 @@ class UniversalChatAgentV10:
         self.predefined_executor = PredefinedQueryExecutor()
         self.query_builder = EnhancedQueryBuilder(self.db_path)
         self.formatter = BankingResponseFormatter()
-        
+        self.llm_client = iniciar_agente_llm()
         # Integraciones externas
         self.cdg_agent = create_cdg_agent() if IMPORTS_SUCCESSFUL else None
         self.chart_generator = None
@@ -1326,7 +1365,7 @@ class UniversalChatAgentV10:
             """
             
             if IMPORTS_SUCCESSFUL:
-                response = self.llm_client.chat.completions.create(
+                response = self.formatter.llm_client.chat.completions.create(
                     model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
                     messages=[
                         {"role": "system", "content": CHAT_CONVERSATIONAL_SYSTEM_PROMPT},

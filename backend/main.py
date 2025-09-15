@@ -701,26 +701,52 @@ def agent_suggest_questions(user_id: Optional[str] = None):
 # ============================================================================
 
 @app.post("/integration/classify-and-route", tags=["Integration"], response_model=ApiResponse)
-async def integration_classify_and_route(req: ChatRequest):
+async def integration_classify_and_route(body: Dict[str, Any] = Body(...)):
     """
-    🎯 ENDPOINT DE CLASIFICACIÓN PURA - Muestra cómo Chat Agent v10.0 clasifica
+    🎯 ENDPOINT DE CLASIFICACIÓN PURA - Chat Agent v10.0 clasifica
     """
     try:
+        # ✅ NUEVO: Validación de entrada más flexible
+        user_id = body.get("user_id", "anonymous")
+        message = body.get("message", "")
+        context = body.get("context", {})
+        
+        if not message:
+            return ok({"error": "message requerido"}, meta={"note": "missing_message"})
+        
+        # ✅ NUEVO: Compatibilidad con diferentes formatos
+        gestor_id = body.get("gestorId") or body.get("gestor_id")
+        periodo = body.get("periodo")
+        mode = body.get("mode", "general")
+        current_chart_config = body.get("currentChartConfig") or body.get("current_chart_config", {})
+        
         if hasattr(chat_agent, 'classifier'):
             routing_result = await chat_agent.classifier.classify_and_route(
-                req.message,
+                message,
                 {
-                    'gestor_id': req.gestor_id,
-                    'periodo': req.periodo,
-                    'context': req.context
+                    'gestor_id': gestor_id,
+                    'periodo': periodo,
+                    'mode': mode,
+                    'context': context,
+                    'current_chart_config': current_chart_config
                 }
             )
             return ok(routing_result, meta={"source": "intelligent_classifier_v10"})
         else:
-            return ok({"flow_type": "DYNAMIC_SQL", "confidence": 0.5}, 
-                     meta={"note": "classifier_not_available"})
+            # ✅ FALLBACK mejorado
+            flow_type = "PIVOT" if any(word in message.lower() for word in ["cambia", "convierte", "muestra", "modifica"]) else "DYNAMIC_SQL"
+            return ok({
+                "flow_type": flow_type, 
+                "confidence": 0.7,
+                "routing": {"target": "fallback"},
+                "classification": "rule_based"
+            }, meta={"note": "classifier_fallback"})
+            
     except Exception as e:
-        return ok({"error": str(e)}, meta={"note": "classification_error"})
+        logger.error(f"Error en classify-and-route: {e}")
+        return ok({"error": str(e), "flow_type": "DYNAMIC_SQL", "confidence": 0.1}, 
+                 meta={"note": "classification_error"})
+
 
 @app.post("/integration/execute-predefined", tags=["Integration"], response_model=ApiResponse)
 async def integration_execute_predefined(body: Dict[str, Any] = Body(...)):
@@ -899,8 +925,16 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
     except Exception as outer_exc:
         logger.error(f"Websocket error: {outer_exc}")
     finally:
-        await websocket.close()
-        logger.info(f"Websocket disconnected: {user_id}")
+        try:
+            # ✅ Solo cerrar si no está ya cerrado
+            if websocket.client_state.name in ['CONNECTED', 'CONNECTING']:
+                await websocket.close(code=1000, reason="Session ended")
+                logger.info(f"WebSocket closed gracefully for user: {user_id}")
+        except Exception as close_error:
+            logger.warning(f"Error closing websocket for {user_id}: {close_error}")
+        finally:
+            logger.info(f"WebSocket session ended for user: {user_id}")
+
 
 # ============================================================================
 # 🎯 ENDPOINTS DE CATÁLOGOS Y PERIODOS (MANTENIDOS)
@@ -946,6 +980,41 @@ def periods_latest():
     except Exception:
         pass
     return ok({"latest": "2025-10"}, meta={"note": "fallback"})
+
+# ============================================================================
+# 🎯 PERÍODOS CON MÉTRICAS FINANCIERAS (NUEVOS)
+# ============================================================================
+
+@app.get("/periods/{periodo}/metricas", tags=["Periods"], response_model=ApiResponse)
+def periods_metricas_financieras(periodo: str):
+    """Métricas financieras agregadas de un período específico"""
+    try:
+        if hasattr(period_queries, "get_periodo_metricas_financieras"):
+            res = period_queries.get_periodo_metricas_financieras(periodo)
+            data = getattr(res, "data", [])
+            if data:
+                return ok(data[0], meta={"periodo": periodo, "source": "period_queries"})
+        
+        return ok({"error": "Métricas del período no disponibles"}, meta={"note": "period_queries no disponible"})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "periods_metricas_error"})
+
+@app.get("/periods/compare/{periodo_actual}/{periodo_anterior}", tags=["Periods"], response_model=ApiResponse)
+def periods_compare_metricas(periodo_actual: str, periodo_anterior: str):
+    """Comparación de métricas entre dos períodos"""
+    try:
+        if hasattr(period_queries, "compare_periodos_metricas"):
+            res = period_queries.compare_periodos_metricas(periodo_actual, periodo_anterior)
+            data = getattr(res, "data", [])
+            if data:
+                return ok(data[0], meta={"periodo_actual": periodo_actual, "periodo_anterior": periodo_anterior})
+        
+        return ok({"error": "Comparación de períodos no disponible"}, meta={"note": "period_queries no disponible"})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "periods_compare_error"})
+
 
 @app.get("/catalogs", tags=["Catalogs"], response_model=ApiResponse)
 def catalogs():
@@ -1416,6 +1485,107 @@ def basic_cuentas_by_linea(linea_cdr: str):
     except Exception as e:
         return ok({"error": str(e)}, meta={"note": "cuentas_by_linea_error"})
 
+# ============================================================================
+# 🎯 ANALYTICS - MÉTRICAS FINANCIERAS POR ENTIDAD (NUEVOS)
+# ============================================================================
+
+@app.get("/analytics/centro/{centro_id}/metricas", tags=["Analytics"], response_model=ApiResponse)
+def analytics_centro_metricas(centro_id: int, periodo: str = Query("2025-10")):
+    """Métricas financieras completas de un centro específico"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_centro_metricas_financieras"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_centro_metricas_financieras(centro_id, periodo)
+        return ok(data, meta={"centro_id": centro_id, "periodo": periodo, "source": "basic_queries"})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_centro_metricas_error"})
+
+@app.get("/analytics/centro/{centro_id}/gestores-con-metricas", tags=["Analytics"], response_model=ApiResponse)
+def analytics_centro_gestores_metricas(centro_id: int, periodo: str = Query("2025-10")):
+    """Gestores de un centro con sus métricas financieras"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_centro_gestores_con_metricas"):
+            return ok([], meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_centro_gestores_con_metricas(centro_id, periodo)
+        return ok(data, meta={"count": len(data), "centro_id": centro_id, "periodo": periodo})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_centro_gestores_error"})
+
+@app.get("/analytics/segmento/{segmento_id}/metricas", tags=["Analytics"], response_model=ApiResponse)
+def analytics_segmento_metricas(segmento_id: str, periodo: str = Query("2025-10")):
+    """Métricas financieras completas de un segmento específico"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_segmento_metricas_financieras"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_segmento_metricas_financieras(segmento_id, periodo)
+        return ok(data, meta={"segmento_id": segmento_id, "periodo": periodo, "source": "basic_queries"})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_segmento_metricas_error"})
+
+@app.get("/analytics/gestor/{gestor_id}/metricas-completas", tags=["Analytics"], response_model=ApiResponse)
+def analytics_gestor_metricas_completas(gestor_id: int, periodo: str = Query("2025-10")):
+    """Métricas financieras completas de un gestor específico"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_gestor_metricas_completas"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_gestor_metricas_completas(gestor_id, periodo)
+        return ok(data, meta={"gestor_id": gestor_id, "periodo": periodo, "source": "basic_queries"})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_gestor_metricas_error"})
+
+@app.get("/analytics/gestor/{gestor_id}/clientes-con-metricas", tags=["Analytics"], response_model=ApiResponse)
+def analytics_gestor_clientes_metricas(gestor_id: int, periodo: str = Query("2025-10")):
+    """Clientes de un gestor con sus métricas financieras"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_gestor_clientes_con_metricas"):
+            return ok([], meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_gestor_clientes_con_metricas(gestor_id, periodo)
+        return ok(data, meta={"count": len(data), "gestor_id": gestor_id, "periodo": periodo})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_gestor_clientes_error"})
+
+@app.get("/analytics/cliente/{cliente_id}/metricas", tags=["Analytics"], response_model=ApiResponse)
+def analytics_cliente_metricas(cliente_id: int, periodo: str = Query("2025-10")):
+    """Métricas financieras de un cliente específico"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_cliente_metricas"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_cliente_metricas(cliente_id, periodo)
+        return ok(data, meta={"cliente_id": cliente_id, "periodo": periodo, "source": "basic_queries"})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_cliente_metricas_error"})
+
+@app.get("/analytics/cliente/{cliente_id}/contratos-con-metricas", tags=["Analytics"], response_model=ApiResponse)
+def analytics_cliente_contratos_metricas(cliente_id: int, periodo: str = Query("2025-10")):
+    """Contratos de un cliente con sus métricas financieras"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_cliente_contratos_con_metricas"):
+            return ok([], meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_cliente_contratos_con_metricas(cliente_id, periodo)
+        return ok(data, meta={"count": len(data), "cliente_id": cliente_id, "periodo": periodo})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_cliente_contratos_error"})
+
+@app.get("/analytics/contrato/{contrato_id}/detalle-completo", tags=["Analytics"], response_model=ApiResponse)
+def analytics_contrato_detalle_completo(contrato_id: int):
+    """Detalle completo de un contrato con todas sus métricas"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_contrato_detalle_completo"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        data = basic_queries.get_contrato_detalle_completo(contrato_id)
+        return ok(data, meta={"contrato_id": contrato_id, "source": "basic_queries"})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_contrato_detalle_error"})
+
+
 # ---- Conteos adicionales
 @app.get("/basic/contracts/count-by-centro", tags=["Basic"], response_model=ApiResponse)
 def basic_count_contracts_by_centro():
@@ -1687,6 +1857,97 @@ def incentives_simulate(payload: Dict[str, Any] = Body(...)):
         return ok([], meta={"note": "no implementado"})
     except Exception as e:
         return ok({"error": str(e)}, meta={"note": "incentives_simulate_error"})
+
+# ============================================================================
+# 🎯 INCENTIVOS DETALLADOS POR ENTIDAD (NUEVOS)
+# ============================================================================
+
+@app.get("/incentives/centro/{centro_id}/total", tags=["Incentives"], response_model=ApiResponse)
+def incentives_centro_total(centro_id: int, periodo: str = Query("2025-10")):
+    """Total de incentivos del centro (suma de gestores)"""
+    try:
+        if hasattr(incentive_queries, "get_incentivos_por_centro"):
+            res = incentive_queries.get_incentivos_por_centro(periodo)
+            data = getattr(res, "data", [])
+            
+            centro_data = next((c for c in data if c.get("CENTRO_ID") == centro_id), None)
+            if centro_data:
+                return ok(centro_data, meta={"centro_id": centro_id, "periodo": periodo, "source": "incentive_queries"})
+        
+        # Fallback calculando desde gestores
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_centro_gestores_con_metricas"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        gestores = basic_queries.get_centro_gestores_con_metricas(centro_id, periodo)
+        
+        total_incentivos = 0.0
+        gestores_elegibles = 0
+        
+        for gestor in gestores:
+            margen = gestor.get('margen_neto_pct', 0)
+            if margen >= 12.0:  # Umbral para incentivos
+                incentivo = min(margen * 150, 4000)  # Fórmula simplificada
+                total_incentivos += incentivo
+                gestores_elegibles += 1
+        
+        return ok({
+            "centro_id": centro_id,
+            "periodo": periodo,
+            "total_incentivos": round(total_incentivos, 2),
+            "gestores_elegibles": gestores_elegibles,
+            "total_gestores": len(gestores),
+            "incentivo_promedio": round(total_incentivos / max(gestores_elegibles, 1), 2)
+        }, meta={"centro_id": centro_id, "periodo": periodo, "source": "calculated"})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "incentives_centro_total_error"})
+
+@app.get("/incentives/gestor/{gestor_id}/detalle", tags=["Incentives"], response_model=ApiResponse)
+def incentives_gestor_detalle(gestor_id: str, periodo: str = Query("2025-10")):
+    """Detalle completo de incentivos por gestor"""
+    try:
+        # Intentar obtener datos de incentivos enhanced
+        detalle_incentivos = {}
+        
+        if hasattr(incentive_queries, "calculate_incentivo_cumplimiento_objetivos_enhanced"):
+            objetivos_res = incentive_queries.calculate_incentivo_cumplimiento_objetivos_enhanced(periodo, 80.0)
+            objetivos_data = getattr(objetivos_res, "data", [])
+            gestor_objetivos = next((g for g in objetivos_data if str(g.get("GESTOR_ID")) == str(gestor_id)), None)
+            if gestor_objetivos:
+                detalle_incentivos["cumplimiento_objetivos"] = gestor_objetivos
+        
+        if hasattr(incentive_queries, "analyze_bonus_margen_neto_enhanced"):
+            bonus_res = incentive_queries.analyze_bonus_margen_neto_enhanced(periodo, 15.0)
+            bonus_data = getattr(bonus_res, "data", [])
+            gestor_bonus = next((g for g in bonus_data if str(g.get("GESTOR_ID")) == str(gestor_id)), None)
+            if gestor_bonus:
+                detalle_incentivos["bonus_margen"] = gestor_bonus
+        
+        if hasattr(incentive_queries, "calculate_ranking_bonus_pool_enhanced"):
+            pool_res = incentive_queries.calculate_ranking_bonus_pool_enhanced(periodo, 50000.0)
+            pool_data = getattr(pool_res, "data", [])
+            gestor_pool = next((g for g in pool_data if str(g.get("GESTOR_ID")) == str(gestor_id)), None)
+            if gestor_pool:
+                detalle_incentivos["pool_distribution"] = gestor_pool
+        
+        # Calcular total
+        total_incentivos = 0.0
+        total_incentivos += detalle_incentivos.get("cumplimiento_objetivos", {}).get("incentivo_calculado_eur", 0.0)
+        total_incentivos += detalle_incentivos.get("bonus_margen", {}).get("bonus_total_eur", 0.0)
+        total_incentivos += detalle_incentivos.get("pool_distribution", {}).get("incentivo_final_eur", 0.0)
+        
+        return ok({
+            "gestor_id": gestor_id,
+            "periodo": periodo,
+            "detalle_incentivos": detalle_incentivos,
+            "total_incentivos": round(total_incentivos, 2),
+            "num_componentes": len([k for k in detalle_incentivos.keys() if detalle_incentivos[k]]),
+            "elegible_para_incentivos": total_incentivos > 0
+        }, meta={"gestor_id": gestor_id, "periodo": periodo})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "incentives_gestor_detalle_error"})
+
 
 # ============================================================================
 # 🎯 ANÁLISIS DE VARIANZA (VARIANCE BRIDGE)
@@ -2090,6 +2351,152 @@ def kpi_calculate(req: KPIRequest):
         return ok({"error": str(e)}, meta={"note": "kpi_calculate_error"})
 
 # ============================================================================
+# 🎯 KPIs FINANCIEROS ESPECÍFICOS POR ENTIDAD (NUEVOS)
+# ============================================================================
+
+@app.get("/kpis/centro/{centro_id}/financieros", tags=["KPI Calculator"], response_model=ApiResponse)
+def kpis_centro_financieros(centro_id: int, periodo: str = Query("2025-10")):
+    """KPIs financieros completos de un centro (ROE, ROA, Margen, etc.)"""
+    try:
+        # Obtener métricas del centro
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_centro_metricas_financieras"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        metricas = basic_queries.get_centro_metricas_financieras(centro_id, periodo)
+        
+        if not metricas:
+            return ok({"error": "Centro no encontrado o sin datos"}, meta={"centro_id": centro_id})
+        
+        # Calcular KPIs usando kpi_calculator
+        kpis_financieros = {}
+        
+        if hasattr(kpi_calc, "calculate_margen_neto") and metricas.get('ingresos_total') and metricas.get('gastos_total'):
+            margen = kpi_calc.calculate_margen_neto(metricas['ingresos_total'], metricas['gastos_total'])
+            kpis_financieros['margen_neto'] = margen
+        
+        if hasattr(kpi_calc, "calculate_roe") and metricas.get('beneficio_neto') and metricas.get('patrimonio_total', metricas.get('ingresos_total', 1)):
+            roe = kpi_calc.calculate_roe(metricas['beneficio_neto'], metricas.get('patrimonio_total', metricas.get('ingresos_total', 1)))
+            kpis_financieros['roe'] = roe
+        
+        if hasattr(kpi_calc, "calculate_ratio_eficiencia") and metricas.get('ingresos_total') and metricas.get('gastos_total'):
+            eficiencia = kpi_calc.calculate_ratio_eficiencia(metricas['ingresos_total'], metricas['gastos_total'])
+            kpis_financieros['eficiencia'] = eficiencia
+        
+        return ok({
+            "centro_id": centro_id,
+            "periodo": periodo,
+            "metricas_base": metricas,
+            "kpis_financieros": kpis_financieros
+        }, meta={"centro_id": centro_id, "periodo": periodo})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "kpis_centro_financieros_error"})
+
+@app.get("/kpis/gestor/{gestor_id}/financieros", tags=["KPI Calculator"], response_model=ApiResponse)
+def kpis_gestor_financieros(gestor_id: int, periodo: str = Query("2025-10")):
+    """KPIs financieros completos de un gestor (ROE, ROA, Margen, Eficiencia)"""
+    try:
+        # Usar el método enhanced de gestor_queries si está disponible
+        if hasattr(gestor_queries, "get_gestor_performance_enhanced"):
+            res = gestor_queries.get_gestor_performance_enhanced(str(gestor_id), periodo)
+            data = getattr(res, "data", [])
+            if data:
+                return ok(data[0], meta={"gestor_id": gestor_id, "periodo": periodo, "source": "gestor_queries_enhanced"})
+        
+        # Fallback usando basic_queries
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_gestor_metricas_completas"):
+            return ok({"error": "Funcionalidad no disponible"}, meta={"note": "basic_queries no disponible"})
+        
+        metricas = basic_queries.get_gestor_metricas_completas(gestor_id, periodo)
+        return ok(metricas, meta={"gestor_id": gestor_id, "periodo": periodo, "source": "basic_queries"})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "kpis_gestor_financieros_error"})
+
+@app.get("/kpis/gestor/{gestor_id}/roe", tags=["KPI Calculator"], response_model=ApiResponse)
+def kpis_gestor_roe(gestor_id: int, periodo: str = Query("2025-10")):
+    """ROE específico de un gestor"""
+    try:
+        if hasattr(gestor_queries, "calculate_roe_gestor_enhanced"):
+            res = gestor_queries.calculate_roe_gestor_enhanced(str(gestor_id), periodo)
+            data = getattr(res, "data", [])
+            if data:
+                return ok(data[0], meta={"gestor_id": gestor_id, "periodo": periodo, "type": "roe"})
+        
+        return ok({"roe_pct": 0.0, "clasificacion": "SIN_DATOS"}, meta={"note": "gestor_queries no disponible"})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "kpis_gestor_roe_error"})
+
+@app.get("/kpis/gestor/{gestor_id}/eficiencia", tags=["KPI Calculator"], response_model=ApiResponse)
+def kpis_gestor_eficiencia(gestor_id: int, periodo: str = Query("2025-10")):
+    """Eficiencia operativa específica de un gestor"""
+    try:
+        if hasattr(gestor_queries, "calculate_eficiencia_operativa_gestor_enhanced"):
+            res = gestor_queries.calculate_eficiencia_operativa_gestor_enhanced(str(gestor_id), periodo)
+            data = getattr(res, "data", [])
+            if data:
+                return ok(data[0], meta={"gestor_id": gestor_id, "periodo": periodo, "type": "eficiencia"})
+        
+        return ok({"ratio_eficiencia": 0.0, "clasificacion": "SIN_DATOS"}, meta={"note": "gestor_queries no disponible"})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "kpis_gestor_eficiencia_error"})
+
+@app.get("/kpis/centro/{centro_id}/margen", tags=["KPI Calculator"], response_model=ApiResponse)
+def kpis_centro_margen(centro_id: int, periodo: str = Query("2025-10")):
+    """Margen neto específico de un centro"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_centro_metricas_financieras"):
+            return ok({"margen_neto_pct": 0.0, "clasificacion": "SIN_DATOS"}, meta={"note": "basic_queries no disponible"})
+        
+        metricas = basic_queries.get_centro_metricas_financieras(centro_id, periodo)
+        
+        if metricas and hasattr(kpi_calc, "calculate_margen_neto"):
+            margen = kpi_calc.calculate_margen_neto(
+                metricas.get('ingresos_total', 0), 
+                metricas.get('gastos_total', 0)
+            )
+            return ok(margen, meta={"centro_id": centro_id, "periodo": periodo, "type": "margen"})
+        
+        return ok({"margen_neto_pct": 0.0, "clasificacion": "SIN_DATOS"}, meta={"centro_id": centro_id})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "kpis_centro_margen_error"})
+
+@app.get("/kpis/centro/{centro_id}/bonus-total", tags=["KPI Calculator"], response_model=ApiResponse)
+def kpis_centro_bonus_total(centro_id: int, periodo: str = Query("2025-10")):
+    """Suma total de bonus de gestores del centro"""
+    try:
+        if not BASIC_QUERIES_AVAILABLE or not hasattr(basic_queries, "get_centro_gestores_con_metricas"):
+            return ok({"bonus_total": 0.0, "gestores_con_bonus": 0}, meta={"note": "basic_queries no disponible"})
+        
+        gestores = basic_queries.get_centro_gestores_con_metricas(centro_id, periodo)
+        
+        bonus_total = 0.0
+        gestores_con_bonus = 0
+        
+        for gestor in gestores:
+            if gestor.get('margen_neto_pct', 0) >= 15.0:  # Umbral mínimo para bonus
+                # Cálculo simplificado de bonus basado en margen
+                bonus_estimado = min(gestor.get('margen_neto_pct', 0) * 100, 3000)
+                bonus_total += bonus_estimado
+                gestores_con_bonus += 1
+        
+        return ok({
+            "centro_id": centro_id,
+            "periodo": periodo,
+            "bonus_total": round(bonus_total, 2),
+            "gestores_con_bonus": gestores_con_bonus,
+            "total_gestores": len(gestores),
+            "bonus_promedio": round(bonus_total / max(gestores_con_bonus, 1), 2)
+        }, meta={"centro_id": centro_id, "periodo": periodo})
+        
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "kpis_centro_bonus_error"})
+
+
+# ============================================================================
 # 🎯 ENDPOINTS DE QUERIES ESPECIALIZADAS (TODOS MANTENIDOS)
 # ============================================================================
 
@@ -2267,8 +2674,8 @@ if __name__ == "__main__":
         "reload": True,
         
         # ✅ WEBSOCKET ESPECÍFICO PARA WINDOWS
-        "ws_ping_interval": 30.0,      # Ping cada 30 segundos
-        "ws_ping_timeout": 15.0,       # Timeout de 15 segundos para pong
+        "ws_ping_interval": 45.0,      # Ping cada 30 segundos
+        "ws_ping_timeout": 30.0,       # Timeout de 15 segundos para pong
         "timeout_keep_alive": 300,     # Keep-alive 5 minutos
         
         # ✅ CONFIGURACIÓN DE CONEXIÓN PARA WINDOWS

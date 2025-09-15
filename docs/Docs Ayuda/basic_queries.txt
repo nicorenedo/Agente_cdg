@@ -570,6 +570,422 @@ class BasicQueries:
         GROUP BY FECHA
         """
         return self.query_executor.execute_query(query, (fecha,), fetch_type="one")
+
+    # =====================================
+    # MÉTRICAS FINANCIERAS POR CENTRO
+    # =====================================
+
+    def get_centro_metricas_financieras(self, centro_id: int, periodo: str = None) -> Dict[str, Any]:
+        """Obtiene métricas financieras completas de un centro específico"""
+        # Si no se especifica período, usar el más reciente
+        periodo_clause = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        params = [centro_id, periodo] if periodo else [centro_id]
+
+        query = f"""
+        SELECT 
+            c.CENTRO_ID,
+            c.DESC_CENTRO,
+            c.IND_CENTRO_FINALISTA,
+            COUNT(DISTINCT co.CONTRATO_ID) as total_contratos,
+            COUNT(DISTINCT cl.CLIENTE_ID) as total_clientes,
+            COUNT(DISTINCT g.GESTOR_ID) as total_gestores,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_movimientos,
+            COALESCE(SUM(gc.IMPORTE), 0) as gastos_centro,
+            COALESCE(AVG(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE END), 0) as ingreso_promedio_movimiento
+        FROM MAESTRO_CENTROS c
+        LEFT JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
+        LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+        LEFT JOIN MAESTRO_CLIENTES cl ON co.CLIENTE_ID = cl.CLIENTE_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            {periodo_clause}
+        LEFT JOIN GASTOS_CENTRO gc ON c.CENTRO_ID = gc.CENTRO_CONTABLE
+            AND (strftime('%Y-%m', gc.FECHA) = ? OR ? IS NULL)
+        WHERE c.CENTRO_ID = ?
+        GROUP BY c.CENTRO_ID, c.DESC_CENTRO, c.IND_CENTRO_FINALISTA
+        """
+
+        # Ajustar parámetros para la query
+        if periodo:
+            params = [centro_id, periodo, periodo, centro_id]
+        else:
+            params = [centro_id, None, None, centro_id]
+
+        result = self.query_executor.execute_query(query, tuple(params), fetch_type="one")
+
+        if result:
+            # Calcular métricas derivadas
+            ingresos = result['ingresos_total'] or 0
+            gastos_totales = (result['gastos_movimientos'] or 0) + (result['gastos_centro'] or 0)
+            beneficio_neto = ingresos - gastos_totales
+
+            result.update({
+                'gastos_totales': gastos_totales,
+                'beneficio_neto': beneficio_neto,
+                'margen_neto_pct': round((beneficio_neto / ingresos * 100), 2) if ingresos > 0 else 0,
+                'contratos_por_gestor': round(result['total_contratos'] / max(result['total_gestores'], 1), 1),
+                'clientes_por_gestor': round(result['total_clientes'] / max(result['total_gestores'], 1), 1)
+            })
+
+        return result or {}
+
+    def get_centro_gestores_con_metricas(self, centro_id: int, periodo: str = None) -> List[Dict[str, Any]]:
+        """Obtiene gestores de un centro con sus métricas financieras"""
+        periodo_clause = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        params = [centro_id, periodo] if periodo else [centro_id]
+
+        query = f"""
+        SELECT 
+            g.GESTOR_ID,
+            g.DESC_GESTOR,
+            g.SEGMENTO_ID,
+            s.DESC_SEGMENTO,
+            COUNT(DISTINCT co.CONTRATO_ID) as num_contratos,
+            COUNT(DISTINCT cl.CLIENTE_ID) as num_clientes,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_gestor,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_gestor,
+            COALESCE(AVG(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE END), 0) as ingreso_promedio
+        FROM MAESTRO_GESTORES g
+        LEFT JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
+        LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+        LEFT JOIN MAESTRO_CLIENTES cl ON co.CLIENTE_ID = cl.CLIENTE_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            {periodo_clause}
+        WHERE g.CENTRO = ?
+        GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, s.DESC_SEGMENTO
+        ORDER BY ingresos_gestor DESC
+        """
+
+        results = self.query_executor.execute_query(query, tuple(params))
+
+        # Calcular métricas derivadas para cada gestor
+        for row in results:
+            ingresos = row['ingresos_gestor'] or 0
+            gastos = row['gastos_gestor'] or 0
+            beneficio = ingresos - gastos
+
+            row.update({
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
+                'ingresos_por_contrato': round(ingresos / max(row['num_contratos'], 1), 2),
+                'ingresos_por_cliente': round(ingresos / max(row['num_clientes'], 1), 2)
+            })
+
+        return results
+
+    # =====================================
+    # MÉTRICAS FINANCIERAS POR SEGMENTO
+    # =====================================
+
+    def get_segmento_metricas_financieras(self, segmento_id: str, periodo: str = None) -> Dict[str, Any]:
+        """Obtiene métricas financieras completas de un segmento específico"""
+        periodo_clause = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        params = [segmento_id, periodo] if periodo else [segmento_id]
+
+        query = f"""
+        SELECT 
+            s.SEGMENTO_ID,
+            s.DESC_SEGMENTO,
+            COUNT(DISTINCT g.GESTOR_ID) as total_gestores,
+            COUNT(DISTINCT co.CONTRATO_ID) as total_contratos,
+            COUNT(DISTINCT cl.CLIENTE_ID) as total_clientes,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_total,
+            COUNT(DISTINCT co.PRODUCTO_ID) as productos_diferentes
+        FROM MAESTRO_SEGMENTOS s
+        LEFT JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
+        LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+        LEFT JOIN MAESTRO_CLIENTES cl ON co.CLIENTE_ID = cl.CLIENTE_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            {periodo_clause}
+        WHERE s.SEGMENTO_ID = ?
+        GROUP BY s.SEGMENTO_ID, s.DESC_SEGMENTO
+        """
+
+        result = self.query_executor.execute_query(query, tuple(params), fetch_type="one")
+
+        if result:
+            ingresos = result['ingresos_total'] or 0
+            gastos = result['gastos_total'] or 0
+            beneficio = ingresos - gastos
+
+            result.update({
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
+                'ingresos_por_gestor': round(ingresos / max(result['total_gestores'], 1), 2),
+                'contratos_por_gestor': round(result['total_contratos'] / max(result['total_gestores'], 1), 1)
+            })
+
+        return result or {}
+
+    # =====================================
+    # MÉTRICAS FINANCIERAS POR GESTOR (EXPANDIDAS)
+    # =====================================
+
+    def get_gestor_metricas_completas(self, gestor_id: int, periodo: str = None) -> Dict[str, Any]:
+        """Obtiene métricas financieras completas de un gestor específico"""
+        periodo_clause = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        params = [gestor_id, periodo] if periodo else [gestor_id]
+
+        query = f"""
+        SELECT 
+            g.GESTOR_ID,
+            g.DESC_GESTOR,
+            g.CENTRO,
+            g.SEGMENTO_ID,
+            c.DESC_CENTRO,
+            s.DESC_SEGMENTO,
+            COUNT(DISTINCT co.CONTRATO_ID) as total_contratos,
+            COUNT(DISTINCT cl.CLIENTE_ID) as total_clientes,
+            COUNT(DISTINCT co.PRODUCTO_ID) as productos_diferentes,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_total,
+            COALESCE(COUNT(DISTINCT mov.MOVIMIENTO_ID), 0) as total_movimientos,
+            COALESCE(AVG(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE END), 0) as ingreso_promedio_movimiento,
+            MIN(co.FECHA_ALTA) as fecha_primer_contrato,
+            MAX(co.FECHA_ALTA) as fecha_ultimo_contrato
+        FROM MAESTRO_GESTORES g
+        LEFT JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+        LEFT JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
+        LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+        LEFT JOIN MAESTRO_CLIENTES cl ON co.CLIENTE_ID = cl.CLIENTE_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            {periodo_clause}
+        WHERE g.GESTOR_ID = ?
+        GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.CENTRO, g.SEGMENTO_ID, c.DESC_CENTRO, s.DESC_SEGMENTO
+        """
+
+        result = self.query_executor.execute_query(query, tuple(params), fetch_type="one")
+
+        if result:
+            ingresos = result['ingresos_total'] or 0
+            gastos = result['gastos_total'] or 0
+            beneficio = ingresos - gastos
+
+            result.update({
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
+                'ingresos_por_contrato': round(ingresos / max(result['total_contratos'], 1), 2),
+                'ingresos_por_cliente': round(ingresos / max(result['total_clientes'], 1), 2),
+                'contratos_por_cliente': round(result['total_contratos'] / max(result['total_clientes'], 1), 1),
+                'movimientos_por_contrato': round(result['total_movimientos'] / max(result['total_contratos'], 1), 1)
+            })
+
+        return result or {}
+
+    def get_gestor_clientes_con_metricas(self, gestor_id: int, periodo: str = None) -> List[Dict[str, Any]]:
+        """Obtiene clientes de un gestor con sus métricas financieras"""
+        periodo_clause = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        params = [gestor_id, periodo] if periodo else [gestor_id]
+
+        query = f"""
+        SELECT 
+            cl.CLIENTE_ID,
+            cl.NOMBRE_CLIENTE,
+            COUNT(DISTINCT co.CONTRATO_ID) as num_contratos,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_cliente,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_cliente,
+            MIN(co.FECHA_ALTA) as fecha_alta_primer_contrato,
+            MAX(co.FECHA_ALTA) as fecha_alta_ultimo_contrato,
+            COUNT(DISTINCT co.PRODUCTO_ID) as productos_diferentes
+        FROM MAESTRO_CLIENTES cl
+        LEFT JOIN MAESTRO_CONTRATOS co ON cl.CLIENTE_ID = co.CLIENTE_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            {periodo_clause}
+        WHERE cl.GESTOR_ID = ?
+        GROUP BY cl.CLIENTE_ID, cl.NOMBRE_CLIENTE
+        ORDER BY ingresos_cliente DESC
+        """
+
+        results = self.query_executor.execute_query(query, tuple(params))
+
+        # Calcular métricas derivadas
+        for row in results:
+            ingresos = row['ingresos_cliente'] or 0
+            gastos = row['gastos_cliente'] or 0
+            beneficio = ingresos - gastos
+
+            row.update({
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
+                'ingresos_por_contrato': round(ingresos / max(row['num_contratos'], 1), 2)
+            })
+
+        return results
+
+    # =====================================
+    # MÉTRICAS FINANCIERAS POR CLIENTE
+    # =====================================
+
+    def get_cliente_metricas(self, cliente_id: int, periodo: str = None) -> Dict[str, Any]:
+        """Obtiene métricas financieras de un cliente específico - VERSION CORREGIDA"""
+        periodo_clause = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        params = [cliente_id]
+        if periodo:
+            params.append(periodo)
+
+        query = f"""
+        SELECT 
+            cl.CLIENTE_ID,
+            cl.NOMBRE_CLIENTE,
+            cl.GESTOR_ID,
+            g.DESC_GESTOR,
+            COUNT(DISTINCT co.CONTRATO_ID) as num_contratos,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_total,
+            MIN(co.FECHA_ALTA) as fecha_alta_primer_contrato,
+            MAX(co.FECHA_ALTA) as fecha_alta_ultimo_contrato,
+            COUNT(DISTINCT co.PRODUCTO_ID) as productos_diferentes
+        FROM MAESTRO_CLIENTES cl
+        LEFT JOIN MAESTRO_GESTORES g ON cl.GESTOR_ID = g.GESTOR_ID
+        LEFT JOIN MAESTRO_CONTRATOS co ON cl.CLIENTE_ID = co.CLIENTE_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            {periodo_clause}
+        WHERE cl.CLIENTE_ID = ?
+        GROUP BY cl.CLIENTE_ID, cl.NOMBRE_CLIENTE, cl.GESTOR_ID, g.DESC_GESTOR
+        """
+
+        result = self.query_executor.execute_query(query, tuple(params), fetch_type="one")
+
+        if result and result.get('CLIENTE_ID'):
+            ingresos = result['ingresos_total'] or 0
+            gastos = result['gastos_total'] or 0
+            beneficio = ingresos - gastos
+
+            result.update({
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
+                'valor_por_contrato': round(beneficio / max(result['num_contratos'], 1), 2)
+            })
+
+            return result
+        else:
+            # Cliente existe pero sin contratos/movimientos
+            query_cliente_solo = """
+            SELECT 
+                cl.CLIENTE_ID,
+                cl.NOMBRE_CLIENTE,
+                cl.GESTOR_ID,
+                g.DESC_GESTOR
+            FROM MAESTRO_CLIENTES cl
+            LEFT JOIN MAESTRO_GESTORES g ON cl.GESTOR_ID = g.GESTOR_ID
+            WHERE cl.CLIENTE_ID = ?
+            """
+            
+            cliente_base = self.query_executor.execute_query(query_cliente_solo, (cliente_id,), fetch_type="one")
+            
+            if cliente_base:
+                return {
+                    'CLIENTE_ID': cliente_base['CLIENTE_ID'],
+                    'NOMBRE_CLIENTE': cliente_base['NOMBRE_CLIENTE'],
+                    'GESTOR_ID': cliente_base['GESTOR_ID'],
+                    'DESC_GESTOR': cliente_base['DESC_GESTOR'],
+                    'num_contratos': 0,
+                    'ingresos_total': 0,
+                    'gastos_total': 0,
+                    'fecha_alta_primer_contrato': None,
+                    'fecha_alta_ultimo_contrato': None,
+                    'productos_diferentes': 0,
+                    'beneficio_neto': 0,
+                    'margen_neto_pct': 0,
+                    'valor_por_contrato': 0,
+                    'nota': 'Cliente sin contratos activos en el periodo'
+                }
+            else:
+                return {
+                    'error': 'Cliente no encontrado',
+                    'CLIENTE_ID': cliente_id
+                }
+
+
+    def get_cliente_contratos_con_metricas(self, cliente_id: int, periodo: str = None) -> List[Dict[str, Any]]:
+        """Obtiene contratos de un cliente con sus métricas financieras"""
+        periodo_clause = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        params = [cliente_id, periodo] if periodo else [cliente_id]
+
+        query = f"""
+        SELECT 
+            co.CONTRATO_ID,
+            co.FECHA_ALTA,
+            co.PRODUCTO_ID,
+            p.DESC_PRODUCTO,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_contrato,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_contrato,
+            COUNT(DISTINCT mov.MOVIMIENTO_ID) as num_movimientos
+        FROM MAESTRO_CONTRATOS co
+        LEFT JOIN MAESTRO_PRODUCTOS p ON co.PRODUCTO_ID = p.PRODUCTO_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            {periodo_clause}
+        WHERE co.CLIENTE_ID = ?
+        GROUP BY co.CONTRATO_ID, co.FECHA_ALTA, co.PRODUCTO_ID, p.DESC_PRODUCTO
+        ORDER BY co.FECHA_ALTA DESC
+        """
+
+        results = self.query_executor.execute_query(query, tuple(params))
+
+        # Calcular métricas derivadas
+        for row in results:
+            ingresos = row['ingresos_contrato'] or 0
+            gastos = row['gastos_contrato'] or 0
+            beneficio = ingresos - gastos
+
+            row.update({
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0
+            })
+
+        return results
+
+    # =====================================
+    # MÉTRICAS FINANCIERAS POR CONTRATO
+    # =====================================
+
+    def get_contrato_detalle_completo(self, contrato_id: int) -> Dict[str, Any]:
+        """Obtiene detalle completo de un contrato con todas sus métricas"""
+        query = """
+        SELECT 
+            co.CONTRATO_ID,
+            co.FECHA_ALTA,
+            co.CLIENTE_ID,
+            co.GESTOR_ID,
+            co.PRODUCTO_ID,
+            co.CENTRO_CONTABLE,
+            cl.NOMBRE_CLIENTE,
+            g.DESC_GESTOR,
+            p.DESC_PRODUCTO,
+            c.DESC_CENTRO,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_total,
+            COUNT(DISTINCT mov.MOVIMIENTO_ID) as num_movimientos,
+            MIN(mov.FECHA) as fecha_primer_movimiento,
+            MAX(mov.FECHA) as fecha_ultimo_movimiento
+        FROM MAESTRO_CONTRATOS co
+        LEFT JOIN MAESTRO_CLIENTES cl ON co.CLIENTE_ID = cl.CLIENTE_ID
+        LEFT JOIN MAESTRO_GESTORES g ON co.GESTOR_ID = g.GESTOR_ID
+        LEFT JOIN MAESTRO_PRODUCTOS p ON co.PRODUCTO_ID = p.PRODUCTO_ID
+        LEFT JOIN MAESTRO_CENTROS c ON co.CENTRO_CONTABLE = c.CENTRO_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+        WHERE co.CONTRATO_ID = ?
+        GROUP BY co.CONTRATO_ID, co.FECHA_ALTA, co.CLIENTE_ID, co.GESTOR_ID, 
+                 co.PRODUCTO_ID, co.CENTRO_CONTABLE, cl.NOMBRE_CLIENTE, 
+                 g.DESC_GESTOR, p.DESC_PRODUCTO, c.DESC_CENTRO
+        """
+
+        result = self.query_executor.execute_query(query, (contrato_id,), fetch_type="one")
+
+        if result:
+            ingresos = result['ingresos_total'] or 0
+            gastos = result['gastos_total'] or 0
+            beneficio = ingresos - gastos
+
+            result.update({
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
+                'promedio_por_movimiento': round(ingresos / max(result['num_movimientos'], 1), 2)
+            })
+
+        return result or {}
+
     
     # =====================================
     # CONSULTAS DE MOVIMIENTOS
@@ -738,6 +1154,15 @@ def get_all_precios_std(): return basic_queries.get_all_precios_std()
 def get_all_precios_real(): return basic_queries.get_all_precios_real()
 def compare_precios_std_vs_real(fecha=None): return basic_queries.compare_precios_std_vs_real(fecha)
 def get_resumen_general(): return basic_queries.get_resumen_general()
+# Funciones de conveniencia para métricas financieras
+def get_centro_metricas(centro_id, periodo=None): return basic_queries.get_centro_metricas_financieras(centro_id, periodo)
+def get_centro_gestores_metricas(centro_id, periodo=None): return basic_queries.get_centro_gestores_con_metricas(centro_id, periodo)
+def get_segmento_metricas(segmento_id, periodo=None): return basic_queries.get_segmento_metricas_financieras(segmento_id, periodo)
+def get_gestor_metricas_completas(gestor_id, periodo=None): return basic_queries.get_gestor_metricas_completas(gestor_id, periodo)
+def get_gestor_clientes_metricas(gestor_id, periodo=None): return basic_queries.get_gestor_clientes_con_metricas(gestor_id, periodo)
+def get_cliente_metricas(cliente_id, periodo=None): return basic_queries.get_cliente_metricas(cliente_id, periodo)
+def get_cliente_contratos_metricas(cliente_id, periodo=None): return basic_queries.get_cliente_contratos_con_metricas(cliente_id, periodo)
+def get_contrato_detalle(contrato_id): return basic_queries.get_contrato_detalle_completo(contrato_id)
 
 if __name__ == "__main__":
     # Ejemplo de uso

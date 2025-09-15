@@ -36,7 +36,6 @@ import {
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import api from '../../services/api';
-import analyticsService from '../../services/analyticsService';
 import ErrorState from '../common/ErrorState';
 import Loader from '../common/Loader';
 import theme from '../../styles/theme';
@@ -76,168 +75,302 @@ const DeviationAnalysis = ({
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [showOnlyOutliers, setShowOnlyOutliers] = useState(false);
 
-  // Cargar datos principales
+  // ✅ CORRECCIÓN PRINCIPAL: Cargar datos principales con manejo correcto de la estructura del backend
   const fetchDeviationData = useCallback(async () => {
     if (!periodo) {
       setError('Período requerido para análisis de desviaciones');
       return;
     }
 
+    console.log('[DeviationAnalysis] 📊 Iniciando carga de desviaciones:', { 
+      mode, 
+      periodo, 
+      gestorId, 
+      bonusPool 
+    });
+
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Resumen general de desviaciones
+      console.log('[DeviationAnalysis] 📡 Llamando APIs de desviaciones...');
+
+      // 1. Resumen general de desviaciones - ✅ CORRECCIÓN: Estructura correcta del backend
       const summaryResponse = await api.deviations.summary(periodo);
-      
-      // 2. Desviaciones de pricing
+      console.log('[DeviationAnalysis] 📋 Summary response raw:', summaryResponse);
+
+      // 2. Desviaciones de pricing - ✅ CORRECCIÓN: Extraer datos correctamente
       const pricingResponse = await api.deviations.pricing(periodo, 15.0);
-      
+      console.log('[DeviationAnalysis] 💰 Pricing response raw:', pricingResponse);
+
       // 3. Desviaciones de margen
       const marginResponse = await api.deviations.margen(periodo, { z: 2.0, enhanced: true });
-      
+      console.log('[DeviationAnalysis] 📈 Margin response raw:', marginResponse);
+
       // 4. Desviaciones de volumen
       const volumeResponse = await api.deviations.volumen(periodo, { factor: 3.0, enhanced: true });
-      
+      console.log('[DeviationAnalysis] 📊 Volume response raw:', volumeResponse);
+
       // 5. Incentivos según contexto
       let incentivesResponse = [];
       if (mode === 'direccion' && bonusPool) {
+        console.log('[DeviationAnalysis] 🎯 Llamando bonusPool...');
         incentivesResponse = await api.incentives.bonusPool(periodo, bonusPool);
       } else if (mode === 'gestor' && gestorId) {
+        console.log('[DeviationAnalysis] 👤 Llamando scorecard gestor...');
         incentivesResponse = await api.incentives.scorecard(gestorId, periodo);
       }
+      console.log('[DeviationAnalysis] 💎 Incentives response raw:', incentivesResponse);
 
-      // Procesar y normalizar datos
-      setSummary(normalizeSummary(summaryResponse));
-      setDeviationPricing(normalizePricingData(pricingResponse.deviations || []));
-      setDeviationMargin(normalizeMarginData(marginResponse.deviations || []));
-      setDeviationVolume(normalizeVolumeData(volumeResponse.deviations || []));
-      setIncentivesData(normalizeIncentivesData(incentivesResponse, bonusPool));
+      // ✅ CORRECCIÓN CRÍTICA: Procesar datos con la estructura real del backend
+      const processedSummary = normalizeSummary(summaryResponse);
+      const processedPricing = normalizePricingData(pricingResponse?.data?.deviations || pricingResponse?.deviations || []);
+      const processedMargin = normalizeMarginData(marginResponse?.data?.deviations || marginResponse?.deviations || []);
+      const processedVolume = normalizeVolumeData(volumeResponse?.data?.deviations || volumeResponse?.deviations || []);
+      const processedIncentives = normalizeIncentivesData(incentivesResponse, bonusPool);
+
+      console.log('[DeviationAnalysis] ✅ Datos procesados finales:', {
+        summary: processedSummary,
+        pricing: processedPricing?.length || 0,
+        margin: processedMargin?.length || 0,
+        volume: processedVolume?.length || 0,
+        incentives: processedIncentives?.length || 0
+      });
+
+      setSummary(processedSummary);
+      setDeviationPricing(processedPricing);
+      setDeviationMargin(processedMargin);
+      setDeviationVolume(processedVolume);
+      setIncentivesData(processedIncentives);
 
     } catch (err) {
-      console.error('[DeviationAnalysis] Error loading data:', err);
+      console.error('[DeviationAnalysis] ❌ Error loading data:', { 
+        error: err?.message, 
+        stack: err?.stack,
+        mode,
+        periodo,
+        gestorId,
+        bonusPool 
+      });
       setError(err?.message || 'Error al cargar datos de desviaciones');
-      
-      // Datos mock para demo
+
+      // Datos mock para demo si hay error
+      console.log('[DeviationAnalysis] 🔧 Usando datos mock debido a error...');
       setSummary(generateMockSummary());
       setDeviationPricing(generateMockPricing());
       setDeviationMargin(generateMockMargin());
       setDeviationVolume(generateMockVolume());
       setIncentivesData(generateMockIncentives());
-      
+
     } finally {
       setLoading(false);
     }
   }, [periodo, gestorId, mode, bonusPool]);
 
-  // Normalizadores de datos
-  const normalizeSummary = (data) => ({
-    totalDeviation: data?.total_deviation || 0,
-    deviationPercent: data?.deviation_percent || 0,
-    outlierCount: data?.outlier_count || 0,
-    criticalAlerts: data?.critical_alerts || 0,
-    insight: data?.insight || 'Análisis completado sin incidencias críticas.',
-    period: data?.periodo || periodo,
-    lastUpdate: new Date().toISOString()
-  });
+  // ✅ CORRECCIÓN CRÍTICA: Normalizadores de datos según estructura real del backend
+  const normalizeSummary = (data) => {
+    console.log('[DeviationAnalysis] 🔄 Normalizando summary:', data);
+    
+    // Backend devuelve: { precio: {total: 3, top: [...]}, margen: {total: 1, top: [...]}, volumen: {total: 13} }
+    const totalDeviations = (data?.precio?.total || 0) + (data?.margen?.total || 0) + (data?.volumen?.total || 0);
+    const criticalAlerts = (data?.precio?.top || []).length + (data?.margen?.top || []).length;
+    
+    return {
+      totalDeviation: totalDeviations,
+      deviationPercent: totalDeviations > 0 ? ((totalDeviations / 20) * 100) : 0, // Cálculo estimado
+      outlierCount: data?.volumen?.total || 0,
+      criticalAlerts: criticalAlerts,
+      insight: criticalAlerts > 0 
+        ? `Se detectan ${criticalAlerts} alertas críticas. Revisar desviaciones en pricing y margen.` 
+        : 'Análisis completado sin incidencias críticas.',
+      period: periodo,
+      lastUpdate: new Date().toISOString()
+    };
+  };
 
   const normalizePricingData = (data) => {
+    console.log('[DeviationAnalysis] 🔄 Normalizando pricing data:', data);
+    
     if (!Array.isArray(data)) return [];
     return data.map((item, index) => ({
-      key: `pricing-${index}`,
-      entity: item.producto || item.entity || `Entidad ${index + 1}`,
-      target: Number(item.precio_std || item.target || 0),
-      actual: Number(item.precio_real || item.actual || 0),
-      deviation: Number(item.delta_abs || item.deviation || 0),
-      deviationPercent: Number(item.delta_pct || item.deviation_percent || 0),
-      semaforo: item.semaforo || (Math.abs(item.delta_pct || 0) > 15 ? 'Rojo' : 
-                  Math.abs(item.delta_pct || 0) > 5 ? 'Amarillo' : 'Verde'),
-      trend: item.trend || (Math.random() > 0.5 ? 'up' : 'down'),
-      contracts: item.contratos || Math.floor(Math.random() * 20) + 1
+      key: `pricing-${item.PRODUCTO_ID || index}`,
+      entity: item.DESC_PRODUCTO || item.PRODUCTO_ID || `Producto ${index + 1}`,
+      target: Math.abs(Number(item.PRECIO_MANTENIMIENTO || 0)),
+      actual: Math.abs(Number(item.PRECIO_MANTENIMIENTO_REAL || 0)),
+      deviation: Number(item.desviacion_absoluta || 0),
+      deviationPercent: Number(item.desviacion_pct || item.desviacion_abs_pct || 0),
+      semaforo: item.nivel_alerta === 'ALTA' ? 'Rojo' : 
+                item.nivel_alerta === 'MEDIA' ? 'Amarillo' : 
+                Math.abs(item.desviacion_pct || 0) > 15 ? 'Rojo' : 
+                Math.abs(item.desviacion_pct || 0) > 5 ? 'Amarillo' : 'Verde',
+      trend: (item.desviacion_pct || 0) > 0 ? 'up' : 'down',
+      contracts: item.NUM_CONTRATOS_BASE || Math.floor(Math.random() * 20) + 1
     }));
   };
 
   const normalizeMarginData = (data) => {
+    console.log('[DeviationAnalysis] 🔄 Normalizando margin data:', data);
+    
     if (!Array.isArray(data)) return [];
     return data.map((item, index) => ({
-      key: `margin-${index}`,
-      entity: item.gestor || item.centro || item.entity || `Entidad ${index + 1}`,
-      target: Number(item.margen_objetivo || item.target || 0),
-      actual: Number(item.margen_real || item.actual || 0),
-      deviation: Number(item.deviation || 0),
-      deviationPercent: Number(item.deviation_percent || 0),
-      semaforo: item.semaforo || (item.deviation < -10000 ? 'Rojo' : 
-                  item.deviation < -5000 ? 'Amarillo' : 'Verde'),
-      trend: item.trend || (Math.random() > 0.5 ? 'up' : 'down'),
-      clients: item.clientes || Math.floor(Math.random() * 50) + 10
+      key: `margin-${item.GESTOR_ID || index}`,
+      entity: item.DESC_GESTOR || item.gestor || `Gestor ${index + 1}`,
+      target: Number(item.media_margen || item.margen_objetivo || 0),
+      actual: Number(item.margen_neto || item.margen_real || 0),
+      deviation: Number(item.beneficio_neto || item.deviation || 0),
+      deviationPercent: Number(item.margen_neto || item.deviation_percent || 0),
+      semaforo: item.clasificacion_anomalia === 'OUTLIER_EXTREMO' ? 'Rojo' : 
+                item.clasificacion_margen === 'ACEPTABLE' ? 'Verde' : 
+                item.margen_neto < 50 ? 'Rojo' : 
+                item.margen_neto < 70 ? 'Amarillo' : 'Verde',
+      trend: (item.margen_neto || 0) > (item.media_margen || 70) ? 'up' : 'down',
+      clients: item.total_clientes || Math.floor(Math.random() * 50) + 10
     }));
   };
 
   const normalizeVolumeData = (data) => {
+    console.log('[DeviationAnalysis] 🔄 Normalizando volume data:', data);
+    
     if (!Array.isArray(data)) return [];
     return data.map((item, index) => ({
-      key: `volume-${index}`,
-      entity: item.entity || `Entidad ${index + 1}`,
-      target: Number(item.target || 0),
-      actual: Number(item.actual || 0),
-      deviation: Number(item.deviation || 0),
-      deviationPercent: Number(item.deviation_percent || 0),
-      semaforo: item.semaforo || (Math.abs(item.deviation_percent || 0) > 20 ? 'Rojo' : 
-                  Math.abs(item.deviation_percent || 0) > 10 ? 'Amarillo' : 'Verde'),
-      trend: item.trend || (Math.random() > 0.5 ? 'up' : 'down'),
-      volume: item.volume || Math.floor(Math.random() * 1000000) + 100000
+      key: `volume-${item.GESTOR_ID || index}`,
+      entity: item.DESC_GESTOR || item.entity || `Entidad ${index + 1}`,
+      target: Number(item.media_contratos || item.target || 0),
+      actual: Number(item.total_contratos || item.actual || 0),
+      deviation: Number(item.total_contratos || 0) - Number(item.media_contratos || 0),
+      deviationPercent: Number(item.ratio_contratos_vs_media || item.deviation_percent || 0) * 100 - 100,
+      semaforo: item.tipo_outlier === 'SIN_ACTIVIDAD' ? 'Rojo' : 
+                item.tipo_outlier === 'PICO_COMERCIAL' ? 'Verde' : 
+                Math.abs((item.ratio_contratos_vs_media || 1) * 100 - 100) > 20 ? 'Rojo' : 
+                Math.abs((item.ratio_contratos_vs_media || 1) * 100 - 100) > 10 ? 'Amarillo' : 'Verde',
+      trend: (item.ratio_contratos_vs_media || 1) > 1 ? 'up' : 'down',
+      volume: item.ingresos_generados || Math.floor(Math.random() * 1000000) + 100000
     }));
   };
 
   const normalizeIncentivesData = (data, pool) => {
-    if (!data || !Array.isArray(data.pool || data.scorecard || [])) return [];
-    const items = data.pool || data.scorecard || [];
-    const totalContribution = items.reduce((sum, item) => sum + (item.contribution || 0), 0);
+    console.log('[DeviationAnalysis] 🔄 Normalizando incentives data:', data);
+    
+    // Backend puede devolver { pool: [...] } o directamente [...]
+    const items = data?.pool || data || [];
+    if (!Array.isArray(items)) return [];
     
     return items.map((item, index) => ({
-      key: `incentive-${index}`,
-      entity: item.gestor || item.entity || `Entidad ${index + 1}`,
-      contribution: Number(item.contribution || 0),
-      contributionPercent: totalContribution > 0 ? (item.contribution / totalContribution) * 100 : 0,
-      estimatedAmount: pool ? (pool * (item.contribution || 0) / totalContribution) : 0,
-      performance: item.performance || Math.random() * 100 + 50,
-      ranking: index + 1
+      key: `incentive-${item.GESTOR_ID || index}`,
+      entity: item.DESC_GESTOR || item.gestor || item.entity || `Gestor ${index + 1}`,
+      contribution: Number(item.score_ponderado || item.contribution || 0),
+      contributionPercent: Number(item.porcentaje_pool || item.contribution_percent || 0),
+      estimatedAmount: Number(item.incentivo_final_eur || item.asignacion_pool_eur || item.estimated_amount || 0),
+      performance: Number(item.margen_neto_pct || item.performance || 100),
+      ranking: item.ranking_general || index + 1
     }));
   };
 
-  // Datos mock para desarrollo
+  // ✅ DATOS MOCK mejorados para testing
   const generateMockSummary = () => ({
-    totalDeviation: 42500,
+    totalDeviation: 17, // Total real del backend (3+1+13)
     deviationPercent: 8.3,
-    outlierCount: 7,
-    criticalAlerts: 3,
-    insight: 'Se detectan 3 alertas críticas en pricing de productos hipotecarios. Revisar condiciones comerciales del centro Madrid.',
+    outlierCount: 13, // Del volumen
+    criticalAlerts: 4, // 3 pricing + 1 margin
+    insight: 'Se detectan 3 desviaciones críticas en pricing de productos hipotecarios y 1 anomalía en margen. Revisar condiciones comerciales.',
     period: periodo,
     lastUpdate: new Date().toISOString()
   });
 
   const generateMockPricing = () => [
-    { key: 'p1', entity: 'Préstamo Hipotecario', target: -1200, actual: -1185, deviation: 15, deviationPercent: 1.25, semaforo: 'Verde', trend: 'up', contracts: 45 },
-    { key: 'p2', entity: 'Depósito Plazo', target: -1160, actual: -1245, deviation: -85, deviationPercent: -7.33, semaforo: 'Rojo', trend: 'down', contracts: 23 },
-    { key: 'p3', entity: 'Fondo Banca March', target: -1180, actual: -1165, deviation: 15, deviationPercent: 1.27, semaforo: 'Verde', trend: 'up', contracts: 67 },
-    { key: 'p4', entity: 'Cuenta Corriente Plus', target: -950, actual: -1075, deviation: -125, deviationPercent: -13.16, semaforo: 'Rojo', trend: 'down', contracts: 12 }
+    { 
+      key: 'p1', 
+      entity: 'Préstamo Hipotecario', 
+      target: 1170, 
+      actual: 1369, 
+      deviation: -199, 
+      deviationPercent: 17.01, 
+      semaforo: 'Rojo', 
+      trend: 'up', 
+      contracts: 13 
+    },
+    { 
+      key: 'p2', 
+      entity: 'Fondo Banca March', 
+      target: 1160, 
+      actual: 1350, 
+      deviation: -190, 
+      deviationPercent: 16.39, 
+      semaforo: 'Rojo', 
+      trend: 'up', 
+      contracts: 13 
+    },
+    { 
+      key: 'p3', 
+      entity: 'Depósito a Plazo Fijo', 
+      target: 1180, 
+      actual: 1367, 
+      deviation: -187, 
+      deviationPercent: 15.84, 
+      semaforo: 'Rojo', 
+      trend: 'up', 
+      contracts: 17 
+    }
   ];
 
   const generateMockMargin = () => [
-    { key: 'm1', entity: 'Ana García López', target: 125000, actual: 142000, deviation: 17000, deviationPercent: 13.6, semaforo: 'Verde', trend: 'up', clients: 34 },
-    { key: 'm2', entity: 'Carlos Martín', target: 98000, actual: 85500, deviation: -12500, deviationPercent: -12.8, semaforo: 'Rojo', trend: 'down', clients: 28 },
-    { key: 'm3', entity: 'María José Ruiz', target: 110000, actual: 118000, deviation: 8000, deviationPercent: 7.3, semaforo: 'Verde', trend: 'up', clients: 31 }
+    { 
+      key: 'm1', 
+      entity: 'Josep Oliver Coll', 
+      target: 70.91, 
+      actual: 8.56, 
+      deviation: 1223, 
+      deviationPercent: -62.35, 
+      semaforo: 'Rojo', 
+      trend: 'down', 
+      clients: 6 
+    }
   ];
 
   const generateMockVolume = () => [
-    { key: 'v1', entity: 'Centro Madrid', target: 180, actual: 195, deviation: 15, deviationPercent: 8.3, semaforo: 'Verde', trend: 'up', volume: 2850000 },
-    { key: 'v2', entity: 'Centro Barcelona', target: 145, actual: 128, deviation: -17, deviationPercent: -11.7, semaforo: 'Amarillo', trend: 'down', volume: 1950000 }
+    { 
+      key: 'v1', 
+      entity: 'Antonio Rodríguez García', 
+      target: 7.2, 
+      actual: 9, 
+      deviation: 1.8, 
+      deviationPercent: 25, 
+      semaforo: 'Verde', 
+      trend: 'up', 
+      volume: 21839 
+    },
+    { 
+      key: 'v2', 
+      entity: 'Miguel Sánchez Rodríguez', 
+      target: 7.2, 
+      actual: 6, 
+      deviation: -1.2, 
+      deviationPercent: -16.7, 
+      semaforo: 'Amarillo', 
+      trend: 'down', 
+      volume: 16026 
+    }
   ];
 
   const generateMockIncentives = () => [
-    { key: 'i1', entity: 'Ana García López', contribution: 18.5, contributionPercent: 18.5, estimatedAmount: 9250, performance: 142, ranking: 1 },
-    { key: 'i2', entity: 'Carlos Martín', contribution: 14.2, contributionPercent: 14.2, estimatedAmount: 7100, performance: 87, ranking: 2 },
-    { key: 'i3', entity: 'María José Ruiz', contribution: 12.8, contributionPercent: 12.8, estimatedAmount: 6400, performance: 118, ranking: 3 }
+    { 
+      key: 'i1', 
+      entity: 'Francesca Costa Ribas', 
+      contribution: 3760, 
+      contributionPercent: 5.63, 
+      estimatedAmount: 3518, 
+      performance: 100, 
+      ranking: 1 
+    },
+    { 
+      key: 'i2', 
+      entity: 'Jordi Torra Vila', 
+      contribution: 3760, 
+      contributionPercent: 5.63, 
+      estimatedAmount: 3518, 
+      performance: 100, 
+      ranking: 2 
+    }
   ];
 
   // Effect para cargar datos
@@ -269,7 +402,7 @@ const DeviationAnalysis = ({
     );
   };
 
-  // Definición de columnas por tipo
+  // Definición de columnas por tipo - ✅ MEJORADAS
   const pricingColumns = [
     {
       title: mode === 'direccion' ? 'Producto' : 'Cliente/Producto',
@@ -290,14 +423,14 @@ const DeviationAnalysis = ({
       dataIndex: 'target',
       key: 'target',
       sorter: (a, b) => a.target - b.target,
-      render: val => <Text>{val.toFixed(0)}€</Text>
+      render: val => <Text>{val?.toFixed(0) || 0}€</Text>
     },
     {
       title: 'Precio Real',
       dataIndex: 'actual',
       key: 'actual',
       sorter: (a, b) => a.actual - b.actual,
-      render: val => <Text>{val.toFixed(0)}€</Text>
+      render: val => <Text>{val?.toFixed(0) || 0}€</Text>
     },
     {
       title: 'Desviación',
@@ -311,7 +444,7 @@ const DeviationAnalysis = ({
                    Math.abs(val) > 5 ? theme.colors.warning : theme.colors.success,
             fontWeight: 600
           }}>
-            {val > 0 ? '+' : ''}{val.toFixed(1)}%
+            {val > 0 ? '+' : ''}{val?.toFixed(1) || 0}%
           </Text>
           <Tag color={record.semaforo === 'Verde' ? 'green' : record.semaforo === 'Amarillo' ? 'orange' : 'red'}>
             {record.semaforo}
@@ -374,18 +507,18 @@ const DeviationAnalysis = ({
       )
     },
     {
-      title: 'Objetivo (€)',
+      title: 'Objetivo (%)',
       dataIndex: 'target',
       key: 'target',
       sorter: (a, b) => a.target - b.target,
-      render: val => <Text>{val.toLocaleString()}€</Text>
+      render: val => <Text>{val?.toFixed(1) || 0}%</Text>
     },
     {
-      title: 'Real (€)',
+      title: 'Real (%)',
       dataIndex: 'actual',
       key: 'actual',
       sorter: (a, b) => a.actual - b.actual,
-      render: val => <Text>{val.toLocaleString()}€</Text>
+      render: val => <Text>{val?.toFixed(1) || 0}%</Text>
     },
     {
       title: 'Desviación (€)',
@@ -399,7 +532,7 @@ const DeviationAnalysis = ({
                    val < 0 ? theme.colors.warning : theme.colors.success,
             fontWeight: 600
           }}>
-            {val > 0 ? '+' : ''}{val.toLocaleString()}€
+            {val > 0 ? '+' : ''}{val?.toLocaleString() || 0}€
           </Text>
           <Tag color={record.semaforo === 'Verde' ? 'green' : record.semaforo === 'Amarillo' ? 'orange' : 'red'}>
             {record.semaforo}
@@ -444,12 +577,14 @@ const DeviationAnalysis = ({
       dataIndex: 'target',
       key: 'target',
       sorter: (a, b) => a.target - b.target,
+      render: val => <Text>{val?.toFixed(0) || 0}</Text>
     },
     {
       title: 'Real',
       dataIndex: 'actual',
       key: 'actual',
       sorter: (a, b) => a.actual - b.actual,
+      render: val => <Text>{val?.toFixed(0) || 0}</Text>
     },
     {
       title: 'Desviación (%)',
@@ -463,7 +598,7 @@ const DeviationAnalysis = ({
                    Math.abs(val) > 10 ? theme.colors.warning : theme.colors.success,
             fontWeight: 600
           }}>
-            {val > 0 ? '+' : ''}{val.toFixed(1)}%
+            {val > 0 ? '+' : ''}{val?.toFixed(1) || 0}%
           </Text>
           <Tag color={record.semaforo === 'Verde' ? 'green' : record.semaforo === 'Amarillo' ? 'orange' : 'red'}>
             {record.semaforo}
@@ -516,7 +651,7 @@ const DeviationAnalysis = ({
             style={{ width: 100 }}
             showInfo={false}
           />
-          <Text>{val.toFixed(1)}%</Text>
+          <Text>{val?.toFixed(1) || 0}%</Text>
         </Space>
       )
     },
@@ -527,7 +662,7 @@ const DeviationAnalysis = ({
       sorter: (a, b) => a.estimatedAmount - b.estimatedAmount,
       render: val => (
         <Text strong style={{ color: theme.colors.bmGreenPrimary }}>
-          {val.toLocaleString()}€
+          {(val || 0).toLocaleString()}€
         </Text>
       )
     },
@@ -538,13 +673,13 @@ const DeviationAnalysis = ({
       sorter: (a, b) => a.performance - b.performance,
       render: val => (
         <Tag color={val > 120 ? 'green' : val > 100 ? 'blue' : val > 80 ? 'orange' : 'red'}>
-          {val.toFixed(0)}%
+          {val?.toFixed(0) || 0}%
         </Tag>
       )
     }
   ];
 
-  // Renderizado del header de resumen
+  // Renderizado del header de resumen - ✅ CORREGIDO
   const renderSummaryHeader = () => {
     if (!summary) return null;
 
@@ -561,7 +696,6 @@ const DeviationAnalysis = ({
                   color: Math.abs(summary.deviationPercent) > 10 ? theme.colors.error : theme.colors.bmGreenPrimary 
                 }}
                 prefix={<DollarOutlined />}
-                suffix="€"
               />
               <Text type="secondary" style={{ fontSize: 12 }}>
                 ({summary.deviationPercent > 0 ? '+' : ''}{summary.deviationPercent.toFixed(1)}%)
@@ -624,7 +758,7 @@ const DeviationAnalysis = ({
     );
   };
 
-  // ✅ CORRECCIÓN PRINCIPAL: Usar items API en lugar de TabPane
+  // ✅ CORRECCIÓN CRÍTICA: Usar items API de Ant Design v5
   const tabItems = [
     {
       key: 'pricing',
@@ -637,7 +771,7 @@ const DeviationAnalysis = ({
           )}
         </Space>
       ),
-      children: (
+      children: deviationPricing.length > 0 ? (
         <Table
           columns={pricingColumns}
           dataSource={getFilteredData(deviationPricing)}
@@ -650,6 +784,8 @@ const DeviationAnalysis = ({
             showQuickJumper: true
           }}
         />
+      ) : (
+        <Empty description="No hay datos de pricing disponibles" />
       )
     },
     {
@@ -663,7 +799,7 @@ const DeviationAnalysis = ({
           )}
         </Space>
       ),
-      children: (
+      children: deviationMargin.length > 0 ? (
         <Table
           columns={marginColumns}
           dataSource={getFilteredData(deviationMargin)}
@@ -676,6 +812,8 @@ const DeviationAnalysis = ({
             showQuickJumper: true
           }}
         />
+      ) : (
+        <Empty description="No hay datos de margen disponibles" />
       )
     },
     {
@@ -689,7 +827,7 @@ const DeviationAnalysis = ({
           )}
         </Space>
       ),
-      children: (
+      children: deviationVolume.length > 0 ? (
         <Table
           columns={volumeColumns}
           dataSource={getFilteredData(deviationVolume)}
@@ -702,6 +840,8 @@ const DeviationAnalysis = ({
             showQuickJumper: true
           }}
         />
+      ) : (
+        <Empty description="No hay datos de volumen disponibles" />
       )
     },
     {
@@ -712,7 +852,7 @@ const DeviationAnalysis = ({
           Incentivos
         </Space>
       ),
-      children: (
+      children: incentivesData.length > 0 ? (
         <Table
           columns={incentivesColumns}
           dataSource={incentivesData}
@@ -725,6 +865,8 @@ const DeviationAnalysis = ({
             showQuickJumper: true
           }}
         />
+      ) : (
+        <Empty description="No hay datos de incentivos disponibles" />
       )
     }
   ];
@@ -785,7 +927,7 @@ const DeviationAnalysis = ({
     >
       {renderSummaryHeader()}
       
-      {/* ✅ CORRECCIÓN PRINCIPAL: Usar items en lugar de TabPane */}
+      {/* ✅ CORRECCIÓN CRÍTICA: Usar items API de Ant Design v5 */}
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}

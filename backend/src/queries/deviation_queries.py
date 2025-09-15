@@ -4,6 +4,7 @@ deviation_queries.py
 Consultas para detección de desviaciones y anomalías financieras en Banca March.
 Incluye alertas sobre desviaciones de precio, margen, volumen y patrones anómalos.
 INTEGRADO con kpi_calculator.py para análisis de desviaciones estandarizados y clasificaciones automáticas.
+✅ CORREGIDO: Lógica de gastos aplicada por nivel (contrato/cliente/gestor/centro/segmento)
 """
 
 import logging
@@ -252,23 +253,23 @@ class DeviationQueries:
 
     # =================================================================
     # 2. DETECCIÓN DE ANOMALÍAS DE MARGEN (MEJORADAS CON KPI)
+    # ✅ CORREGIDAS: Aplicando lógica de gastos por GESTOR
     # =================================================================
 
     def analyze_margen_anomalies_enhanced(self, periodo: str = "2025-10", z_threshold: float = 2.0) -> QueryResult:
         """
         Detecta gestores con márgenes anómalos usando análisis estadístico mejorado con KPI.
+        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
         """
         query = """
-            WITH gestor_data AS (
+            WITH ingresos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
                     SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
-                             THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
-                             THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos_total
+                             THEN mov.IMPORTE ELSE 0 END) as ingresos_total
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
@@ -280,6 +281,24 @@ class DeviationQueries:
                   AND c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING ingresos_total > 0
+            ),
+            gastos_gestor AS (
+                SELECT
+                    g.GESTOR_ID,
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
+                FROM MAESTRO_GESTORES g
+                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                GROUP BY g.GESTOR_ID
+            ),
+            gestor_data AS (
+                SELECT
+                    ig.*,
+                    ABS(gg.gastos_total) as gastos_total
+                FROM ingresos_gestor ig
+                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
             )
             SELECT * FROM gestor_data
         """
@@ -342,31 +361,17 @@ class DeviationQueries:
     def analyze_margen_anomalies(self, periodo: str = "2025-10", z_threshold: float = 2.0) -> QueryResult:
         """
         FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
+        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
         """
         query = """
-            WITH gestor_margenes AS (
+            WITH ingresos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
                     SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
-                             THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
-                    SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
-                             THEN ABS(mov.IMPORTE) ELSE 0 END) as gastos_total,
-                    ROUND(
-                        CASE 
-                            WHEN SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
-                                           THEN mov.IMPORTE ELSE 0 END) > 0
-                            THEN (SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
-                                          THEN mov.IMPORTE ELSE 0 END) - 
-                                  SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0003', 'CR0014', 'CR0016', 'CR0017', 'CR0029') 
-                                           THEN ABS(mov.IMPORTE) ELSE 0 END)) /
-                                 SUM(CASE WHEN cdr.COD_LINEA_CDR IN ('CR0001', 'CR0008', 'CR0012') 
-                                          THEN mov.IMPORTE ELSE 0 END) * 100
-                            ELSE NULL
-                        END, 2
-                    ) as margen_neto
+                             THEN mov.IMPORTE ELSE 0 END) as ingresos_total
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
@@ -377,7 +382,33 @@ class DeviationQueries:
                 WHERE strftime('%Y-%m', COALESCE(mov.FECHA, mc.FECHA_ALTA)) <= ?
                     AND c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
-                HAVING margen_neto IS NOT NULL
+                HAVING ingresos_total > 0
+            ),
+            gastos_gestor AS (
+                SELECT
+                    g.GESTOR_ID,
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
+                FROM MAESTRO_GESTORES g
+                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                GROUP BY g.GESTOR_ID
+            ),
+            gestor_margenes AS (
+                SELECT
+                    ig.*,
+                    ABS(gg.gastos_total) as gastos_total,
+                    ROUND(
+                        CASE 
+                            WHEN ig.ingresos_total > 0
+                            THEN (ig.ingresos_total - ABS(gg.gastos_total)) / ig.ingresos_total * 100
+                            ELSE NULL
+                        END, 2
+                    ) AS margen_neto
+                FROM ingresos_gestor ig
+                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
+                WHERE ig.ingresos_total > 0
             ),
             estadisticas AS (
                 SELECT 
@@ -389,6 +420,7 @@ class DeviationQueries:
                         ELSE 0 
                     END as desv_estandar
                 FROM gestor_margenes
+                WHERE margen_neto IS NOT NULL
             )
             SELECT 
                 gm.GESTOR_ID,
@@ -434,14 +466,16 @@ class DeviationQueries:
 
     # =================================================================
     # 3. DETECCIÓN DE OUTLIERS DE VOLUMEN (MEJORADA)
+    # ✅ CORREGIDAS: Gastos por GESTOR
     # =================================================================
 
     def identify_volumen_outliers_enhanced(self, periodo: str = "2025-10", factor_outlier: float = 3.0) -> QueryResult:
         """
         Identifica gestores con volumen de contratos o actividad atípica con análisis contextual.
+        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
         """
         query = """
-            WITH actividad_gestores AS (
+            WITH ingresos_gestor AS (
                 SELECT 
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
@@ -460,6 +494,24 @@ class DeviationQueries:
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
+            ),
+            gastos_gestor AS (
+                SELECT
+                    g.GESTOR_ID,
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_totales
+                FROM MAESTRO_GESTORES g
+                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                GROUP BY g.GESTOR_ID
+            ),
+            actividad_gestores AS (
+                SELECT
+                    ig.*,
+                    ABS(gg.gastos_totales) as gastos_totales
+                FROM ingresos_gestor ig
+                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
             )
             SELECT * FROM actividad_gestores
         """
@@ -491,7 +543,7 @@ class DeviationQueries:
             if is_outlier:
                 eficiencia_analysis = self.kpi_calc.calculate_ratio_eficiencia(
                     ingresos=row['ingresos_generados'],
-                    gastos=row['total_contratos'] * 100  # proxy de coste medio por contrato
+                    gastos=row['gastos_totales']
                 )
 
                 enhanced_row = {
@@ -525,13 +577,119 @@ class DeviationQueries:
             query_sql=query
         )
 
+    def identify_volumen_outliers(self, periodo: str = "2025-10", factor_outlier: float = 3.0) -> QueryResult:
+        """
+        FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
+        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
+        """
+        query = """
+            WITH ingresos_gestor AS (
+                SELECT 
+                    g.GESTOR_ID,
+                    g.DESC_GESTOR,
+                    c.DESC_CENTRO,
+                    s.DESC_SEGMENTO,
+                    COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
+                    COUNT(DISTINCT CASE WHEN strftime('%Y-%m', mc.FECHA_ALTA) = ? 
+                                       THEN mc.CONTRATO_ID ELSE NULL END) as contratos_nuevos_periodo,
+                    COALESCE(COUNT(DISTINCT mov.MOVIMIENTO_ID), 0) as total_movimientos,
+                    COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_generados
+                FROM MAESTRO_GESTORES g
+                JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+                JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                    AND strftime('%Y-%m', mov.FECHA) = ?
+                WHERE c.IND_CENTRO_FINALISTA = 1
+                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
+            ),
+            gastos_gestor AS (
+                SELECT
+                    g.GESTOR_ID,
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_totales
+                FROM MAESTRO_GESTORES g
+                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                GROUP BY g.GESTOR_ID
+            ),
+            actividad_gestores AS (
+                SELECT
+                    ig.*,
+                    ABS(gg.gastos_totales) as gastos_totales
+                FROM ingresos_gestor ig
+                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
+            ),
+            medias AS (
+                SELECT 
+                    AVG(total_contratos) as media_contratos,
+                    AVG(contratos_nuevos_periodo) as media_nuevos,
+                    AVG(total_movimientos) as media_movimientos,
+                    AVG(ingresos_generados) as media_ingresos
+                FROM actividad_gestores
+            )
+            SELECT 
+                ag.GESTOR_ID,
+                ag.DESC_GESTOR,
+                ag.DESC_CENTRO,
+                ag.DESC_SEGMENTO,
+                ag.total_contratos,
+                ag.contratos_nuevos_periodo,
+                ag.total_movimientos,
+                ag.ingresos_generados,
+                ag.gastos_totales,
+                ROUND(m.media_contratos, 1) as media_contratos,
+                ROUND(m.media_nuevos, 1) as media_nuevos,
+                ROUND(m.media_movimientos, 1) as media_movimientos,
+                ROUND(m.media_ingresos, 2) as media_ingresos,
+                ROUND(ag.total_contratos / NULLIF(m.media_contratos, 0), 2) as ratio_contratos_vs_media,
+                ROUND(ag.contratos_nuevos_periodo / NULLIF(m.media_nuevos, 0), 2) as ratio_nuevos_vs_media,
+                CASE 
+                    WHEN ag.total_contratos >= m.media_contratos * ? THEN 'HIPERACTIVIDAD'
+                    WHEN ag.total_contratos <= m.media_contratos / ? THEN 'BAJA_ACTIVIDAD'
+                    WHEN ag.contratos_nuevos_periodo >= m.media_nuevos * ? THEN 'PICO_COMERCIAL'
+                    WHEN ag.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0 THEN 'SIN_ACTIVIDAD'
+                    ELSE 'NORMAL'
+                END as tipo_outlier
+            FROM actividad_gestores ag
+            CROSS JOIN medias m
+            WHERE (ag.total_contratos >= m.media_contratos * ? OR 
+                   ag.total_contratos <= m.media_contratos / ? OR
+                   ag.contratos_nuevos_periodo >= m.media_nuevos * ? OR
+                   (ag.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0))
+            ORDER BY ABS(ag.total_contratos - m.media_contratos) DESC
+        """
+
+        start_time = datetime.now()
+        results = execute_query(
+            query,
+            (periodo, periodo,
+             factor_outlier, factor_outlier, factor_outlier,
+             factor_outlier, factor_outlier, factor_outlier)
+        )
+        execution_time = (datetime.now() - start_time).total_seconds()
+
+        return QueryResult(
+            data=results,
+            query_type="volumen_outliers",
+            execution_time=execution_time,
+            row_count=len(results) if results else 0,
+            query_sql=query
+        )
+
+    # =================================================================
+    # 4. DETECCIÓN DE PATRONES TEMPORALES (MEJORADA)
+    # ✅ CORREGIDAS: Gastos por GESTOR
+    # =================================================================
+
     def detect_patron_temporal_anomalias_enhanced(self, gestor_id: str = None, num_periods: int = 6) -> QueryResult:
         """
         Detecta patrones temporales anómalos con análisis estadístico mejorado y KPI calculator.
-        (Refactor SQLite-safe: agregamos y DESPUÉS aplicamos LAG sobre el agregado)
+        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
         """
         query = """
-            WITH base AS (
+            WITH base_ingresos AS (
                 SELECT 
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
@@ -552,7 +710,7 @@ class DeviationQueries:
                 SELECT 
                     *,
                     LAG(ingresos_periodo, 1) OVER (PARTITION BY GESTOR_ID ORDER BY periodo) as ingresos_anterior
-                FROM base
+                FROM base_ingresos
                 ORDER BY GESTOR_ID, periodo DESC
                 LIMIT ?
             )
@@ -613,132 +771,10 @@ class DeviationQueries:
             query_sql=query
         )
 
-    def _classify_temporal_anomaly(self, z_score_abs: float, variacion_abs_pct: float) -> str:
-        """Clasificación de anomalías temporales"""
-        if z_score_abs >= 3.0 or variacion_abs_pct >= 100.0:
-            return 'VOLATILIDAD_EXTREMA'
-        elif z_score_abs >= 2.0 or variacion_abs_pct >= 50.0:
-            return 'ALTA_VOLATILIDAD'
-        elif z_score_abs >= 1.5 or variacion_abs_pct >= 25.0:
-            return 'CAMBIO_SIGNIFICATIVO'
-        elif variacion_abs_pct == 0:
-            return 'ESTANCAMIENTO'
-        else:
-            return 'NORMAL'
-
-    def _classify_volatility_level(self, z_score_abs: float, variacion_abs_pct: float) -> str:
-        """Clasificación del nivel de volatilidad"""
-        if z_score_abs >= 3.0:
-            return 'EXTREMA'
-        elif z_score_abs >= 2.0:
-            return 'ALTA'
-        elif z_score_abs >= 1.0:
-            return 'MODERADA'
-        else:
-            return 'BAJA'
-
-    def _interpret_temporal_pattern(self, z_score: float, variacion_pct: float) -> str:
-        """Interpretación contextual del patrón temporal"""
-        if z_score > 2.0:
-            return "Performance muy superior al promedio histórico"
-        elif z_score < -2.0:
-            return "Performance muy inferior al promedio histórico"
-        elif variacion_pct > 50.0:
-            return "Crecimiento acelerado respecto al período anterior"
-        elif variacion_pct < -50.0:
-            return "Caída significativa respecto al período anterior"
-        else:
-            return "Comportamiento dentro de rangos esperados"
-
-    def identify_volumen_outliers(self, periodo: str = "2025-10", factor_outlier: float = 3.0) -> QueryResult:
-        """
-        FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
-        """
-        query = """
-            WITH actividad_gestores AS (
-                SELECT 
-                    g.GESTOR_ID,
-                    g.DESC_GESTOR,
-                    c.DESC_CENTRO,
-                    s.DESC_SEGMENTO,
-                    COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
-                    COUNT(DISTINCT CASE WHEN strftime('%Y-%m', mc.FECHA_ALTA) = ? 
-                                       THEN mc.CONTRATO_ID ELSE NULL END) as contratos_nuevos_periodo,
-                    COALESCE(COUNT(DISTINCT mov.MOVIMIENTO_ID), 0) as total_movimientos,
-                    COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_generados
-                FROM MAESTRO_GESTORES g
-                JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
-                JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
-                WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
-            ),
-            medias AS (
-                SELECT 
-                    AVG(total_contratos) as media_contratos,
-                    AVG(contratos_nuevos_periodo) as media_nuevos,
-                    AVG(total_movimientos) as media_movimientos,
-                    AVG(ingresos_generados) as media_ingresos
-                FROM actividad_gestores
-            )
-            SELECT 
-                ag.GESTOR_ID,
-                ag.DESC_GESTOR,
-                ag.DESC_CENTRO,
-                ag.DESC_SEGMENTO,
-                ag.total_contratos,
-                ag.contratos_nuevos_periodo,
-                ag.total_movimientos,
-                ag.ingresos_generados,
-                ROUND(m.media_contratos, 1) as media_contratos,
-                ROUND(m.media_nuevos, 1) as media_nuevos,
-                ROUND(m.media_movimientos, 1) as media_movimientos,
-                ROUND(m.media_ingresos, 2) as media_ingresos,
-                ROUND(ag.total_contratos / NULLIF(m.media_contratos, 0), 2) as ratio_contratos_vs_media,
-                ROUND(ag.contratos_nuevos_periodo / NULLIF(m.media_nuevos, 0), 2) as ratio_nuevos_vs_media,
-                CASE 
-                    WHEN ag.total_contratos >= m.media_contratos * ? THEN 'HIPERACTIVIDAD'
-                    WHEN ag.total_contratos <= m.media_contratos / ? THEN 'BAJA_ACTIVIDAD'
-                    WHEN ag.contratos_nuevos_periodo >= m.media_nuevos * ? THEN 'PICO_COMERCIAL'
-                    WHEN ag.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0 THEN 'SIN_ACTIVIDAD'
-                    ELSE 'NORMAL'
-                END as tipo_outlier
-            FROM actividad_gestores ag
-            CROSS JOIN medias m
-            WHERE (ag.total_contratos >= m.media_contratos * ? OR 
-                   ag.total_contratos <= m.media_contratos / ? OR
-                   ag.contratos_nuevos_periodo >= m.media_nuevos * ? OR
-                   (ag.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0))
-            ORDER BY ABS(ag.total_contratos - m.media_contratos) DESC
-        """
-
-        start_time = datetime.now()
-        results = execute_query(
-            query,
-            (periodo, periodo,
-             factor_outlier, factor_outlier, factor_outlier,
-             factor_outlier, factor_outlier, factor_outlier)
-        )
-        execution_time = (datetime.now() - start_time).total_seconds()
-
-        return QueryResult(
-            data=results,
-            query_type="volumen_outliers",
-            execution_time=execution_time,
-            row_count=len(results) if results else 0,
-            query_sql=query
-        )
-
-    # =================================================================
-    # 4. DETECCIÓN DE PATRONES TEMPORALES (MANTENER ORIGINAL)
-    # =================================================================
-
     def detect_patron_temporal_anomalias(self, gestor_id: str = None, num_periods: int = 6) -> QueryResult:
         """
         Detecta patrones temporales anómalos en la evolución de KPIs.
-        FUNCIÓN ORIGINAL MANTENIDA
+        FUNCIÓN ORIGINAL MANTENIDA - sin cambios de gastos ya que no usa gastos
         """
         where_clause = "WHERE g.GESTOR_ID = ?" if gestor_id else "WHERE c.IND_CENTRO_FINALISTA = 1"
         params = (gestor_id, num_periods) if gestor_id else (num_periods,)
@@ -825,7 +861,7 @@ class DeviationQueries:
     def analyze_cross_producto_desviaciones(self, periodo: str = "2025-10") -> QueryResult:
         """
         Analiza correlaciones extrañas entre desviaciones de diferentes productos.
-        FUNCIÓN ORIGINAL MANTENIDA
+        FUNCIÓN ORIGINAL MANTENIDA - sin cambios de gastos ya que usa precios
         """
         query = """
             WITH producto_gestor_performance AS (
@@ -936,6 +972,43 @@ class DeviationQueries:
         else:
             return 'NORMAL'
 
+    def _classify_temporal_anomaly(self, z_score_abs: float, variacion_abs_pct: float) -> str:
+        """Clasificación de anomalías temporales"""
+        if z_score_abs >= 3.0 or variacion_abs_pct >= 100.0:
+            return 'VOLATILIDAD_EXTREMA'
+        elif z_score_abs >= 2.0 or variacion_abs_pct >= 50.0:
+            return 'ALTA_VOLATILIDAD'
+        elif z_score_abs >= 1.5 or variacion_abs_pct >= 25.0:
+            return 'CAMBIO_SIGNIFICATIVO'
+        elif variacion_abs_pct == 0:
+            return 'ESTANCAMIENTO'
+        else:
+            return 'NORMAL'
+
+    def _classify_volatility_level(self, z_score_abs: float, variacion_abs_pct: float) -> str:
+        """Clasificación del nivel de volatilidad"""
+        if z_score_abs >= 3.0:
+            return 'EXTREMA'
+        elif z_score_abs >= 2.0:
+            return 'ALTA'
+        elif z_score_abs >= 1.0:
+            return 'MODERADA'
+        else:
+            return 'BAJA'
+
+    def _interpret_temporal_pattern(self, z_score: float, variacion_pct: float) -> str:
+        """Interpretación contextual del patrón temporal"""
+        if z_score > 2.0:
+            return "Performance muy superior al promedio histórico"
+        elif z_score < -2.0:
+            return "Performance muy inferior al promedio histórico"
+        elif variacion_pct > 50.0:
+            return "Crecimiento acelerado respecto al período anterior"
+        elif variacion_pct < -50.0:
+            return "Caída significativa respecto al período anterior"
+        else:
+            return "Comportamiento dentro de rangos esperados"
+
     # =================================================================
     # 6. GENERADOR DINÁMICO DE QUERIES DE DESVIACIONES (MANTENER)
     # =================================================================
@@ -944,7 +1017,10 @@ class DeviationQueries:
         """
         Genera consultas de desviaciones SQL dinámicas usando GPT-4 para preguntas específicas.
         """
-        from ..prompts.system_prompts import get_deviation_generation_prompt
+        try:
+            from ..prompts.system_prompts import get_deviation_generation_prompt
+        except ImportError:
+            from prompts.system_prompts import get_deviation_generation_prompt
 
         try:
             system_prompt = get_deviation_generation_prompt(context)
@@ -964,10 +1040,10 @@ class DeviationQueries:
 
             generated_sql = response.choices[0].message.content.strip()
 
-            if "```sql" in generated_sql:
+            if "```sql" in generated_sql and "```" in generated_sql:
                 generated_sql = generated_sql.split("```sql")[1].split("```")[0].strip()
             elif "```" in generated_sql:
-                generated_sql = generated_sql.split("```")[0].strip()
+                generated_sql = generated_sql.split("```")[1].split("```")[0].strip()
 
             if not is_query_safe(generated_sql):
                 logger.error(f"❌ Consulta SQL bloqueada por seguridad: {generated_sql}")
@@ -1011,7 +1087,10 @@ class DeviationQueries:
         """
         Motor inteligente que decide qué query de desviaciones usar según la pregunta del usuario.
         """
-        from ..prompts.system_prompts import get_deviation_classification_prompt
+        try:
+            from ..prompts.system_prompts import get_deviation_classification_prompt
+        except ImportError:
+            from prompts.system_prompts import get_deviation_classification_prompt
 
         available_queries = [
             "detect_precio_desviaciones_criticas",
@@ -1035,7 +1114,7 @@ class DeviationQueries:
                 max_tokens=50
             )
 
-            predicted_query = classification_response.choices[0].message.content.strip()
+            predicted_query = classification_response.choices.message.content.strip()
             logger.info(f"🧠 Clasificación de desviaciones: '{user_question}' → {predicted_query}")
 
             if predicted_query in available_queries:

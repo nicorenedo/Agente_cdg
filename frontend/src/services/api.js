@@ -12,6 +12,7 @@
  * - Cancelación de requests (AbortController)
  * - WebSocket optimizado para Chat Agent v10.0
  * - SDK completo con TODOS los endpoints del backend
+ * - ✅ ACTUALIZADO: +40 nuevos endpoints añadidos
  */
 
 import axios from "axios";
@@ -198,7 +199,6 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
           clearInterval(heartbeatInterval);
         }
 
-
         // Timeout de 10s para recibir pong
         isAlive = false;
         setTimeout(() => {
@@ -282,14 +282,19 @@ const system = {
   version: (cfg) => unwrap(http.get("/version", cfg)),
 };
 
-// ✅ Catalogs / Periods
+// ✅ Catalogs / Periods - EXTENDIDO CON NUEVOS ENDPOINTS
 const catalogs = {
   periods: (cfg) => unwrap(http.get("/periods", cfg)),
   latestPeriod: (cfg) => unwrap(http.get("/periods/latest", cfg)),
   catalogs: (cfg) => unwrap(http.get("/catalogs", cfg)),
+  // ✅ NUEVOS: Períodos con métricas
+  periodMetricas: (periodo, cfg) =>
+    unwrap(http.get(`/periods/${encodeURIComponent(periodo)}/metricas`, cfg)),
+  comparePeriods: (periodoActual, periodoAnterior, cfg) =>
+    unwrap(http.get(`/periods/compare/${encodeURIComponent(periodoActual)}/${encodeURIComponent(periodoAnterior)}`, cfg)),
 };
 
-// ✅ Basic - COMPLETAMENTE EXTENDIDO
+// ✅ Basic - COMPLETAMENTE EXTENDIDO (TODOS LOS ENDPOINTS MANTENIDOS)
 const basic = {
   // Core básicos
   summary: (cfg) => unwrap(http.get("/basic/summary", cfg)),
@@ -393,6 +398,44 @@ const basic = {
     unwrap(http.get("/basic/contracts/count-by-gestor", cfg)),
 };
 
+// ✅ Analytics - COMPLETAMENTE NUEVO MÓDULO CON MÉTRICAS FINANCIERAS
+const analytics = {
+  // ✅ Varianza (existente)
+  variance: ({ scope, id, periodo, vs = "budget" }, cfg) =>
+    unwrap(
+      http.get("/analytics/variance", {
+        params: { scope, id: id || undefined, periodo, vs },
+        ...cfg,
+      })
+    ),
+  
+  // ✅ NUEVOS: Métricas por Centro
+  centroMetricas: (centroId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/analytics/centro/${centroId}/metricas`, { params: { periodo }, ...cfg })),
+  centroGestoresMetricas: (centroId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/analytics/centro/${centroId}/gestores-con-metricas`, { params: { periodo }, ...cfg })),
+  
+  // ✅ NUEVOS: Métricas por Segmento
+  segmentoMetricas: (segmentoId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/analytics/segmento/${encodeURIComponent(segmentoId)}/metricas`, { params: { periodo }, ...cfg })),
+  
+  // ✅ NUEVOS: Métricas por Gestor
+  gestorMetricasCompletas: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/analytics/gestor/${gestorId}/metricas-completas`, { params: { periodo }, ...cfg })),
+  gestorClientesMetricas: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/analytics/gestor/${gestorId}/clientes-con-metricas`, { params: { periodo }, ...cfg })),
+  
+  // ✅ NUEVOS: Métricas por Cliente
+  clienteMetricas: (clienteId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/analytics/cliente/${clienteId}/metricas`, { params: { periodo }, ...cfg })),
+  clienteContratosMetricas: (clienteId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/analytics/cliente/${clienteId}/contratos-con-metricas`, { params: { periodo }, ...cfg })),
+  
+  // ✅ NUEVOS: Métricas por Contrato
+  contratoDetalleCompleto: (contratoId, cfg) =>
+    unwrap(http.get(`/analytics/contrato/${contratoId}/detalle-completo`, cfg)),
+};
+
 // ✅ Data Queries - ACTUALIZADO
 const dataQueries = {
   pricesComparison: ({ gestorId, productoId, periodo } = {}, cfg) =>
@@ -448,7 +491,7 @@ const deviations = {
     unwrap(http.get("/deviations/critical", { params: { periodo, umbral }, ...cfg })),
 };
 
-// ✅ Incentives - EXTENDIDO
+// ✅ Incentives - COMPLETAMENTE EXTENDIDO
 const incentives = {
   scorecard: (gestorId, periodo, cfg) =>
     unwrap(http.get(`/incentives/gestor/${encodeURIComponent(gestorId)}`, { params: { periodo }, ...cfg })),
@@ -464,10 +507,17 @@ const incentives = {
       params: { gestor_id: gestorId || undefined, periodo }, 
       ...cfg 
     })),
+  
+  // ✅ NUEVOS: Incentivos detallados por entidad
+  centroTotal: (centroId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/incentives/centro/${centroId}/total`, { params: { periodo }, ...cfg })),
+  gestorDetalle: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/incentives/gestor/${encodeURIComponent(gestorId)}/detalle`, { params: { periodo }, ...cfg })),
 };
 
-// ✅ KPIs - MANTENIDO
+// ✅ KPIs - COMPLETAMENTE EXTENDIDO CON NUEVOS ENDPOINTS
 const kpis = {
+  // Existentes
   gestor: (gestorId, periodo, cfg) =>
     unwrap(
       http.get(`/kpis/gestor/${encodeURIComponent(gestorId)}`, {
@@ -482,17 +532,20 @@ const kpis = {
         ...cfg,
       })
     ),
-};
-
-// ✅ Analytics - MANTENIDO
-const analytics = {
-  variance: ({ scope, id, periodo, vs = "budget" }, cfg) =>
-    unwrap(
-      http.get("/analytics/variance", {
-        params: { scope, id: id || undefined, periodo, vs },
-        ...cfg,
-      })
-    ),
+  
+  // ✅ NUEVOS: KPIs financieros específicos por entidad
+  centroFinancieros: (centroId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/kpis/centro/${centroId}/financieros`, { params: { periodo }, ...cfg })),
+  gestorFinancieros: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/kpis/gestor/${gestorId}/financieros`, { params: { periodo }, ...cfg })),
+  gestorROE: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/kpis/gestor/${gestorId}/roe`, { params: { periodo }, ...cfg })),
+  gestorEficiencia: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/kpis/gestor/${gestorId}/eficiencia`, { params: { periodo }, ...cfg })),
+  centroMargen: (centroId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/kpis/centro/${centroId}/margen`, { params: { periodo }, ...cfg })),
+  centroBonusTotal: (centroId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/kpis/centro/${centroId}/bonus-total`, { params: { periodo }, ...cfg })),
 };
 
 // ✅ Charts - ACTUALIZADO CON NUEVOS MÉTODOS
@@ -533,11 +586,36 @@ const charts = {
     unwrap(http.get("/charts/gastos-by-centro", { params: { fecha, chart_type: chartType }, ...cfg })),
 };
 
-// ✅ Dashboards - EXTENDIDO
+// ✅ Dashboards - COMPLETAMENTE EXTENDIDO CON NUEVOS ENDPOINTS
 const dashboards = {
+  // Existentes
   templates: (cfg) => unwrap(http.get("/dashboards/templates", cfg)),
   build: (payload, cfg) => unwrap(http.post("/dashboards/build", toQueryBody(payload), cfg)),
   generate: (payload, cfg) => unwrap(http.post("/dashboards/generate", toQueryBody(payload), cfg)),
+  
+  // ✅ NUEVOS: Dashboards específicos para componentes frontend
+  gestorSummary: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/summary`, { params: { periodo }, ...cfg })),
+  gestorEvolution: (gestorId, cfg) =>
+    unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/evolution`, cfg)),
+  gestorProductos: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/productos`, { params: { periodo }, ...cfg })),
+  gestorAlertas: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/alertas`, { params: { periodo }, ...cfg })),
+  gestorComparative: (gestorId, periodo = "2025-10", cfg) =>
+    unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/comparative`, { params: { periodo }, ...cfg })),
+  
+  // ✅ NUEVOS: Dashboards de incentivos
+  incentivosSummary: (periodo = "2025-10", cfg) =>
+    unwrap(http.get("/dashboards/incentivos/summary", { params: { periodo }, ...cfg })),
+  incentivosTendencia: (cfg) =>
+    unwrap(http.get("/dashboards/incentivos/tendencia", cfg)),
+  
+  // ✅ NUEVOS: Dashboards comparativos
+  comparativeSummary: (periodo = "2025-10", cfg) =>
+    unwrap(http.get("/dashboards/comparative/summary", { params: { periodo }, ...cfg })),
+  matrizSegmentos: (periodo = "2025-10", cfg) =>
+    unwrap(http.get("/dashboards/matriz-segmentos", { params: { periodo }, ...cfg })),
 };
 
 // ✅ Reports - EXTENDIDO
@@ -670,16 +748,16 @@ const api = {
 
   // módulos actualizados
   system,
-  catalogs,
-  basic,                  // ✅ 35+ endpoints
-  kpis,
+  catalogs,               // ✅ +2 nuevos endpoints
+  basic,                  // ✅ 35+ endpoints (todos mantenidos)
+  analytics,              // ✅ +9 nuevos endpoints de métricas financieras
+  kpis,                   // ✅ +6 nuevos endpoints financieros específicos
   comparatives,           // ✅ +1 endpoint
   deviations,             // ✅ +3 endpoints  
-  incentives,             // ✅ +1 endpoint
-  analytics,
+  incentives,             // ✅ +3 nuevos endpoints detallados
   dataQueries,
   charts,                 // ✅ +1 endpoint
-  dashboards,             // ✅ +1 endpoint
+  dashboards,             // ✅ +9 nuevos endpoints específicos
   reports,
   kpiCalc,                // ✅ corregido
   security,
@@ -706,11 +784,11 @@ export {
   system,
   catalogs,
   basic,
+  analytics,
   kpis,
   comparatives,
   deviations,
   incentives,
-  analytics,
   dataQueries,
   charts,
   dashboards,

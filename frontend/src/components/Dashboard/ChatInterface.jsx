@@ -293,14 +293,29 @@ const ChatInterface = ({
     }, 150);
   }, [onNewChart, onReportGenerated]);
 
-  // ✅ INICIALIZAR WEBSOCKET - PROTEGIDO CONTRA DOBLE INICIALIZACIÓN
+  // ✅ INICIALIZAR WEBSOCKET - PROTEGIDO CONTRA DUPLICADOS
   const initializeWebSocket = useCallback(() => {
     if (!isMounted.current || initializationRef.current) return;
     if (sessionRef.current && sessionRef.current.readyState === WebSocket.CONNECTING) return;
-
+  
+    // ✅ NUEVA DETECCIÓN: Verificar si ya hay otro WebSocket activo
+    const existingConnections = chatService.getActiveConnections?.() || [];
+    const hasActiveConnection = existingConnections.some(conn => 
+      conn.userId === userId || conn.status === 'connected'
+    );
+  
+    if (hasActiveConnection) {
+      console.log('[ChatInterface] 🔄 Detectado WebSocket existente, usando HTTP fallback');
+      setUseWebSocket(false);
+      setConnectionStatus('http-fallback-auto');
+      setIsConnected(true);
+      initializationRef.current = false;
+      return;
+    }
+  
     console.log('[ChatInterface] 🌐 Initializing WebSocket with Perfect Integration...');
     initializationRef.current = true;
-
+  
     // Limpiar sesión anterior
     if (sessionRef.current) {
       try {
@@ -310,7 +325,7 @@ const ChatInterface = ({
       }
       sessionRef.current = null;
     }
-
+  
     try {
       const session = chatService.createChatSession(userId, {
         onMessage: handleChatMessage,
@@ -328,8 +343,17 @@ const ChatInterface = ({
             console.log('[ChatInterface] 🔌 WebSocket closed:', event?.code || 'unknown');
             setIsConnected(false);
             setConnectionStatus('disconnected');
-            initializationRef.current = false; // ✅ Permitir reconexión
-            attemptReconnect();
+            initializationRef.current = false;
+            
+            // ✅ NUEVA LÓGICA: Más conservador en reconexión
+            if (event?.code === 1005 || event?.code === 1012) {
+              console.log('[ChatInterface] 🔄 Código de conflicto detectado, cambiando a HTTP');
+              setUseWebSocket(false);
+              setConnectionStatus('http-fallback-conflict');
+              setIsConnected(true);
+            } else {
+              attemptReconnect();
+            }
           }
         },
         onError: (error) => {
@@ -337,8 +361,17 @@ const ChatInterface = ({
             console.error('[ChatInterface] ❌ WebSocket error:', error);
             setIsConnected(false);
             setConnectionStatus('error');
-            initializationRef.current = false; // ✅ Permitir reconexión
-            attemptReconnect();
+            initializationRef.current = false;
+            
+            // ✅ NUEVA LÓGICA: Cambiar a HTTP en caso de error persistente
+            if (connectionAttempts >= 2) {
+              console.log('[ChatInterface] 🔄 Múltiples errores, cambiando a HTTP');
+              setUseWebSocket(false);
+              setConnectionStatus('http-fallback-error');
+              setIsConnected(true);
+            } else {
+              attemptReconnect();
+            }
           }
         },
         onTyping: ({ active, analysis_type }) => {
@@ -350,10 +383,10 @@ const ChatInterface = ({
           }
         }
       });
-
+    
       sessionRef.current = session;
       session.connect();
-
+    
     } catch (error) {
       console.error('[ChatInterface] Error initializing WebSocket:', error);
       initializationRef.current = false;
@@ -361,7 +394,8 @@ const ChatInterface = ({
         attemptReconnect();
       }
     }
-  }, [userId, handleChatMessage]);
+  }, [userId, handleChatMessage, connectionAttempts]);
+
 
   // ✅ LÓGICA DE RECONEXIÓN - ESTABILIZADA
   const attemptReconnect = useCallback(() => {

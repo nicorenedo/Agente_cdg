@@ -106,6 +106,110 @@ class PeriodQueries:
             row_count=1,
             query_sql=periods_result.query_sql
         )
+        
+    # =====================================
+    # ANÁLISIS TEMPORAL DE MÉTRICAS
+    # =====================================
+    
+    def get_periodo_metricas_financieras(self, periodo: str) -> QueryResult:
+        """
+        ✅ Obtiene métricas financieras agregadas para un período específico
+        """
+        query = """
+        SELECT 
+            ? as periodo,
+            COUNT(DISTINCT g.GESTOR_ID) as total_gestores_activos,
+            COUNT(DISTINCT co.CLIENTE_ID) as total_clientes_activos,
+            COUNT(DISTINCT co.CONTRATO_ID) as total_contratos_activos,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_periodo,
+            COALESCE(SUM(CASE WHEN mov.IMPORTE < 0 THEN ABS(mov.IMPORTE) ELSE 0 END), 0) as gastos_periodo,
+            COALESCE(SUM(gc.IMPORTE), 0) as gastos_centros_periodo,
+            COUNT(DISTINCT mov.MOVIMIENTO_ID) as total_movimientos
+        FROM MAESTRO_GESTORES g
+        LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            AND strftime('%Y-%m', mov.FECHA) = ?
+        LEFT JOIN GASTOS_CENTRO gc ON strftime('%Y-%m', gc.FECHA) = ?
+        """
+        
+        start_time = datetime.now()
+        result = execute_query(query, (periodo, periodo, periodo), fetch_type="one")
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        if result:
+            ingresos = result['ingresos_periodo'] or 0
+            gastos_mov = result['gastos_periodo'] or 0
+            gastos_centros = result['gastos_centros_periodo'] or 0
+            gastos_totales = gastos_mov + gastos_centros
+            beneficio = ingresos - gastos_totales
+            
+            result.update({
+                'gastos_totales': gastos_totales,
+                'beneficio_neto': beneficio,
+                'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
+                'promedio_ingresos_por_gestor': round(ingresos / max(result['total_gestores_activos'], 1), 2),
+                'promedio_contratos_por_gestor': round(result['total_contratos_activos'] / max(result['total_gestores_activos'], 1), 1)
+            })
+        
+        return QueryResult(
+            data=[result] if result else [],
+            query_type="periodo_metricas_financieras",
+            execution_time=execution_time,
+            row_count=1 if result else 0,
+            query_sql=query
+        )
+    
+    def compare_periodos_metricas(self, periodo_actual: str, periodo_anterior: str) -> QueryResult:
+        """
+        ✅ Compara métricas financieras entre dos períodos
+        """
+        start_time = datetime.now()
+        
+        # Obtener métricas de ambos períodos
+        metricas_actual = self.get_periodo_metricas_financieras(periodo_actual)
+        metricas_anterior = self.get_periodo_metricas_financieras(periodo_anterior)
+        
+        if not metricas_actual.data or not metricas_anterior.data:
+            return QueryResult(
+                data=[],
+                query_type="compare_periodos_metricas_empty",
+                execution_time=0,
+                row_count=0,
+                query_sql="-- No data available for comparison"
+            )
+        
+        actual = metricas_actual.data[0]
+        anterior = metricas_anterior.data[0]
+        
+        # Calcular variaciones
+        comparacion = {
+            'periodo_actual': periodo_actual,
+            'periodo_anterior': periodo_anterior,
+            'ingresos_actual': actual['ingresos_periodo'],
+            'ingresos_anterior': anterior['ingresos_periodo'],
+            'ingresos_variacion_abs': actual['ingresos_periodo'] - anterior['ingresos_periodo'],
+            'ingresos_variacion_pct': round(((actual['ingresos_periodo'] - anterior['ingresos_periodo']) / max(anterior['ingresos_periodo'], 1) * 100), 2),
+            'beneficio_actual': actual['beneficio_neto'],
+            'beneficio_anterior': anterior['beneficio_neto'],
+            'beneficio_variacion_abs': actual['beneficio_neto'] - anterior['beneficio_neto'],
+            'beneficio_variacion_pct': round(((actual['beneficio_neto'] - anterior['beneficio_neto']) / max(abs(anterior['beneficio_neto']), 1) * 100), 2),
+            'contratos_actual': actual['total_contratos_activos'],
+            'contratos_anterior': anterior['total_contratos_activos'],
+            'contratos_variacion': actual['total_contratos_activos'] - anterior['total_contratos_activos'],
+            'gestores_actual': actual['total_gestores_activos'],
+            'gestores_anterior': anterior['total_gestores_activos']
+        }
+        
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        return QueryResult(
+            data=[comparacion],
+            query_type="compare_periodos_metricas",
+            execution_time=execution_time,
+            row_count=1,
+            query_sql="-- Comparison of two periods"
+        )
+    
 
     # ✅ VERSIONES ORIGINALES MANTENIDAS PARA COMPATIBILIDAD
     def get_available_periods(self) -> List[str]:

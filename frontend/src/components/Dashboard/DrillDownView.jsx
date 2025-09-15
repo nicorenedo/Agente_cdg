@@ -6,38 +6,38 @@ import {
   Input, 
   Button, 
   Space, 
-  Breadcrumb, 
   Tag, 
   Tooltip, 
-  Badge, 
   Typography, 
   Row, 
   Col,
   Statistic,
   Empty,
-  Divider
+  Divider,
+  Alert,
+  Progress
 } from 'antd';
 import {
   SearchOutlined,
   ReloadOutlined,
-  HomeOutlined,
   BankOutlined,
   UserOutlined,
   FileTextOutlined,
   DollarOutlined,
   TrophyOutlined,
-  WarningOutlined,
+  PercentageOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
   MinusOutlined,
-  RightOutlined,
   BarChartOutlined,
   TeamOutlined,
-  ShopOutlined,
-  AppstoreOutlined
+  AppstoreOutlined,
+  CalendarOutlined,
+  EuroCircleOutlined
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import api from '../../services/api';
+import analyticsService from '../../services/analyticsService';
 import ErrorState from '../common/ErrorState';
 import Loader from '../common/Loader';
 import theme from '../../styles/theme';
@@ -49,13 +49,12 @@ const DrillDownView = ({
   mode = 'direccion',
   periodo,
   gestorId = null,
-  defaultRootTab = null,
   onSelectLeaf = null,
   refreshToken = null,
   style = {},
   className = '',
 }) => {
-  // Normalizar período para asegurar que siempre sea string
+  // Normalizar período
   const normalizedPeriodo = useMemo(() => {
     if (!periodo) return "2025-10";
     if (typeof periodo === 'string') return periodo;
@@ -65,7 +64,7 @@ const DrillDownView = ({
     return String(periodo);
   }, [periodo]);
 
-  // Estados corregidos para expandible
+  // Estados
   const [rootData, setRootData] = useState([]);
   const [expandedRowKeys, setExpandedRowKeys] = useState([]);
   const [childDataMap, setChildDataMap] = useState({});
@@ -73,10 +72,9 @@ const DrillDownView = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchText, setSearchText] = useState('');
-  // ✅ Caché para contar contratos por cliente
-  const [contractsCountCache, setContractsCountCache] = useState({});
+  const [metricsCache, setMetricsCache] = useState({});
 
-  // ✅ CONFIGURACIÓN DUAL: Dirección y Gestor
+  // ✅ CONFIGURACIÓN ACTUALIZADA con nuevos endpoints de métricas
   const drillConfig = useMemo(() => ({
     direccion: [
       { 
@@ -85,9 +83,14 @@ const DrillDownView = ({
         icon: BankOutlined, 
         color: theme.colors.bmGreenPrimary,
         endpoint: () => api.basic.centros(),
+        metricsEndpoint: (centroId) => Promise.all([
+          analyticsService.getCentroKPIsFinancieros(centroId, normalizedPeriodo),
+          analyticsService.getCentroMargen(centroId, normalizedPeriodo),
+          analyticsService.getCentroBonusTotal(centroId, normalizedPeriodo)
+        ]),
         idKey: 'CENTRO_ID',
         nameKey: 'DESC_CENTRO',
-        metricsKey: 'num_contratos'
+        metricsKeys: ['ingresos', 'gastos', 'beneficio', 'roe', 'margen_pct', 'bonus_total']
       },
       { 
         key: 'gestores', 
@@ -95,9 +98,14 @@ const DrillDownView = ({
         icon: UserOutlined, 
         color: theme.colors.bmGreenLight,
         endpoint: (centroId) => api.basic.gestoresByCentro(centroId),
+        metricsEndpoint: (gestorId) => Promise.all([
+          analyticsService.getGestorKPIsFinancieros(gestorId, normalizedPeriodo),
+          analyticsService.getGestorROE(gestorId, normalizedPeriodo),
+          analyticsService.getIncentivesGestorDetalle(gestorId, normalizedPeriodo)
+        ]),
         idKey: 'GESTOR_ID',
         nameKey: 'DESC_GESTOR',
-        metricsKey: 'num_contratos'
+        metricsKeys: ['ingresos', 'gastos', 'beneficio', 'roe', 'margen_pct', 'bonus_total']
       },
       { 
         key: 'clientes', 
@@ -105,9 +113,10 @@ const DrillDownView = ({
         icon: TeamOutlined, 
         color: theme.colors.info,
         endpoint: (gestorId) => api.basic.clientesByGestor(gestorId),
+        metricsEndpoint: (clienteId) => analyticsService.getClienteMetricas(clienteId, normalizedPeriodo),
         idKey: 'CLIENTE_ID',
         nameKey: 'NOMBRE_CLIENTE',
-        metricsKey: 'num_contratos'
+        metricsKeys: ['beneficio', 'ingresos', 'num_contratos']
       },
       { 
         key: 'contratos', 
@@ -115,13 +124,13 @@ const DrillDownView = ({
         icon: FileTextOutlined, 
         color: theme.colors.success,
         endpoint: (clienteId) => api.basic.contractsByCliente(clienteId),
+        metricsEndpoint: (contratoId) => analyticsService.getContratoDetalleCompleto(contratoId),
         idKey: 'CONTRATO_ID',
-        nameKey: 'CONTRATO_ID', // ✅ CORRECCIÓN: Mostrar CONTRATO_ID como nombre
-        metricsKey: 'importe',
+        nameKey: 'CONTRATO_ID',
+        metricsKeys: ['importe', 'ingresos', 'margen', 'fecha_alta'],
         isLeaf: true
       }
     ],
-    // ✅ NUEVO: Configuración para modo gestor (Clientes → Contratos)
     gestor: [
       { 
         key: 'clientes', 
@@ -129,9 +138,10 @@ const DrillDownView = ({
         icon: TeamOutlined, 
         color: theme.colors.info,
         endpoint: (gestorIdParam) => api.basic.clientesByGestor(gestorIdParam || gestorId),
+        metricsEndpoint: (clienteId) => analyticsService.getClienteMetricas(clienteId, normalizedPeriodo),
         idKey: 'CLIENTE_ID',
         nameKey: 'NOMBRE_CLIENTE',
-        metricsKey: 'num_contratos'
+        metricsKeys: ['beneficio', 'ingresos', 'num_contratos']
       },
       { 
         key: 'contratos', 
@@ -139,134 +149,230 @@ const DrillDownView = ({
         icon: FileTextOutlined, 
         color: theme.colors.success,
         endpoint: (clienteId) => api.basic.contractsByCliente(clienteId),
+        metricsEndpoint: (contratoId) => analyticsService.getContratoDetalleCompleto(contratoId),
         idKey: 'CONTRATO_ID',
-        nameKey: 'CONTRATO_ID', // ✅ CORRECCIÓN: Mostrar CONTRATO_ID como nombre
-        metricsKey: 'importe',
+        nameKey: 'CONTRATO_ID',
+        metricsKeys: ['importe', 'ingresos', 'margen', 'fecha_alta'],
         isLeaf: true
       }
     ]
-  }), [gestorId]);
+  }), [gestorId, normalizedPeriodo]);
 
-  // ✅ FUNCIÓN PARA CONTAR CONTRATOS POR CLIENTE
-  const loadContractsCount = useCallback(async (clienteId) => {
-    try {
-      const contracts = await api.basic.contractsByCliente(clienteId);
-      return contracts.length;
-    } catch (err) {
-      console.error(`Error loading contracts count for client ${clienteId}:`, err);
-      return 0;
+  // ✅ FUNCIÓN MEJORADA PARA CARGAR MÉTRICAS REALES
+  const loadMetrics = useCallback(async (id, levelConfig) => {
+    const cacheKey = `${levelConfig.key}_${id}_${normalizedPeriodo}`;
+    
+    if (metricsCache[cacheKey]) {
+      console.log(`[DrillDownView] Using cached metrics for ${levelConfig.key}:${id}`);
+      return metricsCache[cacheKey];
     }
-  }, []);
 
-  // ✅ NORMALIZACIÓN MEJORADA con métricas financieras reales
-  const normalizeData = useCallback(async (rawData, levelConfig) => {
+    try {
+      console.log(`[DrillDownView] 📊 Loading metrics for ${levelConfig.key}:${id}...`);
+      let metrics = {};
+      
+      if (levelConfig.metricsEndpoint) {
+        const metricsData = await levelConfig.metricsEndpoint(id);
+        console.log(`[DrillDownView] Raw metrics data for ${id}:`, metricsData);
+        
+        // ✅ PROCESAMIENTO ESPECÍFICO POR TIPO DE ENDPOINT
+        if (Array.isArray(metricsData)) {
+          // Para centros y gestores que devuelven arrays de promesas
+          const [kpisData, roeData, bonusData] = metricsData;
+          
+          metrics = {
+            ingresos: kpisData?.total_ingresos || kpisData?.ingresos_totales || 0,
+            gastos: kpisData?.total_gastos || kpisData?.gastos_totales || 0,
+            beneficio: kpisData?.beneficio_neto || kpisData?.margen_total || (kpisData?.total_ingresos || 0) - (kpisData?.total_gastos || 0),
+            roe: roeData?.roe_pct || kpisData?.roe_pct || 0,
+            margen_pct: kpisData?.margen_neto_pct || kpisData?.margen_pct || 0,
+            bonus_total: bonusData?.total_incentivos || bonusData?.bonus_total || bonusData?.incentivo_final_eur || 0,
+            clasificacion_roe: roeData?.clasificacion || kpisData?.clasificacion_roe || 'N/A',
+            clasificacion_margen: kpisData?.clasificacion_margen || 'N/A'
+          };
+        } else if (metricsData && typeof metricsData === 'object') {
+          // ✅ PROCESAMIENTO MEJORADO para clientes y contratos
+          if (levelConfig.key === 'contratos') {
+            // Para contratos usando el endpoint detalle-completo
+            metrics = {
+              ingresos: Math.abs(metricsData.ingresos_total || metricsData.importe || 0),
+              gastos: Math.abs(metricsData.gastos_total || 0),
+              beneficio: metricsData.beneficio_neto || 0,
+              margen: metricsData.margen_neto_pct || 0,
+              margen_pct: metricsData.margen_neto_pct || 0,
+              num_movimientos: metricsData.num_movimientos || 0,
+              fecha_alta: metricsData.FECHA_ALTA || metricsData.fecha_alta,
+              producto: metricsData.DESC_PRODUCTO || metricsData.producto,
+              promedio_movimiento: metricsData.promedio_por_movimiento || 0
+            };
+          } else {
+            // Para clientes usando el endpoint cliente/metricas
+            metrics = {
+              ingresos: Math.abs(metricsData.ingresos_totales || metricsData.total_ingresos || 0),
+              beneficio: metricsData.beneficio_neto || metricsData.beneficio || 0,
+              margen: metricsData.margen_neto || 0,
+              margen_pct: metricsData.margen_pct || 0,
+              num_contratos: metricsData.num_contratos || metricsData.total_contratos || 0,
+              total_movimientos: metricsData.total_movimientos || 0
+            };
+          }
+        }
+      }
+      
+      console.log(`[DrillDownView] ✅ Processed metrics for ${levelConfig.key}:${id}:`, metrics);
+      setMetricsCache(prev => ({ ...prev, [cacheKey]: metrics }));
+      return metrics;
+      
+    } catch (error) {
+      console.warn(`[DrillDownView] ⚠️ Error loading metrics for ${levelConfig.key}:${id}:`, error.message);
+      return {};
+    }
+  }, [metricsCache, normalizedPeriodo]);
+
+  // ✅ NUEVA FUNCIÓN: Cargar métricas bajo demanda para centros
+  const loadCentroMetricsOnDemand = useCallback(async (centroId) => {
+    const levelConfig = drillConfig.direccion[0]; // Configuración de centros
+    if (!levelConfig?.metricsEndpoint) return {};
+
+    console.log(`[DrillDownView] 📊 Loading on-demand metrics for centro: ${centroId}`);
+    
+    try {
+      const metrics = await loadMetrics(centroId, levelConfig);
+      
+      // Actualizar el rootData con las métricas cargadas
+      setRootData(prevData => 
+        prevData.map(item => {
+          if (item.id === centroId) {
+            const ingresos = Math.round(Math.abs(metrics.ingresos || 0));
+            const gastos = Math.round(Math.abs(metrics.gastos || 0));
+            const beneficio = Math.round(metrics.beneficio || (ingresos - gastos));
+            const margen_pct = Math.round((metrics.margen_pct || 0) * 100) / 100;
+            const roe = Math.round((metrics.roe || 0) * 100) / 100;
+            const alerta = Math.abs(margen_pct) >= 15 ? 'success' : 
+                          Math.abs(margen_pct) >= 10 ? 'warning' : 
+                          beneficio < 0 ? 'error' : 'warning';
+
+            return {
+              ...item,
+              ingresos,
+              gastos,
+              beneficio,
+              margen_pct,
+              roe,
+              bonus_total: Math.round(metrics.bonus_total || 0),
+              alerta,
+              clasificacion_roe: metrics.clasificacion_roe || 'N/A',
+              clasificacion_margen: metrics.clasificacion_margen || 'N/A',
+              _needsMetricsLoad: false,
+              _metrics: metrics
+            };
+          }
+          return item;
+        })
+      );
+      
+      return metrics;
+    } catch (error) {
+      console.warn(`[DrillDownView] ⚠️ Error loading centro metrics for ${centroId}:`, error.message);
+      return {};
+    }
+  }, [drillConfig, loadMetrics]);
+
+  // ✅ NORMALIZACIÓN MEJORADA con métricas reales - CORREGIDO PARA CENTROS
+  const normalizeData = useCallback(async (rawData, levelConfig, forceLoadMetrics = false) => {
     if (!Array.isArray(rawData)) return [];
+    
+    console.log(`[DrillDownView] 🔄 Normalizing ${rawData.length} items for level: ${levelConfig.key}`);
     
     const normalizedData = await Promise.all(
       rawData.map(async (item, index) => {
         const id = item[levelConfig.idKey] || item.id || index;
         let nombre = item[levelConfig.nameKey] || item.nombre || `Item ${index + 1}`;
         
-        // ✅ CORRECCIÓN: Para contratos, mostrar ID + Producto
+        // Para contratos, mostrar ID + Producto
         if (levelConfig.key === 'contratos') {
-          nombre = `${item.CONTRATO_ID} - ${item.DESC_PRODUCTO}`;
+          nombre = `${item.CONTRATO_ID} - ${item.DESC_PRODUCTO || 'Producto'}`;
         }
 
-        // ✅ CORRECCIÓN: Contar contratos reales por cliente
-        let contratos = item[levelConfig.metricsKey] || item.num_contratos || 0;
-        if (levelConfig.key === 'clientes' && !contractsCountCache[id]) {
-          contratos = await loadContractsCount(id);
-          setContractsCountCache(prev => ({ ...prev, [id]: contratos }));
-        } else if (levelConfig.key === 'clientes' && contractsCountCache[id]) {
-          contratos = contractsCountCache[id];
+        // ✅ CARGAR MÉTRICAS REALES - FORZAR CARGA O CARGAR BAJO DEMANDA
+        let metrics = {};
+        if (levelConfig.metricsEndpoint && (forceLoadMetrics || levelConfig.key !== 'centros')) {
+          console.log(`[DrillDownView] 📊 Loading metrics for ${levelConfig.key}:${id} (forced: ${forceLoadMetrics})`);
+          metrics = await loadMetrics(id, levelConfig);
+        } else if (levelConfig.key === 'centros') {
+          console.log(`[DrillDownView] ⚠️ Deferred metrics loading for centro ${id}`);
+          // Para centros, usar datos básicos disponibles y marcar para carga posterior
+          metrics = {
+            ingresos: 0,
+            gastos: 0,
+            beneficio: 0,
+            roe: 0,
+            margen_pct: 0,
+            bonus_total: 0,
+            _needsMetricsLoad: true
+          };
         }
         
-        // ✅ CÁLCULOS DE MÉTRICAS BASADOS EN DATOS REALES
-        const ingresos = calculateIngresos(item, levelConfig, contratos);
-        const margen = calculateMargen(item, ingresos, levelConfig);
-        const margenPct = calculateMargenPct(margen, ingresos);
+        // ✅ CÁLCULOS MEJORADOS basados en datos reales o básicos
+        const ingresos = metrics.ingresos || item.ingresos_total || item.total_ingresos || 0;
+        const gastos = metrics.gastos || item.gastos_total || item.total_gastos || 0;
+        const beneficio = metrics.beneficio || (ingresos - gastos);
+        
+        // Margen porcentual más robusto
+        let margen_pct = metrics.margen_pct || metrics.margen || 0;
+        if (margen_pct === 0 && ingresos > 0) {
+          margen_pct = (beneficio / ingresos) * 100;
+        }
+        
+        // ROE y score
+        const roe = metrics.roe || 0;
+        const score = Math.min(Math.round((roe * 0.4) + (Math.abs(margen_pct) * 0.6)), 100);
+        
+        // ✅ ESTADO DE ALERTA MEJORADO - Para centros sin métricas, estado neutral
+        const alerta = metrics._needsMetricsLoad ? 'warning' :
+                      Math.abs(margen_pct) >= 15 ? 'success' : 
+                      Math.abs(margen_pct) >= 10 ? 'warning' : 
+                      beneficio < 0 ? 'error' : 'warning';
         
         return {
           key: id,
           id: id,
           nombre: nombre,
-          contratos: contratos,
-          ingresos: ingresos,
-          margen: margen,
-          margen_pct: margenPct,
-          score: calculateScore(margenPct, contratos),
-          alerta: checkAlerta(margenPct),
-          tendencia: calculateTendencia(item),
+          ingresos: Math.round(Math.abs(ingresos)),
+          gastos: Math.round(Math.abs(gastos)),
+          beneficio: Math.round(beneficio),
+          margen_pct: Math.round(margen_pct * 100) / 100,
+          roe: Math.round(roe * 100) / 100,
+          bonus_total: Math.round(metrics.bonus_total || 0),
+          num_contratos: metrics.num_contratos || item.num_contratos || 0,
+          score: Math.max(0, score),
+          alerta: alerta,
+          clasificacion_roe: metrics.clasificacion_roe || 'N/A',
+          clasificacion_margen: metrics.clasificacion_margen || 'N/A',
+          _needsMetricsLoad: metrics._needsMetricsLoad || false,
+          
+          // Datos específicos por tipo
           segmento: item.DESC_SEGMENTO || item.segmento || null,
-          fechaAlta: item.FECHA_ALTA || null,
-          producto: item.DESC_PRODUCTO || null,
-          // Datos originales para referencia
+          fechaAlta: metrics.fecha_alta || item.FECHA_ALTA || null,
+          producto: metrics.producto || item.DESC_PRODUCTO || null,
+          centro: item.DESC_CENTRO || null,
+          num_movimientos: metrics.num_movimientos || 0,
+          
+          // Metadatos
           _originalData: item,
-          _level: levelConfig.key
+          _level: levelConfig.key,
+          _metrics: metrics
         };
       })
     );
     
-    return normalizedData;
-  }, [contractsCountCache, loadContractsCount]);
+    // Ordenar por ingresos descendente
+    const sorted = normalizedData.sort((a, b) => (b.ingresos || 0) - (a.ingresos || 0));
+    console.log(`[DrillDownView] ✅ Normalized ${sorted.length} items for ${levelConfig.key}`);
+    return sorted;
+  }, [loadMetrics]);
 
-  // ✅ HELPERS MEJORADOS para cálculos KPI con datos más realistas
-  const calculateIngresos = (item, levelConfig, contratos) => {
-    // Usar datos reales si existen
-    if (item.ingresos_totales) return item.ingresos_totales;
-    if (item.volumen_total) return item.volumen_total;
-    
-    // Estimaciones realistas basadas en tipo de producto y contratos
-    if (levelConfig.key === 'contratos') {
-      // Contratos individuales: basado en tipo de producto
-      if (item.DESC_PRODUCTO?.includes('Hipotecario')) return 120000 + Math.random() * 80000;
-      if (item.DESC_PRODUCTO?.includes('Fondo')) return 80000 + Math.random() * 120000;
-      if (item.DESC_PRODUCTO?.includes('Depósito')) return 45000 + Math.random() * 55000;
-      return 60000 + Math.random() * 40000;
-    }
-    
-    // Clientes: agregación de sus contratos
-    const ingresosPorContrato = 85000; // Promedio realista
-    return contratos * ingresosPorContrato * (0.8 + Math.random() * 0.4);
-  };
-
-  const calculateMargen = (item, ingresos, levelConfig) => {
-    if (item.margen_total) return item.margen_total;
-    if (item.beneficio) return item.beneficio;
-    
-    // Márgenes realistas por tipo de producto bancario
-    let margenPct = 0.10; // 10% base
-    
-    if (levelConfig.key === 'contratos') {
-      if (item.DESC_PRODUCTO?.includes('Hipotecario')) margenPct = 0.12; // 12%
-      if (item.DESC_PRODUCTO?.includes('Fondo')) margenPct = 0.15; // 15%
-      if (item.DESC_PRODUCTO?.includes('Depósito')) margenPct = 0.08; // 8%
-    }
-    
-    return Math.round(ingresos * (margenPct + (Math.random() - 0.5) * 0.05));
-  };
-
-  const calculateMargenPct = (margen, ingresos) => {
-    if (ingresos === 0) return 0;
-    return Math.round((margen / ingresos) * 100 * 100) / 100;
-  };
-
-  const calculateScore = (margenPct, contratos) => {
-    const margenScore = Math.min(margenPct * 4, 60);
-    const volumenScore = Math.min((contratos || 0) * 2, 40);
-    return Math.round(margenScore + volumenScore);
-  };
-
-  const checkAlerta = (margenPct) => {
-    return margenPct < 10 ? 'error' : margenPct < 15 ? 'warning' : 'success';
-  };
-
-  const calculateTendencia = (item) => {
-    const variacion = item.variacion_mes || item.crecimiento || (Math.random() - 0.5) * 20;
-    return variacion > 5 ? 'up' : variacion < -5 ? 'down' : 'stable';
-  };
-
-  // ✅ CARGA DE DATOS RAÍZ adaptada a ambos modos
+  // ✅ CARGA DE DATOS RAÍZ - FORZAR CARGA DE MÉTRICAS PARA CENTROS
   const loadRootData = useCallback(async () => {
     const levelConfig = drillConfig[mode] && drillConfig[mode][0];
     if (!levelConfig) return;
@@ -279,13 +385,15 @@ const DrillDownView = ({
       let rawData;
       if (mode === 'gestor' && gestorId) {
         rawData = await levelConfig.endpoint(gestorId);
+        console.log(`[DrillDownView] ✅ Root data loaded for gestor ${gestorId}:`, rawData);
       } else {
         rawData = await levelConfig.endpoint();
+        console.log('[DrillDownView] ✅ Root data loaded:', rawData);
       }
       
-      console.log('[DrillDownView] ✅ Root data loaded:', rawData);
-      
-      const normalizedData = await normalizeData(rawData, levelConfig);
+      // ✅ FORZAR CARGA DE MÉTRICAS PARA CENTROS EN MODO DIRECCIÓN
+      const shouldForceLoad = mode === 'direccion' && levelConfig.key === 'centros';
+      const normalizedData = await normalizeData(rawData, levelConfig, shouldForceLoad);
       setRootData(normalizedData);
       
     } catch (err) {
@@ -304,7 +412,7 @@ const DrillDownView = ({
     return configs[levelIndex];
   }, [drillConfig, mode]);
 
-  // ✅ MANEJO DE EXPANSIÓN corregido
+  // ✅ MANEJO DE EXPANSIÓN - ACTUALIZADO para cargar métricas de centros si es necesario
   const handleRowExpand = useCallback(async (expanded, record) => {
     const recordId = record.id;
     console.log(`[DrillDownView] 🔽 Row expand ${expanded ? 'OPEN' : 'CLOSE'}:`, recordId);
@@ -316,6 +424,12 @@ const DrillDownView = ({
         }
         return prev;
       });
+
+      // ✅ CARGAR MÉTRICAS DE CENTROS BAJO DEMANDA SI ES NECESARIO
+      if (record._needsMetricsLoad && record._level === 'centros') {
+        console.log(`[DrillDownView] 🔄 Loading centro metrics on expand for: ${recordId}`);
+        await loadCentroMetricsOnDemand(recordId);
+      }
 
       if (!childDataMap[recordId]) {
         const currentLevel = record._level || (mode === 'gestor' ? 'clientes' : 'centros');
@@ -336,7 +450,9 @@ const DrillDownView = ({
           const rawChildData = await nextLevelConfig.endpoint(recordId);
           console.log(`[DrillDownView] ✅ Child data loaded for ${recordId}:`, rawChildData);
           
-          const normalizedChildData = await normalizeData(rawChildData, nextLevelConfig);
+          // ✅ PARA GESTORES (hijos de centros), FORZAR CARGA DE MÉTRICAS
+          const forceLoadMetrics = nextLevelConfig.key === 'gestores';
+          const normalizedChildData = await normalizeData(rawChildData, nextLevelConfig, forceLoadMetrics);
           
           setChildDataMap(prev => ({
             ...prev,
@@ -370,13 +486,15 @@ const DrillDownView = ({
     } else {
       setExpandedRowKeys(prev => prev.filter(key => key !== recordId));
     }
-  }, [mode, drillConfig, normalizeData, childDataMap, getLevelConfig]);
+  }, [mode, drillConfig, normalizeData, childDataMap, getLevelConfig, loadCentroMetricsOnDemand]);
 
-  // ✅ COLUMNAS DINÁMICAS con condicionales por nivel
+  // ✅ COLUMNAS DINÁMICAS ACTUALIZADAS con indicadores de carga
   const getColumns = useCallback((levelConfig) => {
     const columns = [
       {
-        title: levelConfig.key === 'contratos' ? 'Contrato ID - Producto' : 'Nombre',
+        title: levelConfig.key === 'contratos' ? 'Contrato - Producto' : 
+               levelConfig.key === 'centros' ? 'Centro' :
+               levelConfig.key === 'gestores' ? 'Gestor' : 'Cliente',
         dataIndex: 'nombre',
         key: 'nombre',
         fixed: 'left',
@@ -390,13 +508,23 @@ const DrillDownView = ({
               </div>
               {record.segmento && (
                 <Text type="secondary" style={{ fontSize: 11 }}>
-                  {record.segmento}
+                  Segmento: {record.segmento}
                 </Text>
               )}
               {record.fechaAlta && (
-                <Text type="secondary" style={{ fontSize: 10 }}>
-                  Alta: {new Date(record.fechaAlta).toLocaleDateString()}
+                <Text type="secondary" style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CalendarOutlined /> {new Date(record.fechaAlta).toLocaleDateString('es-ES')}
                 </Text>
+              )}
+              {record.num_movimientos > 0 && (
+                <Text type="secondary" style={{ fontSize: 10 }}>
+                  {record.num_movimientos} movimientos
+                </Text>
+              )}
+              {record.clasificacion_roe && record.clasificacion_roe !== 'N/A' && (
+                <Tag size="small" color={record.alerta === 'success' ? 'green' : record.alerta === 'warning' ? 'orange' : 'red'}>
+                  {record.clasificacion_roe}
+                </Tag>
               )}
             </div>
           </div>
@@ -407,92 +535,235 @@ const DrillDownView = ({
       }
     ];
 
-    // ✅ CORRECCIÓN: Solo mostrar contratos si NO es nivel hoja (contratos)
-    if (!levelConfig.isLeaf) {
-      columns.push({
-        title: 'Contratos',
-        dataIndex: 'contratos',
-        key: 'contratos',
-        width: 100,
-        render: (value) => (
+    // ✅ INGRESOS (siempre mostrar) - ACTUALIZADO con indicador de carga
+    columns.push({
+      title: 'Ingresos',
+      dataIndex: 'ingresos',
+      key: 'ingresos',
+      width: 120,
+      render: (value, record) => (
+        <div>
           <Statistic
             value={value || 0}
-            formatter={val => new Intl.NumberFormat('es-ES').format(val)}
-            valueStyle={{ fontSize: 14, color: theme.colors.textPrimary }}
+            prefix={record._needsMetricsLoad ? 
+              <Tooltip title="Expandir fila para cargar métricas">
+                <BarChartOutlined style={{ color: theme.colors.warning }} />
+              </Tooltip> : 
+              <EuroCircleOutlined />
+            }
+            formatter={val => record._needsMetricsLoad ? 'Pendiente...' : new Intl.NumberFormat('es-ES', { 
+              style: 'currency', 
+              currency: 'EUR',
+              notation: 'compact'
+            }).format(val)}
+            valueStyle={{ 
+              fontSize: 13, 
+              color: record._needsMetricsLoad ? theme.colors.warning : theme.colors.textPrimary 
+            }}
+          />
+          {record._needsMetricsLoad && (
+            <div style={{ fontSize: 10, color: theme.colors.warning }}>
+              Expandir para cargar
+            </div>
+          )}
+        </div>
+      ),
+      sorter: (a, b) => (a.ingresos || 0) - (b.ingresos || 0),
+    });
+
+    // ✅ BENEFICIO/MARGEN para centros y gestores
+    if (levelConfig.key === 'centros' || levelConfig.key === 'gestores') {
+      columns.push({
+        title: 'Beneficio',
+        dataIndex: 'beneficio',
+        key: 'beneficio',
+        width: 120,
+        render: (value, record) => (
+          <div>
+            <Statistic
+              value={value || 0}
+              formatter={val => record._needsMetricsLoad ? 'Pendiente...' : new Intl.NumberFormat('es-ES', { 
+                style: 'currency', 
+                currency: 'EUR',
+                notation: 'compact'
+              }).format(val)}
+              valueStyle={{ 
+                fontSize: 13, 
+                color: record._needsMetricsLoad ? theme.colors.warning : 
+                       value >= 0 ? theme.colors.success : theme.colors.error 
+              }}
+            />
+            <div style={{ fontSize: 10, color: '#666' }}>
+              Margen: {record._needsMetricsLoad ? '-' : `${Math.abs(record.margen_pct || 0).toFixed(1)}%`}
+            </div>
+          </div>
+        ),
+        sorter: (a, b) => (a.beneficio || 0) - (b.beneficio || 0),
+      });
+
+      // ✅ ROE para centros y gestores
+      columns.push({
+        title: 'ROE',
+        dataIndex: 'roe',
+        key: 'roe',
+        width: 100,
+        render: (value, record) => (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ 
+              fontWeight: 600, 
+              fontSize: 14,
+              color: record._needsMetricsLoad ? theme.colors.warning :
+                     value >= 15 ? theme.colors.success : 
+                     value >= 10 ? theme.colors.warning : theme.colors.error 
+            }}>
+              {record._needsMetricsLoad ? '-' : `${value?.toFixed(1) || 0}%`}
+            </div>
+            {!record._needsMetricsLoad && (
+              <Progress 
+                percent={Math.min(value || 0, 25) * 4} 
+                showInfo={false}
+                strokeColor={value >= 15 ? theme.colors.success : 
+                            value >= 10 ? theme.colors.warning : theme.colors.error}
+                size="small"
+              />
+            )}
+          </div>
+        ),
+        sorter: (a, b) => (a.roe || 0) - (b.roe || 0),
+      });
+
+      // ✅ BONUS para centros y gestores
+      columns.push({
+        title: 'Bonus',
+        dataIndex: 'bonus_total',
+        key: 'bonus_total',
+        width: 100,
+        render: (value, record) => (
+          <Statistic
+            value={value || 0}
+            prefix={<TrophyOutlined />}
+            formatter={val => record._needsMetricsLoad ? '-' : new Intl.NumberFormat('es-ES', { 
+              style: 'currency', 
+              currency: 'EUR',
+              notation: 'compact'
+            }).format(val)}
+            valueStyle={{ 
+              fontSize: 12, 
+              color: record._needsMetricsLoad ? theme.colors.warning :
+                     value > 0 ? theme.colors.bmGreenPrimary : theme.colors.textSecondary 
+            }}
           />
         ),
-        sorter: (a, b) => (a.contratos || 0) - (b.contratos || 0),
+        sorter: (a, b) => (a.bonus_total || 0) - (b.bonus_total || 0),
       });
     }
 
-    // Siempre mostrar ingresos, margen y score
-    columns.push(
-      {
-        title: 'Ingresos',
-        dataIndex: 'ingresos',
-        key: 'ingresos',
+    // ✅ BENEFICIO para clientes
+    if (levelConfig.key === 'clientes') {
+      columns.push({
+        title: 'Beneficio',
+        dataIndex: 'beneficio',
+        key: 'beneficio',
         width: 120,
-        render: (value) => (
-          <Statistic
-            value={value || 0}
-            formatter={val => `€${new Intl.NumberFormat('es-ES', { notation: 'compact' }).format(val)}`}
-            valueStyle={{ fontSize: 13, color: theme.colors.textPrimary }}
-          />
+        render: (value, record) => (
+          <div>
+            <Statistic
+              value={value || 0}
+              formatter={val => new Intl.NumberFormat('es-ES', { 
+                style: 'currency', 
+                currency: 'EUR',
+                notation: 'compact'
+              }).format(val)}
+              valueStyle={{ 
+                fontSize: 13, 
+                color: value >= 0 ? theme.colors.success : theme.colors.error 
+              }}
+            />
+            <div style={{ fontSize: 10, color: '#666' }}>
+              {record.num_contratos} contrato{record.num_contratos !== 1 ? 's' : ''}
+            </div>
+          </div>
+        ),
+        sorter: (a, b) => (a.beneficio || 0) - (b.beneficio || 0),
+      });
+    }
+
+    // ✅ IMPORTE para contratos
+    if (levelConfig.key === 'contratos') {
+      columns.push({
+        title: 'Importe',
+        dataIndex: 'ingresos',
+        key: 'importe_contrato',
+        width: 120,
+        render: (value, record) => (
+          <div>
+            <Statistic
+              value={value || 0}
+              formatter={val => new Intl.NumberFormat('es-ES', { 
+                style: 'currency', 
+                currency: 'EUR'
+              }).format(val)}
+              valueStyle={{ fontSize: 13, color: theme.colors.textPrimary }}
+            />
+            {record.margen_pct !== 0 && (
+              <div style={{ 
+                fontSize: 10, 
+                color: record.margen_pct > 0 ? theme.colors.success : theme.colors.error 
+              }}>
+                {record.margen_pct > 0 ? '+' : ''}{Math.abs(record.margen_pct).toFixed(1)}% margen
+              </div>
+            )}
+          </div>
         ),
         sorter: (a, b) => (a.ingresos || 0) - (b.ingresos || 0),
-      },
-      {
-        title: 'Margen',
-        dataIndex: 'margen_pct',
-        key: 'margen_pct',
-        width: 100,
-        render: (value, record) => (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: 600, color: record.alerta === 'success' ? theme.colors.success : 
-                        record.alerta === 'warning' ? theme.colors.warning : theme.colors.error }}>
-              {value?.toFixed(1) || 0}%
-            </div>
-            <div style={{ fontSize: 11, color: '#666' }}>
-              €{new Intl.NumberFormat('es-ES', { notation: 'compact' }).format(record.margen || 0)}
-            </div>
+      });
+    }
+
+    // ✅ ESTADO/ALERTA (común para todos)
+    columns.push({
+      title: 'Estado',
+      dataIndex: 'alerta',
+      key: 'estado',
+      width: 100,
+      render: (value, record) => (
+        <div style={{ textAlign: 'center' }}>
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              backgroundColor: value === 'success' ? theme.colors.success :
+                             value === 'warning' ? theme.colors.warning : theme.colors.error,
+              color: 'white',
+              fontSize: 12,
+              fontWeight: 600,
+              marginBottom: 4
+            }}
+          >
+            {record._needsMetricsLoad ? '⏳' : 
+             value === 'success' ? '✓' : value === 'warning' ? '!' : '✗'}
           </div>
-        ),
-        sorter: (a, b) => (a.margen_pct || 0) - (b.margen_pct || 0),
-      },
-      {
-        title: 'Score',
-        dataIndex: 'score',
-        key: 'score',
-        width: 80,
-        render: (value, record) => (
-          <div style={{ textAlign: 'center' }}>
-            <div 
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                backgroundColor: record.alerta === 'success' ? theme.colors.success :
-                               record.alerta === 'warning' ? theme.colors.warning : theme.colors.error,
-                color: 'white',
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {value || 0}
-            </div>
+          <div style={{ fontSize: 10, color: '#666' }}>
+            {record._needsMetricsLoad ? 'Pendiente' :
+             value === 'success' ? 'Óptimo' : value === 'warning' ? 'Atención' : 'Crítico'}
           </div>
-        ),
-        sorter: (a, b) => (a.score || 0) - (b.score || 0),
-      }
-    );
+        </div>
+      ),
+      filters: [
+        { text: 'Óptimo', value: 'success' },
+        { text: 'Atención', value: 'warning' },
+        { text: 'Crítico', value: 'error' }
+      ],
+      onFilter: (value, record) => record.alerta === value,
+    });
 
     return columns;
   }, [searchText]);
 
-  // ✅ RENDERIZADO DE FILAS EXPANDIDAS mejorado
+  // ✅ RENDERIZADO DE FILAS EXPANDIDAS MEJORADO
   const expandedRowRender = useCallback((record) => {
     const recordId = record.id;
     const childInfo = childDataMap[recordId];
@@ -533,200 +804,252 @@ const DrillDownView = ({
     const { data, config } = childInfo;
     const columns = getColumns(config);
 
+    // ✅ MÉTRICAS AGREGADAS mejoradas
+    const totalIngresos = data.reduce((acc, item) => acc + (item.ingresos || 0), 0);
+    const totalBeneficio = data.reduce((acc, item) => acc + (item.beneficio || 0), 0);
+    const avgMargen = data.length > 0 ? data.reduce((acc, item) => acc + Math.abs(item.margen_pct || 0), 0) / data.length : 0;
+    const totalBonus = data.reduce((acc, item) => acc + (item.bonus_total || 0), 0);
+
     return (
-      <div style={{ margin: '16px 0', backgroundColor: '#fafafa', borderRadius: 6, padding: '12px' }}>
-        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <Text strong style={{ color: theme.colors.bmGreenPrimary }}>
-              <config.icon style={{ marginRight: 6 }} />
-              {config.label} de {record.nombre}
-            </Text>
-            <Text type="secondary" style={{ marginLeft: 12, fontSize: 12 }}>
-              {data.length} registros
-            </Text>
+      <div style={{ 
+        margin: '16px 0', 
+        backgroundColor: '#fafafa', 
+        borderRadius: 6, 
+        padding: '16px',
+        border: `1px solid ${theme.colors.borderLight}`,
+        maxHeight: '600px',
+        overflow: 'auto'
+      }}>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <Text strong style={{ color: theme.colors.bmGreenPrimary, fontSize: 16 }}>
+                <config.icon style={{ marginRight: 8 }} />
+                {config.label} de {record.nombre}
+              </Text>
+              <Text type="secondary" style={{ marginLeft: 12, fontSize: 12 }}>
+                {data.length} registros encontrados
+              </Text>
+            </div>
           </div>
-          {/* ✅ Métricas resumidas */}
-          <Space>
-            <Statistic 
-              title="Total Ingresos" 
-              value={data.reduce((acc, item) => acc + (item.ingresos || 0), 0)} 
-              formatter={val => `€${new Intl.NumberFormat('es-ES', {notation: 'compact'}).format(val)}`}
-              valueStyle={{ fontSize: 12 }}
-            />
-            <Statistic 
-              title="Margen Promedio" 
-              value={data.length > 0 ? data.reduce((acc, item) => acc + (item.margen_pct || 0), 0) / data.length : 0} 
-              formatter={val => `${val.toFixed(1)}%`}
-              valueStyle={{ fontSize: 12 }}
-            />
-          </Space>
+          
+          {/* ✅ PANEL DE MÉTRICAS AGREGADAS */}
+          <Row gutter={16} style={{ marginBottom: 12 }}>
+            <Col span={6}>
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="Total Ingresos" 
+                  value={totalIngresos}
+                  formatter={val => new Intl.NumberFormat('es-ES', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    notation: 'compact'
+                  }).format(val)}
+                  valueStyle={{ fontSize: 14, color: theme.colors.bmGreenPrimary }}
+                />
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="Total Beneficio" 
+                  value={totalBeneficio}
+                  formatter={val => new Intl.NumberFormat('es-ES', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    notation: 'compact'
+                  }).format(val)}
+                  valueStyle={{ 
+                    fontSize: 14, 
+                    color: totalBeneficio >= 0 ? theme.colors.success : theme.colors.error 
+                  }}
+                />
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="Margen Promedio" 
+                  value={avgMargen}
+                  formatter={val => `${val.toFixed(1)}%`}
+                  valueStyle={{ 
+                    fontSize: 14,
+                    color: avgMargen >= 15 ? theme.colors.success : 
+                           avgMargen >= 10 ? theme.colors.warning : theme.colors.error
+                  }}
+                />
+              </Card>
+            </Col>
+            {totalBonus > 0 && (
+              <Col span={6}>
+                <Card size="small" style={{ textAlign: 'center' }}>
+                  <Statistic 
+                    title="Total Bonus" 
+                    value={totalBonus}
+                    prefix={<TrophyOutlined />}
+                    formatter={val => new Intl.NumberFormat('es-ES', {
+                      style: 'currency',
+                      currency: 'EUR',
+                      notation: 'compact'
+                    }).format(val)}
+                    valueStyle={{ fontSize: 14, color: theme.colors.bmGreenPrimary }}
+                  />
+                </Card>
+              </Col>
+            )}
+          </Row>
         </div>
-        
+
         <Table
           columns={columns}
           dataSource={data}
-          rowKey="id"
-          pagination={false}
           size="small"
-          scroll={{ x: 800 }}
-          expandable={
-            !config.isLeaf ? {
-              expandedRowKeys: expandedRowKeys,
-              onExpand: handleRowExpand,
-              rowExpandable: () => true,
-              expandedRowRender: expandedRowRender,
-            } : undefined
-          }
-          onRow={(record) => ({
-            onClick: () => {
-              if (config.isLeaf && onSelectLeaf) {
-                console.log('[DrillDownView] 🍃 Leaf selected:', record);
-                onSelectLeaf(record);
-              }
-            },
-            style: { cursor: config.isLeaf ? 'pointer' : 'default' }
-          })}
+          pagination={{
+            size: 'small',
+            pageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: ['5', '10', '20']
+          }}
+          scroll={{ x: true }}
+          expandable={config.isLeaf ? undefined : {
+            onExpand: handleRowExpand,
+            expandedRowKeys: expandedRowKeys,
+            expandedRowRender: expandedRowRender
+          }}
+          locale={{
+            emptyText: <Empty description={`No hay ${config.label.toLowerCase()} disponibles`} />
+          }}
         />
       </div>
     );
-  }, [childDataMap, loadingChildren, expandedRowKeys, handleRowExpand, getColumns, onSelectLeaf]);
+  }, [childDataMap, loadingChildren, getColumns, expandedRowKeys, handleRowExpand]);
 
-  // Efectos
+  // Effects
   useEffect(() => {
-    if (normalizedPeriodo && (mode === 'direccion' || (mode === 'gestor' && gestorId))) {
-      loadRootData();
-    }
-  }, [normalizedPeriodo, mode, gestorId, loadRootData, refreshToken]);
-
-  // Handlers
-  const handleRefresh = useCallback(() => {
-    console.log('[DrillDownView] 🔄 Refreshing...');
-    setExpandedRowKeys([]);
-    setChildDataMap({});
-    setLoadingChildren({});
-    setContractsCountCache({}); // ✅ Limpiar caché de contratos
     loadRootData();
   }, [loadRootData]);
 
-  // ✅ VALIDACIÓN de configuración
-  const rootLevelConfig = drillConfig[mode] && drillConfig[mode][0];
-  if (!rootLevelConfig) {
+  useEffect(() => {
+    if (refreshToken) {
+      loadRootData();
+    }
+  }, [refreshToken, loadRootData]);
+
+  // Handlers
+  const handleRefresh = useCallback(() => {
+    setChildDataMap({});
+    setExpandedRowKeys([]);
+    setMetricsCache({});
+    loadRootData();
+  }, [loadRootData]);
+
+  const handleSearch = useCallback((value) => {
+    setSearchText(value);
+  }, []);
+
+  if (loading) {
+    return <Loader tip="Cargando análisis navegable..." />;
+  }
+
+  if (error) {
     return (
-      <Card className={className} style={style}>
-        <Empty description={`Configuración de drill-down no disponible para modo: ${mode}`} />
+      <ErrorState 
+        error={error} 
+        onRetry={handleRefresh}
+        style={{ height: '100%' }}
+      />
+    );
+  }
+
+  const currentLevelConfig = drillConfig[mode] && drillConfig[mode][0];
+  if (!currentLevelConfig) {
+    return (
+      <Card style={style} className={className}>
+        <Empty 
+          description="Configuración no disponible para este modo" 
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       </Card>
     );
   }
 
-  const rootColumns = getColumns(rootLevelConfig);
-  const modeTitle = mode === 'gestor' ? 'Mi Cartera' : 'Vista Corporativa';
-  const searchPlaceholder = mode === 'gestor' ? 'Buscar clientes...' : 'Buscar centros...';
+  const columns = getColumns(currentLevelConfig);
 
   return (
     <Card
-      className={`drill-down-view ${className}`}
-      style={{
-        borderRadius: theme.token.borderRadius,
-        boxShadow: '0 4px 12px rgba(27, 94, 85, 0.08)',
-        ...style
-      }}
-    >
-      {/* Header */}
-      <div style={{ marginBottom: theme.spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: theme.spacing.md }}>
-          <div>
-            <Title level={4} style={{ margin: 0, color: theme.colors.bmGreenPrimary }}>
-              <BarChartOutlined style={{ marginRight: 8 }} />
-              Análisis Navegable - {modeTitle}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Space>
+            <BarChartOutlined style={{ color: theme.colors.bmGreenPrimary }} />
+            <Title level={5} style={{ margin: 0 }}>
+              Análisis Navegable - Vista {mode === 'gestor' ? 'Personal' : 'Corporativa'}
             </Title>
             <Text type="secondary">
-              Expande las filas para navegar por la jerarquía • Período: {normalizedPeriodo}
-              {mode === 'gestor' && gestorId && ` • Gestor: ${gestorId}`}
+              Navega por la jerarquía expandiendo filas • Período: {normalizedPeriodo}
             </Text>
-          </div>
+          </Space>
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={loading}>
+            <Search
+              placeholder={`Buscar ${currentLevelConfig.label.toLowerCase()}...`}
+              allowClear
+              onSearch={handleSearch}
+              style={{ width: 200 }}
+            />
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={handleRefresh}
+              disabled={loading}
+            >
               Actualizar
             </Button>
           </Space>
         </div>
-
-        {/* Herramientas */}
-        <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} sm={12} md={8}>
-            <Search
-              placeholder={searchPlaceholder}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: '100%' }}
-              allowClear
-            />
-          </Col>
-          <Col xs={24} sm={12} md={16}>
-            <div style={{ 
-              display: 'flex', 
-              gap: theme.spacing.md, 
-              alignItems: 'center',
-              padding: theme.spacing.sm,
-              backgroundColor: theme.colors.backgroundLight,
-              borderRadius: 6,
-              border: `1px solid ${theme.colors.borderLight}`
-            }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                💡 Haz clic en el símbolo ▶ para expandir y ver detalles
-              </Text>
-            </div>
-          </Col>
-        </Row>
-      </div>
-
-      {/* Tabla Principal */}
-      {loading ? (
-        <Loader 
-          tip={`Cargando ${mode === 'gestor' ? 'clientes' : 'centros'}...`}
-          style={{ minHeight: 400 }}
-        />
-      ) : error ? (
-        <ErrorState
-          error={error}
-          message="Error al cargar datos del drill-down"
-          onRetry={handleRefresh}
-          style={{ minHeight: 400 }}
-        />
-      ) : (
-        <Table
-          columns={rootColumns}
-          dataSource={rootData}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} de ${total} ${mode === 'gestor' ? 'clientes' : 'centros'}`,
-            pageSizeOptions: ['10', '20', '50'],
-            defaultPageSize: 10,
-          }}
-          expandable={{
-            expandedRowKeys: expandedRowKeys,
-            onExpand: handleRowExpand,
-            rowExpandable: (record) => !rootLevelConfig.isLeaf,
-            expandedRowRender: expandedRowRender,
-          }}
-          scroll={{ x: 1000 }}
-          size="middle"
-          bordered={false}
-          className="drill-down-table"
-        />
-      )}
+      }
+      style={style}
+      className={className}
+      styles={{ body: { padding: '16px' } }}
+    >
+      <Table
+        columns={columns}
+        dataSource={rootData}
+        size="middle"
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: true,
+          showQuickJumper: true,
+          pageSizeOptions: ['5', '10', '20', '50'],
+          showTotal: (total, range) => 
+            `${range[0]}-${range[1]} de ${total} ${currentLevelConfig.label.toLowerCase()}`
+        }}
+        scroll={{ x: 1200 }}
+        expandable={{
+          onExpand: handleRowExpand,
+          expandedRowKeys: expandedRowKeys,
+          expandedRowRender: expandedRowRender,
+          expandIcon: ({ expanded, onExpand, record }) => 
+            expanded ? (
+              <MinusOutlined onClick={e => onExpand(record, e)} style={{ color: theme.colors.bmGreenPrimary }} />
+            ) : (
+              <ArrowDownOutlined onClick={e => onExpand(record, e)} style={{ color: theme.colors.bmGreenPrimary }} />
+            )
+        }}
+        locale={{
+          emptyText: <Empty description={`No hay ${currentLevelConfig.label.toLowerCase()} disponibles`} />
+        }}
+        rowClassName={(record) => 
+          record.alerta === 'error' ? 'row-critical' : 
+          record.alerta === 'warning' ? 'row-warning' : 'row-success'
+        }
+      />
     </Card>
   );
 };
 
 DrillDownView.propTypes = {
   mode: PropTypes.oneOf(['direccion', 'gestor']).isRequired,
-  periodo: PropTypes.oneOfType([PropTypes.string, PropTypes.object]).isRequired,
+  periodo: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
   gestorId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  defaultRootTab: PropTypes.string,
   onSelectLeaf: PropTypes.func,
   refreshToken: PropTypes.any,
   style: PropTypes.object,
