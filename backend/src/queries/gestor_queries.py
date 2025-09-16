@@ -91,7 +91,7 @@ class GestorQueries:
             ),
             gastos AS (
                 SELECT
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as total_gastos
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as total_gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -160,7 +160,7 @@ class GestorQueries:
             'total_contratos': r['total_contratos'],
             'total_clientes': r['total_clientes'],
             'total_ingresos': r['total_ingresos'] or 0,
-            'total_gastos': abs(r['total_gastos'] or 0),
+            'total_gastos': r['total_gastos'] or 0,
             'patrimonio_total': r['patrimonio_total'] or 0,
 
             # KPIs
@@ -261,7 +261,7 @@ class GestorQueries:
         for r in raw:
             # Calcular gastos por producto usando precio real
             gastos_producto_query = """
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_producto
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_producto
                 FROM MAESTRO_CONTRATOS mc
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON mc.PRODUCTO_ID = p.PRODUCTO_ID
                     AND p.SEGMENTO_ID = (SELECT SEGMENTO_ID FROM MAESTRO_GESTORES WHERE GESTOR_ID = ?)
@@ -269,7 +269,7 @@ class GestorQueries:
                 WHERE mc.GESTOR_ID = ? AND mc.PRODUCTO_ID = ?
             """
             gastos_res = execute_query(gastos_producto_query, (gestor_id, gestor_id, r['PRODUCTO_ID']))
-            gastos_producto = abs(gastos_res[0]['gastos_producto']) if gastos_res else 0
+            gastos_producto = gastos_res[0]['gastos_producto'] if gastos_res else 0
             
             eficiencia = self.kpi_calc.calculate_ratio_eficiencia(
                 ingresos=r['volumen_total_producto'],
@@ -350,7 +350,7 @@ class GestorQueries:
             ),
             gastos AS (
                 SELECT
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as total_gastos
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as total_gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -411,7 +411,7 @@ class GestorQueries:
                 WHERE cont.GESTOR_ID = ? AND strftime('%Y-%m', mov.FECHA) = ?
             ),
             gastos AS (
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as total_gastos
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as total_gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -455,7 +455,7 @@ class GestorQueries:
                 WHERE cont.GESTOR_ID = ? AND strftime('%Y-%m', mov.FECHA) = ?
             ),
             gastos AS (
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -503,7 +503,7 @@ class GestorQueries:
                 WHERE cont.GESTOR_ID = ? AND strftime('%Y-%m', mov.FECHA) = ?
             ),
             gastos AS (
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -540,7 +540,7 @@ class GestorQueries:
                 WHERE cont.GESTOR_ID = ? AND strftime('%Y-%m', mov.FECHA) = ?
             ),
             gastos AS (
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -598,7 +598,7 @@ class GestorQueries:
                 WHERE cont.GESTOR_ID = ? AND strftime('%Y-%m', mov.FECHA) = ?
             ),
             gastos AS (
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -770,7 +770,7 @@ class GestorQueries:
                     ) ingresos
                     JOIN (
                         SELECT g.GESTOR_ID,
-                               COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as total_gastos
+                               COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as total_gastos
                         FROM MAESTRO_GESTORES g
                         LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                         LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -861,7 +861,7 @@ class GestorQueries:
             gastos_centro AS (
                 SELECT
                     c.CENTRO_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_centro
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_centro
                 FROM MAESTRO_CENTROS c
                 LEFT JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
@@ -917,7 +917,7 @@ class GestorQueries:
             gastos_segmento AS (
                 SELECT
                     s.SEGMENTO_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_segmento
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_segmento
                 FROM MAESTRO_SEGMENTOS s
                 LEFT JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
@@ -985,7 +985,7 @@ class GestorQueries:
             
             # Calcular gastos del producto usando precio real
             gastos_producto_query = """
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_producto
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_producto
                 FROM MAESTRO_CONTRATOS mc
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON mc.PRODUCTO_ID = p.PRODUCTO_ID
                     AND p.SEGMENTO_ID = (SELECT SEGMENTO_ID FROM MAESTRO_GESTORES WHERE GESTOR_ID = ?)
@@ -993,7 +993,7 @@ class GestorQueries:
                 WHERE mc.GESTOR_ID = ? AND mc.PRODUCTO_ID = ?
             """
             gastos_res = execute_query(gastos_producto_query, (gestor_id, gestor_id, r['PRODUCTO_ID']))
-            gastos_producto = abs(gastos_res[0]['gastos_producto']) if gastos_res else 0
+            gastos_producto = gastos_res[0]['gastos_producto'] if gastos_res else 0
             
             ef = self.kpi_calc.calculate_ratio_eficiencia(r['volumen'] or 0, gastos_producto)
             out.append({
@@ -1100,7 +1100,7 @@ class GestorQueries:
             GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
         ),
         gastos_gestor AS (
-            SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_periodo
+            SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_periodo
             FROM MAESTRO_GESTORES g
             LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
             LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1201,7 +1201,7 @@ class GestorQueries:
             GROUP BY strftime('%Y-%m', mov.FECHA)
         ),
         gastos_gestor_total AS (
-            SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) / 6 as gastos_promedio_mensual
+            SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) / 6 as gastos_promedio_mensual
             FROM MAESTRO_GESTORES g
             LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
             LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1266,7 +1266,7 @@ class GestorQueries:
         gastos_por_producto AS (
             SELECT 
                 mc.PRODUCTO_ID,
-                COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_producto
+                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_producto
             FROM MAESTRO_CONTRATOS mc
             LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON mc.PRODUCTO_ID = p.PRODUCTO_ID
                 AND p.SEGMENTO_ID = (SELECT SEGMENTO_ID FROM MAESTRO_GESTORES WHERE GESTOR_ID = ?)
@@ -1399,7 +1399,7 @@ class GestorQueries:
             ) ingresos ON g.GESTOR_ID = ingresos.GESTOR_ID
             JOIN (
                 SELECT g.GESTOR_ID,
-                       COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_gestor
+                       COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_gestor
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1438,7 +1438,7 @@ class GestorQueries:
                 ) ingresos ON g.GESTOR_ID = ingresos.GESTOR_ID
                 LEFT JOIN (
                     SELECT g.GESTOR_ID,
-                           COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                           COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
                     FROM MAESTRO_GESTORES g
                     LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                     LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1524,7 +1524,7 @@ class GestorQueries:
                 GROUP BY strftime('%Y-%m', mov.FECHA)
             ),
             gastos_gestor AS (
-                SELECT COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) / 2 as gastos_mes
+                SELECT COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) / 2 as gastos_mes
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1594,7 +1594,7 @@ class GestorQueries:
                 ) ingresos ON g.GESTOR_ID = ingresos.GESTOR_ID
                 LEFT JOIN (
                     SELECT g.GESTOR_ID,
-                           COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_gestor
+                           COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_gestor
                     FROM MAESTRO_GESTORES g
                     LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                     LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1629,7 +1629,7 @@ class GestorQueries:
                 ) ingresos ON g2.GESTOR_ID = ingresos.GESTOR_ID
                 LEFT JOIN (
                     SELECT g.GESTOR_ID,
-                           COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_par
+                           COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_par
                     FROM MAESTRO_GESTORES g
                     LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                     LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1707,7 +1707,7 @@ class GestorQueries:
                     ) ingresos ON g.GESTOR_ID = ingresos.GESTOR_ID
                     LEFT JOIN (
                         SELECT g.GESTOR_ID,
-                               COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                               COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
                         FROM MAESTRO_GESTORES g
                         LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                         LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
@@ -1763,7 +1763,7 @@ class GestorQueries:
                     ) ingresos ON g.GESTOR_ID = ingresos.GESTOR_ID
                     LEFT JOIN (
                         SELECT g.GESTOR_ID,
-                               COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                               COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
                         FROM MAESTRO_GESTORES g
                         LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
                         LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 

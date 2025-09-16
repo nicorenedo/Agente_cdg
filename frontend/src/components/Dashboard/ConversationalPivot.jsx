@@ -1,5 +1,5 @@
 // frontend/src/components/Dashboard/ConversationalPivot.jsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   Card, 
   Input, 
@@ -31,21 +31,30 @@ import {
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import chatService from '../../services/chatService';
-import analyticsService from '../../services/analyticsService';
+import analyticsService, { 
+  PIVOTABLE_CONFIG, 
+  validatePivotCombination, 
+  getPivotableChartData 
+} from '../../services/analyticsService';
 import theme from '../../styles/theme';
 
 const { TextArea } = Input;
 const { Text } = Typography;
 
 /**
- * ✅ ConversationalPivot v11.1 - Perfect Integration FIXED
+ * ✅ ConversationalPivot v11.1 - Perfect Integration ENHANCED
  * 
- * CORRECCIONES v11.1:
- * 1. ✅ UserIds únicos para evitar colisiones con ChatInterface
- * 2. ✅ Detección automática de conflictos WebSocket 
- * 3. ✅ Fallback automático a HTTP-only cuando hay múltiples componentes
- * 4. ✅ Layout completamente responsivo
- * 5. ✅ Mejor gestión de errores y reconexiones
+ * NUEVAS MEJORAS v11.1:
+ * 1. ✅ Integración con PIVOTABLE_CONFIG para sugerencias dinámicas
+ * 2. ✅ Uso de getPivotableChartData() como método primario 
+ * 3. ✅ Validación con validatePivotCombination() antes de pivotear
+ * 4. ✅ Sugerencias contextuales basadas en configuración dinámica
+ * 5. ✅ Parser local mejorado con fallback inteligente
+ * 6. ✅ UserIds únicos para evitar colisiones WebSocket
+ * 7. ✅ Detección automática de conflictos con modo HTTP-only
+ * 8. ✅ Layout completamente responsivo
+ * 9. ✅ Integración perfecta con InteractiveCharts mediante onChartUpdate
+ * 10. ✅ Solo modifica el gráfico de análisis general (unified)
  */
 const ConversationalPivot = ({
   mode = 'direccion',
@@ -68,8 +77,8 @@ const ConversationalPivot = ({
   const [availableQueries, setAvailableQueries] = useState([]);
   const [integrationStatus, setIntegrationStatus] = useState('idle'); // 'idle' | 'processing' | 'success' | 'error'
 
-  // ✅ USER ID ÚNICO POR MODO - FIXED COLLISION
-  const userId = React.useMemo(() => {
+  // ✅ USER ID ÚNICO POR MODO - ENHANCED COLLISION AVOIDANCE
+  const userId = useMemo(() => {
     const baseUserId = gestorId ? String(gestorId) : 'anonymous';
     const timestamp = Date.now().toString(36).slice(-4);
     const random = Math.random().toString(36).slice(-4);
@@ -91,17 +100,23 @@ const ConversationalPivot = ({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // ✅ CARGAR CONFIGURACIÓN INICIAL
+  // ✅ CARGAR CONFIGURACIÓN INICIAL CON PIVOTABLE_CONFIG
   useEffect(() => {
     const loadInitialConfig = async () => {
       try {
-        // ✅ Cargar queries disponibles
+        // ✅ NUEVO: Cargar queries disponibles usando función mejorada
         const queries = await analyticsService.getAvailableQuickQueries();
         setAvailableQueries(queries || []);
 
-        // ✅ Verificar estado de integración
-        const coordination = await chatService.http.agentCoordination();
-        console.log('[ConversationalPivot] ✅ Agent coordination status:', coordination);
+        // ✅ NUEVO: Verificar estado de integración usando API v11.0
+        try {
+          const coordination = await chatService.http.agentCoordination();
+          console.log('[ConversationalPivot] ✅ Agent coordination status:', coordination);
+          setIntegrationStatus(coordination?.integrationlevel === 'Perfect Integration' ? 'success' : 'partial');
+        } catch (apiError) {
+          console.warn('[ConversationalPivot] API coordination not available:', apiError.message);
+          setIntegrationStatus('limited');
+        }
         
       } catch (error) {
         console.warn('[ConversationalPivot] Error loading initial config:', error.message);
@@ -111,13 +126,12 @@ const ConversationalPivot = ({
     loadInitialConfig();
   }, []);
 
-  // ✅ INICIALIZAR CHAT SESSION CON PERFECT INTEGRATION - CONFLICT DETECTION
+  // ✅ INICIALIZAR CHAT SESSION CON CONFLICT DETECTION MEJORADA
   useEffect(() => {
     console.log(`[ConversationalPivot] 🚀 Initializing Perfect Integration for userId: ${userId}`);
     
-    // ✅ NUEVO: Verificar si ya hay conexiones activas para evitar conflictos
+    // ✅ NUEVO: Verificar si ya hay conexiones activas WebSocket
     const checkActiveConnections = () => {
-      // Buscar conexiones WebSocket activas en la página
       const existingConnections = document.querySelectorAll('[class*="conversational-pivot"], [class*="chat-interface"]');
       console.log(`[ConversationalPivot] 🔍 Found ${existingConnections.length} chat components`);
       
@@ -130,28 +144,29 @@ const ConversationalPivot = ({
       console.log(`[ConversationalPivot] ⚠️ Multiple chat components detected, using HTTP-only mode`);
       
       setIsHttpOnlyMode(true);
-      setIsConnected(true); // Marcar como "conectado" aunque sea HTTP-only
+      setIsConnected(true);
       
-      // Mostrar mensaje de modo HTTP-only
+      // ✅ NUEVO: Mensaje de bienvenida con información dinámica de PIVOTABLE_CONFIG
       const conflictMsg = {
         id: Date.now(),
         sender: 'assistant',
-        text: `🔄 **Modo HTTP-Only activado**
+        text: `🔄 **Modo HTTP-Only activado** - Perfect Integration v11.1
 
 Detectadas múltiples interfaces de chat.
 Usando comunicación HTTP para evitar conflictos.
 
 ✅ **Funcionalidad completa disponible:**
 • Perfect Integration v11.1 mediante HTTP
-• Modificación de gráficos en tiempo real
+• Modificación SOLO del gráfico de análisis general
+• ${Object.keys(PIVOTABLE_CONFIG.metrics).length} métricas dinámicas disponibles
+• ${Object.keys(PIVOTABLE_CONFIG.dimensions).length} dimensiones soportadas
 • Chat Agent v10.0 + CDG Agent v6.0
-• Análisis complejos especializados
 
-**Comandos disponibles:**
+**Comandos inteligentes:**
 • "Cambia a barras horizontales"
-• "Muestra por centros"
+• "Muestra ${mode === 'direccion' ? 'por centros' : 'mis clientes'}"
 • "Convierte a circular"
-• "Métrica MARGEN"
+• "Métrica ${Object.keys(PIVOTABLE_CONFIG.metrics)[0]}"
 
 ¡Todo funciona igual de bien!`,
         timestamp: new Date().toLocaleTimeString(),
@@ -163,26 +178,30 @@ Usando comunicación HTTP para evitar conflictos.
       return;
     }
     
-    // Crear sesión de chat con Chat Agent v10.0
+    // ✅ Crear sesión de chat con Chat Agent v10.0
     chatSessionRef.current = chatService.createChatSession(userId, {
       onOpen: () => {
         console.log('[ConversationalPivot] ✅ Chat Agent v10.0 connected');
         setIsConnected(true);
         
-        // ✅ Mensaje de bienvenida mejorado y más compacto
+        // ✅ NUEVO: Mensaje de bienvenida mejorado con información dinámica
         const welcomeMsg = {
           id: Date.now(),
           sender: 'assistant',
           text: `🤖 **Perfect Integration v11.1**
-¡Hola! Modifica gráficos con lenguaje natural.
 
-**Ejemplos rápidos:**
-• "Cambia a barras horizontales"
-• "Muestra por centros"
-• "Convierte a circular"
-• "Métrica MARGEN"
+¡Hola! Modifico gráficos con lenguaje natural.
+**Solo el gráfico de análisis general**, no el de precios.
 
-Solo modifico el gráfico de análisis general.`,
+**📊 Configuración dinámica disponible:**
+• Métricas: ${Object.keys(PIVOTABLE_CONFIG.metrics).slice(0, 3).join(', ')}...
+• Dimensiones: ${Object.keys(PIVOTABLE_CONFIG.dimensions).length} opciones
+• Tipos: ${Object.keys(PIVOTABLE_CONFIG.chartTypes).length} formatos
+
+**Ejemplos por modo ${mode}:**
+${getContextualSuggestions().slice(0, 3).map(s => `• "${s}"`).join('\n')}
+
+🎯 **Perfect Integration activa**`,
           timestamp: new Date().toLocaleTimeString(),
           isWelcome: true,
           aiMode: 'welcome'
@@ -194,7 +213,7 @@ Solo modifico el gráfico de análisis general.`,
         console.log('[ConversationalPivot] ❌ WebSocket disconnected:', event?.code);
         setIsConnected(false);
         
-        // ✅ NUEVA LÓGICA: Si hay códigos de conflicto, cambiar a HTTP-only
+        // ✅ NUEVA LÓGICA: Cambiar a HTTP-only automáticamente
         if (event?.code === 1005 || event?.code === 1012 || event?.code === 1000) {
           console.log('[ConversationalPivot] 🔄 Conflict detected, switching to HTTP-only');
           setIsHttpOnlyMode(true);
@@ -208,7 +227,11 @@ Solo modifico el gráfico de análisis general.`,
 WebSocket cerrado (código: ${event?.code || 'unknown'})
 Continuando con Perfect Integration via HTTP.
 
-✅ Funcionalidad completa mantenida
+✅ **Funcionalidad completa mantenida:**
+• Pivoteo dinámico con ${Object.keys(PIVOTABLE_CONFIG.metrics).length} métricas
+• Validación automática de combinaciones
+• Solo modifica gráfico de análisis general
+
 ¡Sigue funcionando perfectamente!`,
             timestamp: new Date().toLocaleTimeString(),
             aiMode: 'http-fallback'
@@ -222,7 +245,7 @@ Continuando con Perfect Integration via HTTP.
         setIsConnected(false);
         setIntegrationStatus('error');
         
-        // ✅ NUEVA LÓGICA: Después de múltiples errores, cambiar a HTTP-only
+        // ✅ NUEVA LÓGICA: Auto-recovery con HTTP-only
         setTimeout(() => {
           console.log('[ConversationalPivot] 🔄 After error, switching to HTTP-only');
           setIsHttpOnlyMode(true);
@@ -247,7 +270,7 @@ Continuando con Perfect Integration via HTTP.
           setMessages(prev => [...prev, assistantMessage]);
         }
 
-        // ✅ PERFECT INTEGRATION: Procesar charts usando InteractiveCharts
+        // ✅ PERFECT INTEGRATION: Procesar charts para InteractiveCharts
         if (wsMessage.charts && wsMessage.charts.length > 0) {
           handleChartsFromWebSocket(wsMessage.charts);
         }
@@ -283,24 +306,26 @@ Continuando con Perfect Integration via HTTP.
         pivotControllerRef.current.abort();
       }
     };
-  }, [userId]);
+  }, [userId, mode]);
 
   // ✅ FUNCIÓN: Manejar charts desde WebSocket
   const handleChartsFromWebSocket = useCallback(async (charts) => {
     console.log('[ConversationalPivot] 🔄 Processing charts from WebSocket:', charts.length);
     
     try {
+      // ✅ NUEVO: Solo buscar charts del gráfico de análisis general
       const unifiedChart = charts.find(chart => 
         chart.meta?.type === 'unified' || 
         chart.meta?.chart_id === 'unified' ||
         chart.chartKey === 'unified' ||
-        !chart.meta?.type
+        chart.meta?.chartKey === 'unified' ||
+        !chart.meta?.type // Default a unified si no especifica
       );
       
       if (unifiedChart) {
         console.log('[ConversationalPivot] ✅ Found unified chart, updating InteractiveCharts');
         
-        // ✅ Usar onChartUpdate para Perfect Integration
+        // ✅ PERFECT INTEGRATION: Usar onChartUpdate
         if (onChartUpdate && typeof onChartUpdate === 'function') {
           onChartUpdate({
             chartKey: 'unified',
@@ -315,6 +340,8 @@ Continuando con Perfect Integration via HTTP.
         
         // Auto-reset success indicator
         setTimeout(() => setLastPivotSuccess(false), 3000);
+      } else {
+        console.warn('[ConversationalPivot] ⚠️ No unified chart found in WebSocket response');
       }
       
     } catch (error) {
@@ -323,7 +350,95 @@ Continuando con Perfect Integration via HTTP.
     }
   }, [onChartUpdate]);
 
-  // ✅ FUNCIÓN PRINCIPAL: Enviar mensaje con Perfect Integration
+  // ✅ NUEVA FUNCIÓN: Extraer configuración actual del gráfico
+  const extractCurrentConfig = useCallback(() => {
+    if (!currentChartConfig) return null;
+    
+    // ✅ Intentar extraer métrica/dimensión/tipo de diferentes fuentes posibles
+    const config = {
+      metric: currentChartConfig.metric || 
+              currentChartConfig.metricType || 
+              currentChartConfig.currentMetric || 
+              'CONTRATOS',
+      dimension: currentChartConfig.dimension || 
+                currentChartConfig.dimensionType || 
+                currentChartConfig.currentDimension || 
+                (mode === 'direccion' ? 'gestores' : 'clientes'),
+      chartType: currentChartConfig.chartType || 
+                currentChartConfig.type || 
+                currentChartConfig.currentChartType || 
+                'horizontal_bar'
+    };
+    
+    console.log('[ConversationalPivot] 📊 Extracted config:', config);
+    return config;
+  }, [currentChartConfig, mode]);
+
+  // ✅ NUEVA FUNCIÓN: Parser local mejorado
+  const parseLocalPivotIntent = useCallback((message) => {
+    const msgLower = message.toLowerCase();
+    
+    // ✅ NUEVO: Detectar métrica específica
+    let detectedMetric = null;
+    for (const [metricKey, metricConfig] of Object.entries(PIVOTABLE_CONFIG.metrics)) {
+      const label = metricConfig.label.toLowerCase();
+      if (msgLower.includes(metricKey.toLowerCase()) || msgLower.includes(label)) {
+        detectedMetric = metricKey;
+        break;
+      }
+    }
+    
+    // ✅ NUEVO: Detectar dimensión específica
+    let detectedDimension = null;
+    for (const [dimensionKey, dimensionConfig] of Object.entries(PIVOTABLE_CONFIG.dimensions)) {
+      const label = dimensionConfig.label.toLowerCase();
+      if (msgLower.includes(dimensionKey.toLowerCase()) || msgLower.includes(label)) {
+        detectedDimension = dimensionKey;
+        break;
+      }
+    }
+    
+    // ✅ NUEVO: Detectar tipo de gráfico
+    let detectedChartType = null;
+    const chartTypeMap = {
+      'barras horizontales': 'horizontal_bar',
+      'barras': 'bar', 
+      'circular': 'pie',
+      'donut': 'donut',
+      'líneas': 'line',
+      'línea': 'line'
+    };
+    
+    for (const [pattern, chartType] of Object.entries(chartTypeMap)) {
+      if (msgLower.includes(pattern)) {
+        detectedChartType = chartType;
+        break;
+      }
+    }
+    
+    // ✅ NUEVO: Determinar si es pivot intent
+    const isPivot = msgLower.includes('cambia') || 
+                   msgLower.includes('convierte') || 
+                   msgLower.includes('muestra') || 
+                   msgLower.includes('modifica') ||
+                   detectedMetric || 
+                   detectedDimension || 
+                   detectedChartType;
+    
+    const result = {
+      isPivot,
+      metric: detectedMetric,
+      dimension: detectedDimension,
+      chartType: detectedChartType,
+      confidence: isPivot ? 0.8 : 0.2,
+      source: 'local_parser'
+    };
+    
+    console.log('[ConversationalPivot] 🧠 Local parse result:', result);
+    return result;
+  }, []);
+
+  // ✅ FUNCIÓN PRINCIPAL MEJORADA: Enviar mensaje con validaciones y getPivotableChartData
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() || isLoading) return;
 
@@ -344,39 +459,67 @@ Continuando con Perfect Integration via HTTP.
     try {
       console.log(`[ConversationalPivot] 🚀 Processing message with Perfect Integration: "${inputMessage}"`);
       
-      // ✅ NUEVO: Verificar si estamos en modo HTTP-only
-      if (isHttpOnlyMode) {
-        console.log('[ConversationalPivot] 📡 Using HTTP-only mode for this request');
-      }
-      
       const messageText = inputMessage.trim();
       
-      // ✅ STEP 1: Clasificación inteligente
-      const classification = await chatService.http.classifyAndRoute(messageText, {
-        mode,
-        gestorId: gestorId ? String(gestorId) : undefined,
-        periodo: periodo ? String(periodo) : undefined,
-        currentChartConfig: currentChartConfig || {}
-      });
-
-      console.log('[ConversationalPivot] 🎯 Message classified:', classification);
-
+      // ✅ STEP 1: Parser local mejorado con PIVOTABLE_CONFIG
+      const localParse = parseLocalPivotIntent(messageText);
+      
       let response = null;
       let updatedChart = null;
 
-      if (classification.flowType === 'PIVOT' || messageText.toLowerCase().includes('cambia') || 
-          messageText.toLowerCase().includes('convierte') || messageText.toLowerCase().includes('muestra')) {
+      if (localParse.isPivot) {
+        console.log('[ConversationalPivot] 🎯 Detected pivot intent, using getPivotableChartData');
         
-        // ✅ STEP 2: Usar analyticsService.pivotChart para modificación real
-        console.log('[ConversationalPivot] 🔄 Using pivotChart for real modification');
+        // ✅ STEP 2: Extraer configuración actual
+        const currentConfig = extractCurrentConfig();
         
-        try {
-          updatedChart = await analyticsService.pivotChart(userId, messageText, currentChartConfig, 'pivot');
+        // ✅ STEP 3: Construir nueva configuración
+        const newConfig = {
+          metric: localParse.metric || currentConfig?.metric || 'CONTRATOS',
+          dimension: localParse.dimension || currentConfig?.dimension || (mode === 'direccion' ? 'gestores' : 'clientes'),
+          chartType: localParse.chartType || currentConfig?.chartType || 'horizontal_bar'
+        };
+        
+        console.log('[ConversationalPivot] 🔧 New config:', newConfig);
+        
+        // ✅ STEP 4: Validar combinación usando validatePivotCombination
+        const validation = validatePivotCombination(newConfig.metric, newConfig.dimension, newConfig.chartType);
+        
+        if (!validation.valid) {
+          console.warn('[ConversationalPivot] ❌ Invalid combination:', validation.reason);
           
-          if (updatedChart) {
-            console.log('[ConversationalPivot] ✅ Chart pivoted successfully');
+          // ✅ Sugerir combinación válida alternativa
+          const suggestions = getValidAlternatives(newConfig.metric, mode);
+          
+          response = {
+            text: `❌ **Combinación no válida**
+
+${validation.reason}
+
+💡 **Sugerencias válidas para ${newConfig.metric}:**
+${suggestions.map(s => `• ${s}`).join('\n')}
+
+Prueba una de estas opciones.`
+          };
+        } else {
+          // ✅ STEP 5: Usar getPivotableChartData para obtener datos reales
+          try {
+            console.log('[ConversationalPivot] 🔄 Using getPivotableChartData with validated config');
             
-            // ✅ STEP 3: Actualizar InteractiveCharts directamente
+            updatedChart = await getPivotableChartData(
+              newConfig.metric, 
+              newConfig.dimension, 
+              newConfig.chartType, 
+              {
+                periodo: periodo || '2025-10',
+                gestorId: gestorId ? parseInt(gestorId, 10) : undefined,
+                mode
+              }
+            );
+            
+            console.log('[ConversationalPivot] ✅ getPivotableChartData successful:', updatedChart.meta);
+            
+            // ✅ STEP 6: Actualizar InteractiveCharts directamente
             if (onChartUpdate) {
               onChartUpdate({
                 chartKey: 'unified',
@@ -390,37 +533,53 @@ Continuando con Perfect Integration via HTTP.
             setLastPivotSuccess(true);
             setIntegrationStatus('success');
             
+            const metricLabel = PIVOTABLE_CONFIG.metrics[newConfig.metric]?.label || newConfig.metric;
+            const dimensionLabel = PIVOTABLE_CONFIG.dimensions[newConfig.dimension]?.label || newConfig.dimension;
+            const chartLabel = PIVOTABLE_CONFIG.chartTypes[newConfig.chartType]?.label || newConfig.chartType;
+            
             response = {
-              text: `✅ **Gráfico actualizado**
-"${messageText}" procesado con Perfect Integration.
-✅ Cambios aplicados en tiempo real
-¡El cambio ya es visible!${isHttpOnlyMode ? '\n🔄 Via HTTP-Only' : ''}`,
+              text: `✅ **Gráfico actualizado con Perfect Integration**
+
+"${messageText}" procesado exitosamente.
+
+📊 **Nueva configuración:**
+• Métrica: ${metricLabel}
+• Dimensión: ${dimensionLabel} 
+• Tipo: ${chartLabel}
+
+✅ **Cambios aplicados en tiempo real**
+${updatedChart.meta?.showing || 0} elementos mostrados${isHttpOnlyMode ? '\n🔄 Via HTTP-Only' : ''}`,
               charts: [updatedChart]
             };
+            
+          } catch (pivotError) {
+            console.warn('[ConversationalPivot] ⚠️ getPivotableChartData failed, trying analyticsService.pivotChart:', pivotError.message);
+            
+            // ✅ FALLBACK: Usar analyticsService.pivotChart como backup
+            try {
+              updatedChart = await analyticsService.pivotChart(userId, messageText, currentChartConfig, 'pivot');
+              
+              if (updatedChart && onChartUpdate) {
+                onChartUpdate({
+                  chartKey: 'unified',
+                  ...updatedChart,
+                  source: 'pivot_fallback',
+                  message: messageText,
+                  timestamp: Date.now()
+                });
+              }
+              
+              response = {
+                text: `✅ **Gráfico actualizado (método fallback)**
+"${messageText}" procesado con método alternativo.
+✅ Cambios aplicados${isHttpOnlyMode ? ' via HTTP-Only' : ''}`,
+                charts: updatedChart ? [updatedChart] : []
+              };
+              
+            } catch (fallbackError) {
+              throw new Error(`Pivot principal y fallback fallaron: ${pivotError.message} | ${fallbackError.message}`);
+            }
           }
-          
-        } catch (pivotError) {
-          console.warn('[ConversationalPivot] Pivot failed, using chat fallback:', pivotError.message);
-          
-          // ✅ FALLBACK: Chat normal si pivot falla
-          response = await chatService.http.sendMessage({
-            user_id: userId,
-            message: messageText,
-            gestor_id: gestorId ? String(gestorId) : undefined,
-            periodo: periodo ? String(periodo) : undefined,
-            include_charts: true,
-            include_recommendations: false,
-            context: {
-              mode,
-              chartTarget: 'unified',
-              intent: 'chart_modification',
-              fallbackReason: pivotError.message
-            },
-            current_chart_config: currentChartConfig || {},
-            chart_interaction_type: 'pivot',
-            use_basic_queries: true,
-            quick_mode: true
-          });
         }
         
       } else {
@@ -436,14 +595,14 @@ Continuando con Perfect Integration via HTTP.
           include_recommendations: true,
           context: {
             mode,
-            chartTarget: 'unified',
+            chartTarget: 'unified_only', // ✅ NUEVO: Especificar que solo unified
             intent: 'general_query'
           },
           quick_mode: true
         });
       }
 
-      // ✅ STEP 4: Procesar respuesta
+      // ✅ STEP 7: Procesar respuesta
       if (response && response.text) {
         const assistantMessage = {
           id: Date.now() + 1,
@@ -451,19 +610,19 @@ Continuando con Perfect Integration via HTTP.
           text: response.text,
           timestamp: new Date().toLocaleTimeString(),
           source: updatedChart ? 'pivot_success' : 'chat_response',
-          aiMode: classification.flowType?.toLowerCase() || 'chat'
+          aiMode: localParse.isPivot ? 'pivot' : 'chat'
         };
         setMessages(prev => [...prev, assistantMessage]);
       }
 
-      // ✅ STEP 5: Procesar charts adicionales si existen
+      // ✅ STEP 8: Procesar charts adicionales si existen
       if (response && response.charts && response.charts.length > 0) {
         await handleChartsFromWebSocket(response.charts);
       }
 
       notification.success({
         message: '🤖 Procesado con IA',
-        description: updatedChart ? 'Gráfico actualizado correctamente' : 'Consulta procesada',
+        description: updatedChart ? 'Gráfico de análisis general actualizado' : 'Consulta procesada',
         duration: 2
       });
 
@@ -481,7 +640,12 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
 **Sugerencias:**
 • Reformula tu mensaje
 • Verifica que InteractiveCharts esté visible
-• Prueba: "Cambia a barras horizontales"`,
+• Prueba: "Cambia a barras horizontales"
+• Solo modifico el gráfico de análisis general
+
+**Configuración disponible:**
+• Métricas: ${Object.keys(PIVOTABLE_CONFIG.metrics).join(', ')}
+• Dimensiones para ${mode}: ${getValidDimensionsForMode().join(', ')}`,
         timestamp: new Date().toLocaleTimeString(),
         isError: true,
         aiMode: 'error'
@@ -515,8 +679,35 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
     currentChartConfig, 
     onChartUpdate,
     integrationStatus,
-    isHttpOnlyMode
+    isHttpOnlyMode,
+    parseLocalPivotIntent,
+    extractCurrentConfig
   ]);
+
+  // ✅ NUEVA FUNCIÓN: Obtener dimensiones válidas por modo
+  const getValidDimensionsForMode = useCallback(() => {
+    if (mode === 'direccion') {
+      return ['gestores', 'centros', 'productos', 'segmentos'];
+    } else {
+      return ['clientes', 'productos'];
+    }
+  }, [mode]);
+
+  // ✅ NUEVA FUNCIÓN: Obtener alternativas válidas para una métrica
+  const getValidAlternatives = useCallback((metric, currentMode) => {
+    const validDimensions = getValidDimensionsForMode();
+    const alternatives = [];
+    
+    for (const dimension of validDimensions) {
+      const validation = validatePivotCombination(metric, dimension, 'horizontal_bar');
+      if (validation.valid) {
+        const dimensionLabel = PIVOTABLE_CONFIG.dimensions[dimension]?.label || dimension;
+        alternatives.push(`"Muestra ${metric} por ${dimensionLabel}"`);
+      }
+    }
+    
+    return alternatives;
+  }, [getValidDimensionsForMode]);
 
   // ✅ MANEJAR ENTER
   const handleKeyPress = useCallback((event) => {
@@ -547,7 +738,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
       
       notification.info({
         message: '🧹 Chat limpiado',
-        description: 'Sesión reiniciada',
+        description: 'Sesión reiniciada con configuración dinámica',
         duration: 2
       });
       
@@ -557,28 +748,30 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
     }
   }, [isHttpOnlyMode]);
 
-  // ✅ SUGERENCIAS CONTEXTUALES DINÁMICAS Y COMPACTAS
+  // ✅ NUEVA FUNCIÓN: Sugerencias contextuales dinámicas basadas en PIVOTABLE_CONFIG
   const getContextualSuggestions = useCallback(() => {
-    const baseSuggestions = [
-      "Barras horizontales",
-      "Gráfico circular", 
-      "Métrica MARGEN"
-    ];
-
-    if (mode === 'direccion') {
-      return [
-        ...baseSuggestions,
-        "Por centros",
-        "Por segmentos"
-      ];
-    } else {
-      return [
-        ...baseSuggestions,
-        "Mis clientes",
-        "Por productos"
-      ];
+    const suggestions = [];
+    
+    // ✅ Sugerencias de tipos de gráfico
+    suggestions.push("Barras horizontales");
+    suggestions.push("Gráfico circular");
+    
+    // ✅ Sugerencias de métricas principales
+    const topMetrics = Object.entries(PIVOTABLE_CONFIG.metrics).slice(0, 2);
+    for (const [metricKey] of topMetrics) {
+      suggestions.push(`Métrica ${metricKey}`);
     }
-  }, [mode]);
+    
+    // ✅ Sugerencias específicas por modo
+    const validDimensions = getValidDimensionsForMode();
+    if (validDimensions.length > 0) {
+      const dimensionKey = validDimensions[0];
+      const dimensionLabel = PIVOTABLE_CONFIG.dimensions[dimensionKey]?.label || dimensionKey;
+      suggestions.push(`Por ${dimensionLabel}`);
+    }
+    
+    return suggestions.slice(0, 6); // Máximo 6 sugerencias
+  }, [mode, getValidDimensionsForMode]);
 
   const contextualSuggestions = getContextualSuggestions();
 
@@ -586,7 +779,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
     setInputMessage(suggestion);
   }, []);
 
-  // ✅ MENU DE CONFIGURACIÓN COMPACTO
+  // ✅ MENU DE CONFIGURACIÓN MEJORADO
   const configMenu = {
     items: [
       {
@@ -600,17 +793,23 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
         icon: <SettingOutlined />,
         label: `Modo: ${isHttpOnlyMode ? 'HTTP-Only' : 'WebSocket'}`,
         disabled: true
+      },
+      {
+        key: 'metrics',
+        icon: <ExperimentOutlined />,
+        label: `${Object.keys(PIVOTABLE_CONFIG.metrics).length} métricas disponibles`,
+        disabled: true
       }
     ]
   };
 
-  // ✅ RENDERIZADO COMPLETAMENTE RESPONSIVO
+  // ✅ RENDERIZADO COMPLETAMENTE RESPONSIVO CON INFORMACIÓN DINÁMICA
   return (
     <Card
       className={`conversational-pivot-v11 ${className}`}
       style={{
-        width: '100%', // ✅ CAMBIO CLAVE: width 100% en lugar de fijo
-        height: '100%', // ✅ CAMBIO CLAVE: height 100% en lugar de fijo
+        width: '100%',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         border: integrationStatus === 'success' ? '2px solid #52c41a' : 
@@ -630,9 +829,9 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
             size="small"
           />
           <div>
-            <Text strong style={{ fontSize: 13 }}>Chat IA</Text>
+            <Text strong style={{ fontSize: 13 }}>Chat IA v11.1</Text>
             <div style={{ fontSize: 9, color: '#666', marginTop: -2 }}>
-              Perfect Integration v11.1 {isHttpOnlyMode && '(HTTP-Only)'}
+              Perfect Integration • Solo gráfico análisis general
             </div>
           </div>
           <Space size="small">
@@ -645,12 +844,15 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
             {lastPivotSuccess && (
               <Badge count="✅" style={{ backgroundColor: '#52c41a', fontSize: 8 }} />
             )}
+            <Tag size="small" color="blue">
+              {Object.keys(PIVOTABLE_CONFIG.metrics).length}M/{Object.keys(PIVOTABLE_CONFIG.dimensions).length}D
+            </Tag>
           </Space>
         </Space>
       }
       extra={
         <Space size="small">
-          <Tooltip title={`Modo: ${aiMode} ${isHttpOnlyMode ? '(HTTP-Only)' : ''}`}>
+          <Tooltip title={`Modo: ${aiMode} • Métricas: ${Object.keys(PIVOTABLE_CONFIG.metrics).length} • ${isHttpOnlyMode ? 'HTTP-Only' : 'WebSocket'}`}>
             <Avatar 
               size="small"
               style={{ 
@@ -674,7 +876,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
           flex: 1, 
           display: 'flex', 
           flexDirection: 'column',
-          overflow: 'hidden' // ✅ CAMBIO CLAVE: Prevenir scroll externo
+          overflow: 'hidden'
         }
       }}
     >
@@ -685,7 +887,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
           overflowY: 'auto', 
           padding: '12px', 
           backgroundColor: '#fafafa',
-          minHeight: 0 // ✅ CAMBIO CLAVE: Permite que flex shrink funcione
+          minHeight: 0
         }}
       >
         {messages.length === 0 ? (
@@ -698,20 +900,25 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
                 </div>
                 <div style={{ marginBottom: 12 }}>
                   <Text type="secondary" style={{ fontSize: 11 }}>
-                    Modifica gráficos con lenguaje natural
+                    Modifica solo el gráfico de análisis general
                   </Text>
                 </div>
-                {currentChartConfig ? (
-                  <Tag color="green" size="small">✅ Gráfico detectado</Tag>
-                ) : (
-                  <Tag color="orange" size="small">⚠️ Sin gráfico</Tag>
-                )}
-                {isHttpOnlyMode && (
-                  <Tag color="blue" size="small">📡 Modo HTTP-Only</Tag>
-                )}
-                <div style={{ marginTop: 6 }}>
+                <Space direction="vertical" size="small">
+                  {currentChartConfig ? (
+                    <Tag color="green" size="small">✅ Gráfico detectado</Tag>
+                  ) : (
+                    <Tag color="orange" size="small">⚠️ Sin gráfico</Tag>
+                  )}
+                  {isHttpOnlyMode && (
+                    <Tag color="blue" size="small">📡 Modo HTTP-Only</Tag>
+                  )}
+                  <Tag size="small" color="purple">
+                    {Object.keys(PIVOTABLE_CONFIG.metrics).length} métricas • {getValidDimensionsForMode().length} dimensiones
+                  </Tag>
+                </Space>
+                <div style={{ marginTop: 8 }}>
                   <Text type="secondary" style={{ fontSize: 10 }}>
-                    Modo: {mode}
+                    Modo: {mode} • Validación automática activa
                   </Text>
                 </div>
               </div>
@@ -766,7 +973,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
                 {message.isWelcome && (
                   <div style={{ marginTop: 8 }}>
                     <Text strong style={{ fontSize: 10, display: 'block', marginBottom: 6, color: '#666' }}>
-                      <BulbOutlined /> Prueba:
+                      <BulbOutlined /> Prueba estos comandos:
                     </Text>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       {contextualSuggestions.slice(0, 2).map((suggestion, index) => (
@@ -824,7 +1031,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
           ))
         )}
         
-        {/* ✅ INDICADOR DE CARGA MEJORADO Y COMPACTO */}
+        {/* ✅ INDICADOR DE CARGA MEJORADO */}
         {isLoading && (
           <div style={{ 
             display: 'flex', 
@@ -854,7 +1061,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
                   indicator={<LoadingOutlined style={{ fontSize: 12 }} spin />} 
                 />
                 <span>
-                  {integrationStatus === 'processing' ? 'Procesando...' : 'Procesando...'}
+                  {integrationStatus === 'processing' ? 'Procesando con validaciones...' : 'Procesando...'}
                 </span>
               </Space>
             </div>
@@ -864,11 +1071,11 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ✅ SUGERENCIAS CONTEXTUALES COMPACTAS */}
+      {/* ✅ SUGERENCIAS CONTEXTUALES DINÁMICAS */}
       {messages.length <= 1 && (
         <div style={{ padding: '6px 12px', borderTop: '1px solid #f0f0f0', backgroundColor: '#fafafa' }}>
           <Text strong style={{ fontSize: 10, display: 'block', marginBottom: 6, color: '#666' }}>
-            <ThunderboltOutlined /> Comandos rápidos:
+            <ThunderboltOutlined /> Comandos inteligentes ({mode}):
           </Text>
           <Space wrap size="small">
             {contextualSuggestions.map((suggestion, index) => (
@@ -883,6 +1090,11 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
               </Button>
             ))}
           </Space>
+          <div style={{ marginTop: 4 }}>
+            <Text style={{ fontSize: 8, color: '#999' }}>
+              ✅ Validación automática • Solo modifica gráfico de análisis general
+            </Text>
+          </div>
         </div>
       )}
 
@@ -891,14 +1103,14 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
         padding: 10, 
         borderTop: '1px solid #f0f0f0',
         backgroundColor: 'white',
-        flexShrink: 0 // ✅ CAMBIO CLAVE: Evita que se comprima
+        flexShrink: 0
       }}>
         <Space.Compact style={{ width: '100%' }}>
           <TextArea
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={`Comando para gráfico... (${mode})`}
+            placeholder={`Comando para análisis general... (${mode})`}
             autoSize={{ minRows: 1, maxRows: 2 }}
             disabled={isLoading}
             maxLength={200}
@@ -930,7 +1142,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
           </Button>
         </Space.Compact>
 
-        {/* ✅ ESTADO DE CONEXIÓN COMPACTO */}
+        {/* ✅ ESTADO DE CONEXIÓN CON INFO DINÁMICA */}
         <div style={{ marginTop: 6, textAlign: 'center' }}>
           <Space split={<span>•</span>} size="small">
             <Text type="secondary" style={{ fontSize: 9 }}>
@@ -940,7 +1152,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
               {integrationStatus}
             </Text>
             <Text type="secondary" style={{ fontSize: 9 }}>
-              {mode === 'direccion' ? 'Corporativo' : 'Personal'}
+              {Object.keys(PIVOTABLE_CONFIG.metrics).length}M/{getValidDimensionsForMode().length}D
             </Text>
             {isHttpOnlyMode && (
               <Text type="secondary" style={{ fontSize: 9, color: '#1890ff' }}>
@@ -951,11 +1163,11 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
         </div>
       </div>
 
-      {/* ✅ ALERTAS DE ESTADO COMPACTAS */}
+      {/* ✅ ALERTAS DE ESTADO MEJORADAS */}
       {!currentChartConfig && (
         <Alert
           message="Sin gráfico detectado"
-          description="Asegúrate de que InteractiveCharts esté visible"
+          description="Asegúrate de que InteractiveCharts esté visible para usar pivoteo"
           type="warning"
           showIcon
           style={{ margin: '6px 10px 10px 10px', fontSize: 10 }}
@@ -977,7 +1189,7 @@ ${error.message || 'No se pudo procesar tu solicitud.'}
       {isHttpOnlyMode && (
         <Alert
           message="Modo HTTP-Only activo"
-          description="Funcionalidad completa via HTTP para evitar conflictos"
+          description="Funcionalidad completa via HTTP con validaciones automáticas"
           type="info"
           showIcon
           style={{ margin: '6px 10px 10px 10px', fontSize: 10 }}

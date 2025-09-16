@@ -1,44 +1,33 @@
 // frontend/src/components/Dashboard/ConversationalPivot.jsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Card, 
   Input, 
   Button, 
   Typography, 
-  List, 
-  Avatar, 
   Space, 
-  Divider,
-  Row,
-  Col,
-  Tag,
-  notification,
-  Spin,
   Alert,
-  Collapse,
+  Avatar,
+  Spin,
+  notification,
+  Tag,
+  Empty,
   Tooltip,
   Badge,
-  Popover,
-  Progress
+  Dropdown
 } from 'antd';
 import { 
   SendOutlined, 
   RobotOutlined, 
   UserOutlined, 
-  BulbOutlined,
-  LoadingOutlined,
   MessageOutlined,
-  ExclamationCircleOutlined,
-  DownOutlined,
-  BarChartOutlined,
-  ReloadOutlined,
-  ClearOutlined,
-  CloseCircleOutlined,
+  LoadingOutlined,
   ThunderboltOutlined,
-  CheckCircleOutlined,
-  WarningOutlined,
-  InfoCircleOutlined,
-  CommentOutlined
+  ClearOutlined,
+  ExperimentOutlined,
+  SettingOutlined,
+  QuestionCircleOutlined,
+  BulbOutlined
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import chatService from '../../services/chatService';
@@ -46,1136 +35,827 @@ import analyticsService from '../../services/analyticsService';
 import theme from '../../styles/theme';
 
 const { TextArea } = Input;
-const { Title, Text, Paragraph } = Typography;
-const { Panel } = Collapse;
+const { Text } = Typography;
 
 /**
- * ✅ COMPLETAMENTE RENOVADO: ConversationalPivot - Asistente IA para Pivoteo de Gráficos
- * --------------------------------------------------------------------------------------
- * NUEVAS FUNCIONALIDADES:
- * 1. Integración completa con InteractiveCharts.jsx para pivoteo conversacional
- * 2. Detección inteligente de intenciones (cambio de gráficos vs consultas generales)
- * 3. Soporte dual: WebSocket en tiempo real + HTTP fallback
- * 4. Interfaz diferenciada por modo (Dirección/Gestor) con capacidades específicas
- * 5. Historial de pivots con contexto para el agente
- * 6. Validación de configuraciones válidas antes de aplicar cambios
- * 7. Estados visuales claros: conectado, procesando, error
- * 8. Sugerencias contextuales según el dashboard activo
- * 9. Auto-scroll, cleanup de conexiones y manejo robusto de errores
- * 10. Preview de cambios antes de aplicar (opcional)
+ * ✅ ConversationalPivot v11.1 - Perfect Integration FIXED
+ * 
+ * CORRECCIONES v11.1:
+ * 1. ✅ UserIds únicos para evitar colisiones con ChatInterface
+ * 2. ✅ Detección automática de conflictos WebSocket 
+ * 3. ✅ Fallback automático a HTTP-only cuando hay múltiples componentes
+ * 4. ✅ Layout completamente responsivo
+ * 5. ✅ Mejor gestión de errores y reconexiones
  */
-
-const ConversationalPivot = ({ 
+const ConversationalPivot = ({
   mode = 'direccion',
-  gestorId, 
-  periodo,
-  currentChartConfig,
-  onChartUpdate,
-  onChartPivot,
+  gestorId = null,
+  periodo = null,
+  currentChartConfig = null,
+  onChartUpdate = () => {},
   className = '',
   style = {}
 }) => {
   
-  // ✅ ESTADOS PRINCIPALES
+  // ✅ ESTADOS PRINCIPALES MEJORADOS
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [isAssistantActive, setIsAssistantActive] = useState(false);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  const [pivotHistory, setPivotHistory] = useState([]);
-  const [chatStats, setChatStats] = useState({ messageCount: 0, pivotCount: 0, successRate: 0 });
-  
-  // Referencias
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-  const chatSessionRef = useRef(null);
-  const lastActivityRef = useRef(Date.now());
+  const [isConnected, setIsConnected] = useState(false);
+  const [isHttpOnlyMode, setIsHttpOnlyMode] = useState(false);
+  const [aiMode, setAiMode] = useState('chat'); // 'chat' | 'pivot' | 'analysis'
+  const [lastPivotSuccess, setLastPivotSuccess] = useState(false);
+  const [availableQueries, setAvailableQueries] = useState([]);
+  const [integrationStatus, setIntegrationStatus] = useState('idle'); // 'idle' | 'processing' | 'success' | 'error'
 
-  // ✅ CONFIGURACIÓN DINÁMICA MEJORADA SEGÚN EL MODO
-  const assistantConfig = useMemo(() => {
+  // ✅ USER ID ÚNICO POR MODO - FIXED COLLISION
+  const userId = React.useMemo(() => {
     const baseUserId = gestorId ? String(gestorId) : 'anonymous';
-    const userId = mode === 'direccion' ? `direction_${baseUserId}` : `gestor_${baseUserId}`;
-    
-    const config = {
-      userId,
-      mode,
-      title: mode === 'direccion' ? 'Asistente IA - Dirección CDG' : 'Asistente IA - Gestor Personal',
-      welcomeMessage: mode === 'direccion' 
-        ? '¡Hola! Soy tu asistente IA especializado en análisis corporativo. Puedo ayudarte a generar gráficos directivos, cambiar visualizaciones dinámicamente y proporcionar insights estratégicos sobre el rendimiento global.'
-        : '¡Hola! Soy tu asistente personal CDG. Puedo ayudarte a analizar tu cartera, cambiar gráficos mediante lenguaje natural, y darte recomendaciones específicas sobre tu rendimiento comercial.',
-      capabilities: mode === 'direccion' 
-        ? [
-            'Análisis corporativo global', 
-            'Rankings ejecutivos por métricas', 
-            'Distribución multi-centro', 
-            'Comparativas de rendimiento',
-            'Pivoteo conversacional de gráficos',
-            'Alertas de desviaciones críticas'
-          ]
-        : [
-            'Análisis de cartera personal', 
-            'Top clientes por margen', 
-            'Mix óptimo de productos', 
-            'Comparativa precios vs estándares',
-            'Cambio dinámico de visualizaciones',
-            'Recomendaciones de acción'
-          ],
-      chartTypes: mode === 'direccion'
-        ? ['gestores-ranking', 'centros-distribution', 'summary-dashboard', 'precios-comparison']
-        : ['top-clients', 'product-mix', 'price-comparison'],
-      pivotExamples: mode === 'direccion'
-        ? [
-            "Cambia el ranking de gestores a gráfico circular",
-            "Muestra la distribución por centros como barras horizontales",  
-            "Convierte el análisis a formato de líneas temporales",
-            "Cambia la métrica a MARGEN en lugar de CONTRATOS"
-          ]
-        : [
-            "Cambia mis top clientes a formato de barras verticales",
-            "Muestra el mix de productos como gráfico de líneas",
-            "Convierte la comparativa de precios a formato horizontal",
-            "Cambia la dimensión a productos en lugar de clientes"
-          ]
-    };
-
-    console.log('[ConversationalPivot] Config generated:', config);
-    return config;
+    const timestamp = Date.now().toString(36).slice(-4);
+    const random = Math.random().toString(36).slice(-4);
+    return mode === 'direccion' 
+      ? `pivot-direction-${baseUserId}-${timestamp}${random}` 
+      : `pivot-gestor-${baseUserId}-${timestamp}${random}`;
   }, [mode, gestorId]);
 
-  // ✅ SCROLL AUTOMÁTICO OPTIMIZADO
+  const chatSessionRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const pivotControllerRef = useRef(null);
+
+  // ✅ SCROLL AUTOMÁTICO
   const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'nearest' 
-      });
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(scrollToBottom, 100);
-    return () => clearTimeout(timer);
+    scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // ✅ DETECCIÓN INTELIGENTE DE INTENCIONES DE PIVOTEO
-  const detectPivotIntent = useCallback((message) => {
-    const messageLower = message.toLowerCase().trim();
-    
-    // Patrones específicos de pivoteo
-    const pivotPatterns = [
-      // Cambios directos
-      /\b(cambia|cambiar|modifica|modificar|convierte|convertir)\b.*\b(gráfico|grafico|chart|visualización|visual)\b/,
-      /\b(muestra|mostrar|haz|hacer|genera|generar)\b.*\b(como|en|formato)\b/,
-      /\b(pivotea|pivotar|transforma|transformar)\b/,
-      
-      // Tipos de gráfico específicos
-      /\b(barras|circular|pie|donut|líneas|lineas|horizontal|vertical)\b/,
-      
-      // Cambios de métrica/dimensión
-      /\b(cambia|cambiar)\b.*\b(métrica|metrica|dimensión|dimension)\b/,
-      /\b(en lugar de|instead of|por|by)\b.*\b(contratos|clientes|margen|ingresos)\b/,
-      
-      // Instrucciones directas
-      /^(convierte|cambia|muestra|haz|genera|modifica)/,
-    ];
+  // ✅ CARGAR CONFIGURACIÓN INICIAL
+  useEffect(() => {
+    const loadInitialConfig = async () => {
+      try {
+        // ✅ Cargar queries disponibles
+        const queries = await analyticsService.getAvailableQuickQueries();
+        setAvailableQueries(queries || []);
 
-    const hasIntent = pivotPatterns.some(pattern => pattern.test(messageLower));
-    
-    // Keywords adicionales que sugieren manipulación de gráficos
-    const chartKeywords = ['gráfico', 'grafico', 'chart', 'visualización', 'visual', 'formato', 'tipo', 'estilo'];
-    const hasChartReference = chartKeywords.some(keyword => messageLower.includes(keyword));
-    
-    console.log('[ConversationalPivot] Intent detection:', {
-      message: messageLower,
-      hasIntent,
-      hasChartReference,
-      finalResult: hasIntent || hasChartReference
-    });
-    
-    return hasIntent || hasChartReference;
+        // ✅ Verificar estado de integración
+        const coordination = await chatService.http.agentCoordination();
+        console.log('[ConversationalPivot] ✅ Agent coordination status:', coordination);
+        
+      } catch (error) {
+        console.warn('[ConversationalPivot] Error loading initial config:', error.message);
+      }
+    };
+
+    loadInitialConfig();
   }, []);
 
-  // ✅ EJECUTAR PIVOT MEJORADO CON VALIDACIÓN
-  const executePivot = useCallback(async (message, chartId = null) => {
-    console.log('[ConversationalPivot] 🔄 Executing pivot:', {
-      message,
-      chartId: chartId || currentChartConfig?.meta?.chart_id,
-      currentConfig: currentChartConfig
+  // ✅ INICIALIZAR CHAT SESSION CON PERFECT INTEGRATION - CONFLICT DETECTION
+  useEffect(() => {
+    console.log(`[ConversationalPivot] 🚀 Initializing Perfect Integration for userId: ${userId}`);
+    
+    // ✅ NUEVO: Verificar si ya hay conexiones activas para evitar conflictos
+    const checkActiveConnections = () => {
+      // Buscar conexiones WebSocket activas en la página
+      const existingConnections = document.querySelectorAll('[class*="conversational-pivot"], [class*="chat-interface"]');
+      console.log(`[ConversationalPivot] 🔍 Found ${existingConnections.length} chat components`);
+      
+      return existingConnections.length > 1; // Si hay más de uno, hay potencial conflicto
+    };
+    
+    const hasConflict = checkActiveConnections();
+    
+    if (hasConflict) {
+      console.log(`[ConversationalPivot] ⚠️ Multiple chat components detected, using HTTP-only mode`);
+      
+      setIsHttpOnlyMode(true);
+      setIsConnected(true); // Marcar como "conectado" aunque sea HTTP-only
+      
+      // Mostrar mensaje de modo HTTP-only
+      const conflictMsg = {
+        id: Date.now(),
+        sender: 'assistant',
+        text: `🔄 **Modo HTTP-Only activado**
+
+Detectadas múltiples interfaces de chat.
+Usando comunicación HTTP para evitar conflictos.
+
+✅ **Funcionalidad completa disponible:**
+• Perfect Integration v11.1 mediante HTTP
+• Modificación de gráficos en tiempo real
+• Chat Agent v10.0 + CDG Agent v6.0
+• Análisis complejos especializados
+
+**Comandos disponibles:**
+• "Cambia a barras horizontales"
+• "Muestra por centros"
+• "Convierte a circular"
+• "Métrica MARGEN"
+
+¡Todo funciona igual de bien!`,
+        timestamp: new Date().toLocaleTimeString(),
+        isWelcome: true,
+        aiMode: 'http-only'
+      };
+      setMessages([conflictMsg]);
+      setIntegrationStatus('success');
+      return;
+    }
+    
+    // Crear sesión de chat con Chat Agent v10.0
+    chatSessionRef.current = chatService.createChatSession(userId, {
+      onOpen: () => {
+        console.log('[ConversationalPivot] ✅ Chat Agent v10.0 connected');
+        setIsConnected(true);
+        
+        // ✅ Mensaje de bienvenida mejorado y más compacto
+        const welcomeMsg = {
+          id: Date.now(),
+          sender: 'assistant',
+          text: `🤖 **Perfect Integration v11.1**
+¡Hola! Modifica gráficos con lenguaje natural.
+
+**Ejemplos rápidos:**
+• "Cambia a barras horizontales"
+• "Muestra por centros"
+• "Convierte a circular"
+• "Métrica MARGEN"
+
+Solo modifico el gráfico de análisis general.`,
+          timestamp: new Date().toLocaleTimeString(),
+          isWelcome: true,
+          aiMode: 'welcome'
+        };
+        setMessages([welcomeMsg]);
+      },
+
+      onClose: (event) => {
+        console.log('[ConversationalPivot] ❌ WebSocket disconnected:', event?.code);
+        setIsConnected(false);
+        
+        // ✅ NUEVA LÓGICA: Si hay códigos de conflicto, cambiar a HTTP-only
+        if (event?.code === 1005 || event?.code === 1012 || event?.code === 1000) {
+          console.log('[ConversationalPivot] 🔄 Conflict detected, switching to HTTP-only');
+          setIsHttpOnlyMode(true);
+          setIsConnected(true);
+          
+          const httpFallbackMsg = {
+            id: Date.now(),
+            sender: 'assistant',
+            text: `🔄 **Cambiado a modo HTTP-Only**
+
+WebSocket cerrado (código: ${event?.code || 'unknown'})
+Continuando con Perfect Integration via HTTP.
+
+✅ Funcionalidad completa mantenida
+¡Sigue funcionando perfectamente!`,
+            timestamp: new Date().toLocaleTimeString(),
+            aiMode: 'http-fallback'
+          };
+          setMessages(prev => [...prev, httpFallbackMsg]);
+        }
+      },
+
+      onError: (error) => {
+        console.error('[ConversationalPivot] WebSocket error:', error);
+        setIsConnected(false);
+        setIntegrationStatus('error');
+        
+        // ✅ NUEVA LÓGICA: Después de múltiples errores, cambiar a HTTP-only
+        setTimeout(() => {
+          console.log('[ConversationalPivot] 🔄 After error, switching to HTTP-only');
+          setIsHttpOnlyMode(true);
+          setIsConnected(true);
+          setIntegrationStatus('success');
+        }, 2000);
+      },
+
+      // ✅ NUEVO: Handler mejorado para integration events
+      onMessage: (wsMessage) => {
+        console.log('[ConversationalPivot] 📨 Received message:', wsMessage);
+        
+        if (wsMessage.text) {
+          const assistantMessage = {
+            id: Date.now(),
+            sender: 'assistant',
+            text: wsMessage.text,
+            timestamp: new Date().toLocaleTimeString(),
+            source: 'websocket',
+            aiMode: wsMessage.responseType || 'chat'
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+        }
+
+        // ✅ PERFECT INTEGRATION: Procesar charts usando InteractiveCharts
+        if (wsMessage.charts && wsMessage.charts.length > 0) {
+          handleChartsFromWebSocket(wsMessage.charts);
+        }
+      },
+
+      // ✅ NUEVOS: Event handlers específicos
+      onIntegrationReady: (data) => {
+        console.log('[ConversationalPivot] 🔗 Perfect Integration ready:', data);
+        setIntegrationStatus('success');
+      },
+
+      onComplexAnalysis: (data) => {
+        console.log('[ConversationalPivot] 🧠 Complex analysis:', data);
+        setAiMode('analysis');
+      },
+
+      onClassification: (data) => {
+        console.log('[ConversationalPivot] 🎯 Message classified:', data);
+        setAiMode(data.flowType === 'PIVOT' ? 'pivot' : 'chat');
+      }
     });
 
-    if (!currentChartConfig && !chartId) {
-      throw new Error('No hay gráfico activo para pivotar. Asegúrate de tener un gráfico visible.');
+    // ✅ Solo conectar WebSocket si no hay conflictos
+    if (!hasConflict) {
+      chatSessionRef.current.connect();
     }
 
-    try {
-      let result;
-      const startTime = Date.now();
-      
-      // ✅ Intentar diferentes métodos de pivoteo
-      if (chartId || currentChartConfig?.meta?.chart_id) {
-        // Método 1: Pivoteo directo con chart_id
-        const targetChartId = chartId || currentChartConfig.meta.chart_id;
-        console.log('[ConversationalPivot] Attempting direct pivot with chartId:', targetChartId);
-        result = await analyticsService.pivotChart(targetChartId, message);
-      } else {
-        // Método 2: Interpretación de mensaje para nueva configuración
-        console.log('[ConversationalPivot] Attempting message interpretation');
-        result = await analyticsService.interpretChartMessage(message, currentChartConfig);
+    return () => {
+      if (chatSessionRef.current) {
+        chatSessionRef.current.close();
       }
-
-      const executionTime = Date.now() - startTime;
-      console.log('[ConversationalPivot] ✅ Pivot successful:', { result, executionTime });
-
-      // ✅ Actualizar estadísticas
-      setChatStats(prev => ({
-        messageCount: prev.messageCount + 1,
-        pivotCount: prev.pivotCount + 1,
-        successRate: ((prev.pivotCount + 1) / (prev.messageCount + 1) * 100).toFixed(1)
-      }));
-
-      // ✅ Registrar en historial
-      const pivotEntry = {
-        id: Date.now(),
-        message: message.substring(0, 100),
-        timestamp: new Date().toISOString(),
-        result: result?.meta || {},
-        success: true,
-        executionTime,
-        chartType: result?.meta?.type || 'unknown'
-      };
-      
-      setPivotHistory(prev => [pivotEntry, ...prev.slice(0, 9)]);
-
-      // ✅ Notificar cambios a InteractiveCharts
-      if (onChartPivot) {
-        onChartPivot(result, message);
+      if (pivotControllerRef.current) {
+        pivotControllerRef.current.abort();
       }
-      
-      if (onChartUpdate) {
-        onChartUpdate(result);
-      }
+    };
+  }, [userId]);
 
-      // ✅ Mostrar notificación de éxito
-      notification.success({
-        message: 'Gráfico actualizado',
-        description: 'El cambio se aplicó correctamente',
-        duration: 2,
-        placement: 'topRight'
-      });
-
-      return {
-        success: true,
-        result,
-        message: `✅ Gráfico actualizado correctamente en ${executionTime}ms`,
-        executionTime
-      };
-
-    } catch (error) {
-      console.error('[ConversationalPivot] ❌ Pivot error:', error);
-      
-      // ✅ Actualizar estadísticas de fallo
-      setChatStats(prev => ({
-        messageCount: prev.messageCount + 1,
-        pivotCount: prev.pivotCount,
-        successRate: prev.messageCount > 0 ? (prev.pivotCount / (prev.messageCount + 1) * 100).toFixed(1) : 0
-      }));
-      
-      const pivotEntry = {
-        id: Date.now(),
-        message: message.substring(0, 100),
-        timestamp: new Date().toISOString(),
-        error: error.message,
-        success: false
-      };
-      
-      setPivotHistory(prev => [pivotEntry, ...prev.slice(0, 9)]);
-
-      // ✅ Mostrar notificación de error
-      notification.error({
-        message: 'Error al cambiar gráfico',
-        description: error.message,
-        duration: 4,
-        placement: 'topRight'
-      });
-
-      return {
-        success: false,
-        error: error.message,
-        message: `❌ Error al cambiar gráfico: ${error.message}`
-      };
-    }
-  }, [currentChartConfig, onChartPivot, onChartUpdate]);
-
-  // ✅ ACTIVAR ASISTENTE CON CONEXIÓN MEJORADA
-  const handleActivateAssistant = useCallback(async () => {
-    console.log('[ConversationalPivot] 🚀 Activating assistant:', assistantConfig);
-    
-    setLoadingSuggestions(true);
-    setIsAssistantActive(true);
-    setConnectionStatus('connecting');
+  // ✅ FUNCIÓN: Manejar charts desde WebSocket
+  const handleChartsFromWebSocket = useCallback(async (charts) => {
+    console.log('[ConversationalPivot] 🔄 Processing charts from WebSocket:', charts.length);
     
     try {
-      // ✅ CREAR SESIÓN DE CHAT CON CONFIGURACIÓN ROBUSTA
-      chatSessionRef.current = chatService.createChatSession(assistantConfig.userId, {
-        onOpen: () => {
-          console.log('[ConversationalPivot] 🔌 WebSocket connected successfully');
-          setConnectionStatus('connected');
-          lastActivityRef.current = Date.now();
-        },
-        onClose: (event) => {
-          console.log('[ConversationalPivot] 🔌 WebSocket closed:', event);
-          setConnectionStatus('disconnected');
-        },
-        onError: (error) => {
-          console.error('[ConversationalPivot] ❌ WebSocket error:', error);
-          setConnectionStatus('error');
-        },
-        onMessage: (wsMessage) => {
-          console.log('[ConversationalPivot] 📨 WebSocket message:', wsMessage);
-          lastActivityRef.current = Date.now();
-          
-          if (wsMessage.text || wsMessage.response) {
-            const content = wsMessage.text || wsMessage.response || 'Respuesta recibida';
-            
-            const assistantMessage = {
-              id: Date.now(),
-              type: 'assistant',
-              content: content,
-              timestamp: new Date().toISOString(),
-              charts: wsMessage.charts || [],
-              recommendations: wsMessage.recommendations || [],
-              source: 'websocket',
-              isRealTime: true
-            };
-            
-            setMessages(prev => [...prev, assistantMessage]);
-            
-            // ✅ Actualizar gráficos si los hay
-            if (wsMessage.charts && wsMessage.charts.length > 0 && onChartUpdate) {
-              onChartUpdate(wsMessage.charts[0]);
-            }
-          }
-        }
-      });
-
-      // ✅ Conectar WebSocket
-      if (chatSessionRef.current && chatSessionRef.current.connect) {
-        chatSessionRef.current.connect();
-      }
-
-      // ✅ OBTENER SUGERENCIAS CONTEXTUALES
-      try {
-        console.log('[ConversationalPivot] 📝 Loading suggestions...');
-        const suggestionsResponse = await chatService.http.suggestions(assistantConfig.userId);
+      const unifiedChart = charts.find(chart => 
+        chart.meta?.type === 'unified' || 
+        chart.meta?.chart_id === 'unified' ||
+        chart.chartKey === 'unified' ||
+        !chart.meta?.type
+      );
+      
+      if (unifiedChart) {
+        console.log('[ConversationalPivot] ✅ Found unified chart, updating InteractiveCharts');
         
-        if (Array.isArray(suggestionsResponse) && suggestionsResponse.length > 0) {
-          setSuggestions(suggestionsResponse);
-        } else {
-          // ✅ Sugerencias por defecto contextuales
-          const defaultSuggestions = [
-            ...assistantConfig.pivotExamples.slice(0, 2),
-            `¿Cuáles son los KPIs principales ${mode === 'direccion' ? 'corporativos' : 'de mi cartera'}?`,
-            `Analiza las tendencias ${mode === 'direccion' ? 'globales' : 'de mi segmento'} del período actual`
-          ];
-          setSuggestions(defaultSuggestions);
+        // ✅ Usar onChartUpdate para Perfect Integration
+        if (onChartUpdate && typeof onChartUpdate === 'function') {
+          onChartUpdate({
+            chartKey: 'unified',
+            ...unifiedChart,
+            source: 'conversational_pivot',
+            timestamp: Date.now()
+          });
         }
-      } catch (sugError) {
-        console.warn('[ConversationalPivot] ⚠️ Error loading suggestions:', sugError);
-        setSuggestions(assistantConfig.pivotExamples);
+        
+        setLastPivotSuccess(true);
+        setIntegrationStatus('success');
+        
+        // Auto-reset success indicator
+        setTimeout(() => setLastPivotSuccess(false), 3000);
       }
-
-      // ✅ MENSAJE DE BIENVENIDA MEJORADO
-      const welcomeMessage = {
-        id: Date.now(),
-        type: 'assistant',
-        content: assistantConfig.welcomeMessage,
-        timestamp: new Date().toISOString(),
-        capabilities: assistantConfig.capabilities,
-        chartTypes: assistantConfig.chartTypes,
-        pivotExamples: assistantConfig.pivotExamples.slice(0, 3),
-        source: 'system',
-        isWelcome: true
-      };
-      
-      setMessages([welcomeMessage]);
-      
-      // ✅ Reset estadísticas
-      setChatStats({ messageCount: 0, pivotCount: 0, successRate: 0 });
       
     } catch (error) {
-      console.error('[ConversationalPivot] ❌ Error activating assistant:', error);
-      setConnectionStatus('error');
-      
-      // ✅ Fallback con modo offline
-      const errorMessage = {
-        id: Date.now(),
-        type: 'assistant',
-        content: `${assistantConfig.title} iniciado en modo offline. Funcionalidad de pivoteo limitada pero disponible.`,
-        timestamp: new Date().toISOString(),
-        isOffline: true,
-        source: 'fallback',
-        capabilities: ['Pivoteo básico', 'Interpretación de comandos', 'Análisis offline']
-      };
-      
-      setMessages([errorMessage]);
-      setSuggestions(assistantConfig.pivotExamples);
-    } finally {
-      setLoadingSuggestions(false);
+      console.error('[ConversationalPivot] ❌ Error processing charts:', error);
+      setIntegrationStatus('error');
     }
-  }, [assistantConfig, onChartUpdate, mode]);
+  }, [onChartUpdate]);
 
-  // ✅ ENVIAR MENSAJE CON DETECCIÓN INTELIGENTE
+  // ✅ FUNCIÓN PRINCIPAL: Enviar mensaje con Perfect Integration
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() || isLoading) return;
 
-    const currentMessage = inputMessage.trim();
     const userMessage = {
       id: Date.now(),
-      type: 'user',
-      content: currentMessage,
-      timestamp: new Date().toISOString()
+      sender: 'user',
+      text: inputMessage.trim(),
+      timestamp: new Date().toLocaleTimeString()
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
     setIsLoading(true);
-    lastActivityRef.current = Date.now();
+    setIntegrationStatus('processing');
+
+    // ✅ Abort controller para request
+    pivotControllerRef.current = new AbortController();
 
     try {
-      console.log('[ConversationalPivot] 📤 Processing message:', currentMessage);
+      console.log(`[ConversationalPivot] 🚀 Processing message with Perfect Integration: "${inputMessage}"`);
       
-      // ✅ DETECCIÓN INTELIGENTE DE INTENCIÓN
-      const isPivotIntent = detectPivotIntent(currentMessage);
-      
-      if (isPivotIntent && currentChartConfig) {
-        console.log('[ConversationalPivot] 🔄 Pivot intent detected, executing...');
-        
-        // ✅ Mensaje de procesamiento inmediato
-        const processingMessage = {
-          id: Date.now() + 0.5,
-          type: 'assistant',
-          content: '🔄 Procesando cambio de gráfico...',
-          timestamp: new Date().toISOString(),
-          isProcessing: true,
-          source: 'pivot-processing'
-        };
-        setMessages(prev => [...prev, processingMessage]);
-        
-        const pivotResult = await executePivot(currentMessage);
-        
-        // ✅ Reemplazar mensaje de procesamiento con resultado
-        setMessages(prev => prev.filter(msg => !msg.isProcessing));
-        
-        const pivotMessage = {
-          id: Date.now() + 1,
-          type: 'assistant',
-          content: pivotResult.message,
-          timestamp: new Date().toISOString(),
-          isPivot: true,
-          pivotSuccess: pivotResult.success,
-          executionTime: pivotResult.executionTime,
-          source: 'pivot-result'
-        };
-        
-        setMessages(prev => [...prev, pivotMessage]);
-        
-        // ✅ Si pivot exitoso, no enviar al chat general
-        if (pivotResult.success) {
-          setIsLoading(false);
-          return;
-        }
+      // ✅ NUEVO: Verificar si estamos en modo HTTP-only
+      if (isHttpOnlyMode) {
+        console.log('[ConversationalPivot] 📡 Using HTTP-only mode for this request');
       }
-
-      // ✅ ENVÍO AL AGENTE DE CHAT GENERAL
-      console.log('[ConversationalPivot] 📡 Sending to chat agent...');
       
-      const payload = {
-        user_id: assistantConfig.userId,
-        message: currentMessage,
-        gestor_id: gestorId ? String(gestorId) : undefined,
+      const messageText = inputMessage.trim();
+      
+      // ✅ STEP 1: Clasificación inteligente
+      const classification = await chatService.http.classifyAndRoute(messageText, {
+        mode,
+        gestorId: gestorId ? String(gestorId) : undefined,
         periodo: periodo ? String(periodo) : undefined,
-        include_charts: true,
-        include_recommendations: true,
-        context: {
-          mode,
-          currentChartConfig: currentChartConfig || {},
-          pivotHistory: pivotHistory.slice(0, 3),
-          chatStats,
-          isPivotIntent,
-          assistantType: 'conversational_pivot'
-        },
-        current_chart_config: currentChartConfig || {},
-        chart_interaction_type: isPivotIntent ? 'pivot' : 'query',
-        use_basic_queries: true,
-        quick_mode: false
-      };
+        currentChartConfig: currentChartConfig || {}
+      });
 
-      let response;
-      
-      // ✅ Intentar WebSocket primero, luego HTTP
-      if (chatSessionRef.current && connectionStatus === 'connected') {
-        console.log('[ConversationalPivot] 🌐 Sending via WebSocket');
-        chatSessionRef.current.send({
-          message: currentMessage,
-          context: payload.context,
-          type: 'pivot_query'
-        });
-        // La respuesta llegará vía WebSocket onMessage
-        setIsLoading(false);
-        return;
+      console.log('[ConversationalPivot] 🎯 Message classified:', classification);
+
+      let response = null;
+      let updatedChart = null;
+
+      if (classification.flowType === 'PIVOT' || messageText.toLowerCase().includes('cambia') || 
+          messageText.toLowerCase().includes('convierte') || messageText.toLowerCase().includes('muestra')) {
+        
+        // ✅ STEP 2: Usar analyticsService.pivotChart para modificación real
+        console.log('[ConversationalPivot] 🔄 Using pivotChart for real modification');
+        
+        try {
+          updatedChart = await analyticsService.pivotChart(userId, messageText, currentChartConfig, 'pivot');
+          
+          if (updatedChart) {
+            console.log('[ConversationalPivot] ✅ Chart pivoted successfully');
+            
+            // ✅ STEP 3: Actualizar InteractiveCharts directamente
+            if (onChartUpdate) {
+              onChartUpdate({
+                chartKey: 'unified',
+                ...updatedChart,
+                source: 'pivot_direct',
+                message: messageText,
+                timestamp: Date.now()
+              });
+            }
+
+            setLastPivotSuccess(true);
+            setIntegrationStatus('success');
+            
+            response = {
+              text: `✅ **Gráfico actualizado**
+"${messageText}" procesado con Perfect Integration.
+✅ Cambios aplicados en tiempo real
+¡El cambio ya es visible!${isHttpOnlyMode ? '\n🔄 Via HTTP-Only' : ''}`,
+              charts: [updatedChart]
+            };
+          }
+          
+        } catch (pivotError) {
+          console.warn('[ConversationalPivot] Pivot failed, using chat fallback:', pivotError.message);
+          
+          // ✅ FALLBACK: Chat normal si pivot falla
+          response = await chatService.http.sendMessage({
+            user_id: userId,
+            message: messageText,
+            gestor_id: gestorId ? String(gestorId) : undefined,
+            periodo: periodo ? String(periodo) : undefined,
+            include_charts: true,
+            include_recommendations: false,
+            context: {
+              mode,
+              chartTarget: 'unified',
+              intent: 'chart_modification',
+              fallbackReason: pivotError.message
+            },
+            current_chart_config: currentChartConfig || {},
+            chart_interaction_type: 'pivot',
+            use_basic_queries: true,
+            quick_mode: true
+          });
+        }
+        
       } else {
-        console.log('[ConversationalPivot] 📡 Sending via HTTP fallback');
-        response = await chatService.http.sendMessage(payload);
+        // ✅ STEP 2B: Chat normal para consultas no-pivot
+        console.log('[ConversationalPivot] 💬 Using regular chat for non-pivot message');
+        
+        response = await chatService.http.sendMessage({
+          user_id: userId,
+          message: messageText,
+          gestor_id: gestorId ? String(gestorId) : undefined,
+          periodo: periodo ? String(periodo) : undefined,
+          include_charts: false, // No charts para consultas generales
+          include_recommendations: true,
+          context: {
+            mode,
+            chartTarget: 'unified',
+            intent: 'general_query'
+          },
+          quick_mode: true
+        });
       }
 
-      console.log('[ConversationalPivot] 📨 Chat response received:', response);
-
-      if (response && (response.text || response.response)) {
-        const content = response.text || response.response;
-        
+      // ✅ STEP 4: Procesar respuesta
+      if (response && response.text) {
         const assistantMessage = {
           id: Date.now() + 1,
-          type: 'assistant',
-          content: content,
-          timestamp: new Date().toISOString(),
-          charts: response.charts || [],
-          recommendations: response.recommendations || [],
-          source: 'http',
-          confidence: response.confidence_score || null
+          sender: 'assistant',
+          text: response.text,
+          timestamp: new Date().toLocaleTimeString(),
+          source: updatedChart ? 'pivot_success' : 'chat_response',
+          aiMode: classification.flowType?.toLowerCase() || 'chat'
         };
-        
         setMessages(prev => [...prev, assistantMessage]);
-        
-        // ✅ Actualizar gráficos si los hay
-        if (response.charts && response.charts.length > 0 && onChartUpdate) {
-          onChartUpdate(response.charts[0]);
-        }
-      } else {
-        throw new Error('Respuesta inválida del servidor');
       }
-      
+
+      // ✅ STEP 5: Procesar charts adicionales si existen
+      if (response && response.charts && response.charts.length > 0) {
+        await handleChartsFromWebSocket(response.charts);
+      }
+
+      notification.success({
+        message: '🤖 Procesado con IA',
+        description: updatedChart ? 'Gráfico actualizado correctamente' : 'Consulta procesada',
+        duration: 2
+      });
+
     } catch (error) {
       console.error('[ConversationalPivot] ❌ Error processing message:', error);
+      setIntegrationStatus('error');
       
       const errorMessage = {
         id: Date.now() + 1,
-        type: 'assistant',
-        content: `Lo siento, ha ocurrido un error: ${error.message}. Por favor, intenta reformular tu consulta.`,
-        timestamp: new Date().toISOString(),
+        sender: 'assistant',
+        text: `❌ **Error en Perfect Integration**
+
+${error.message || 'No se pudo procesar tu solicitud.'}
+
+**Sugerencias:**
+• Reformula tu mensaje
+• Verifica que InteractiveCharts esté visible
+• Prueba: "Cambia a barras horizontales"`,
+        timestamp: new Date().toLocaleTimeString(),
         isError: true,
-        source: 'error'
+        aiMode: 'error'
       };
       
       setMessages(prev => [...prev, errorMessage]);
+      
+      notification.error({
+        message: '❌ Error en IA',
+        description: error.message || 'Error desconocido',
+        duration: 3
+      });
     } finally {
       setIsLoading(false);
+      setInputMessage('');
+      
+      // Reset integration status after delay
+      setTimeout(() => {
+        if (integrationStatus !== 'success') {
+          setIntegrationStatus('idle');
+        }
+      }, 2000);
     }
-  }, [inputMessage, isLoading, assistantConfig, detectPivotIntent, currentChartConfig, executePivot, mode, gestorId, periodo, pivotHistory, chatStats, connectionStatus, onChartUpdate]);
+  }, [
+    inputMessage, 
+    isLoading, 
+    userId, 
+    mode, 
+    gestorId, 
+    periodo, 
+    currentChartConfig, 
+    onChartUpdate,
+    integrationStatus,
+    isHttpOnlyMode
+  ]);
 
-  // ✅ USAR SUGERENCIA PREDEFINIDA
-  const handleUseSuggestion = useCallback((suggestionText) => {
-    console.log('[ConversationalPivot] 💡 Using suggestion:', suggestionText);
-    setInputMessage(suggestionText);
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        // Posicionar cursor al final
-        const length = suggestionText.length;
-        inputRef.current.setSelectionRange(length, length);
-      }
-    }, 100);
-  }, []);
-
-  // ✅ MANEJAR TECLAS
-  const handleKeyPress = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  // ✅ MANEJAR ENTER
+  const handleKeyPress = useCallback((event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       handleSendMessage();
     }
   }, [handleSendMessage]);
 
-  // ✅ LIMPIAR CONVERSACIÓN
-  const handleClearConversation = useCallback(async () => {
+  // ✅ LIMPIAR CHAT CON RESET MEJORADO
+  const handleClearChat = useCallback(async () => {
     try {
-      if (assistantConfig.userId) {
-        await chatService.http.reset(assistantConfig.userId);
+      console.log('[ConversationalPivot] 🧹 Clearing chat with Perfect Integration reset');
+      
+      if (chatSessionRef.current && !isHttpOnlyMode) {
+        await chatSessionRef.current.reset();
       }
+      
+      // ✅ Limpiar cache de analytics
+      if (analyticsService.clearAnalyticsCache) {
+        analyticsService.clearAnalyticsCache();
+      }
+      
       setMessages([]);
-      setPivotHistory([]);
-      setChatStats({ messageCount: 0, pivotCount: 0, successRate: 0 });
-      console.log('[ConversationalPivot] 🧹 Conversation cleared');
+      setLastPivotSuccess(false);
+      setIntegrationStatus('idle');
+      setAiMode('chat');
+      
+      notification.info({
+        message: '🧹 Chat limpiado',
+        description: 'Sesión reiniciada',
+        duration: 2
+      });
+      
     } catch (error) {
-      console.warn('[ConversationalPivot] ⚠️ Error clearing conversation:', error);
+      console.warn('[ConversationalPivot] Error clearing chat:', error);
       setMessages([]);
-      setPivotHistory([]);
-      setChatStats({ messageCount: 0, pivotCount: 0, successRate: 0 });
     }
-  }, [assistantConfig.userId]);
+  }, [isHttpOnlyMode]);
 
-  // ✅ CLEANUP AL DESMONTAR
-  useEffect(() => {
-    return () => {
-      if (chatSessionRef.current && chatSessionRef.current.close) {
-        chatSessionRef.current.close();
-      }
-    };
+  // ✅ SUGERENCIAS CONTEXTUALES DINÁMICAS Y COMPACTAS
+  const getContextualSuggestions = useCallback(() => {
+    const baseSuggestions = [
+      "Barras horizontales",
+      "Gráfico circular", 
+      "Métrica MARGEN"
+    ];
+
+    if (mode === 'direccion') {
+      return [
+        ...baseSuggestions,
+        "Por centros",
+        "Por segmentos"
+      ];
+    } else {
+      return [
+        ...baseSuggestions,
+        "Mis clientes",
+        "Por productos"
+      ];
+    }
+  }, [mode]);
+
+  const contextualSuggestions = getContextualSuggestions();
+
+  const handleUseSuggestion = useCallback((suggestion) => {
+    setInputMessage(suggestion);
   }, []);
 
-  // ✅ RENDERIZAR MENSAJE MEJORADO
-  const renderMessage = useCallback((message) => {
-    const isUser = message.type === 'user';
-    
-    return (
-      <div
-        key={message.id}
-        style={{
-          display: 'flex',
-          justifyContent: isUser ? 'flex-end' : 'flex-start',
-          marginBottom: 16,
-          alignItems: 'flex-start'
-        }}
-      >
-        {!isUser && (
+  // ✅ MENU DE CONFIGURACIÓN COMPACTO
+  const configMenu = {
+    items: [
+      {
+        key: 'reset',
+        icon: <ClearOutlined />,
+        label: 'Reiniciar',
+        onClick: handleClearChat
+      },
+      {
+        key: 'mode',
+        icon: <SettingOutlined />,
+        label: `Modo: ${isHttpOnlyMode ? 'HTTP-Only' : 'WebSocket'}`,
+        disabled: true
+      }
+    ]
+  };
+
+  // ✅ RENDERIZADO COMPLETAMENTE RESPONSIVO
+  return (
+    <Card
+      className={`conversational-pivot-v11 ${className}`}
+      style={{
+        width: '100%', // ✅ CAMBIO CLAVE: width 100% en lugar de fijo
+        height: '100%', // ✅ CAMBIO CLAVE: height 100% en lugar de fijo
+        display: 'flex',
+        flexDirection: 'column',
+        border: integrationStatus === 'success' ? '2px solid #52c41a' : 
+               integrationStatus === 'error' ? '2px solid #ff4d4f' :
+               integrationStatus === 'processing' ? '2px solid #1890ff' : '1px solid #d9d9d9',
+        boxShadow: integrationStatus === 'processing' ? '0 0 12px rgba(24, 144, 255, 0.3)' : undefined,
+        ...style
+      }}
+      title={
+        <Space size="small">
           <Avatar 
             icon={<RobotOutlined />} 
             style={{ 
-              backgroundColor: message.isError ? '#ff4d4f' : 
-                              message.isPivot ? (message.pivotSuccess ? '#52c41a' : '#ff4d4f') :
-                              message.isProcessing ? '#faad14' :
-                              message.source === 'websocket' ? '#722ed1' : 
-                              message.isWelcome ? '#1890ff' : '#13c2c2',
-              marginRight: 8,
-              flexShrink: 0
+              backgroundColor: isConnected ? '#52c41a' : '#ff4d4f',
+              border: integrationStatus === 'processing' ? '2px solid #1890ff' : 'none'
             }} 
-          />
-        )}
-        
-        <div
-          style={{
-            maxWidth: '80%',
-            padding: '12px 16px',
-            borderRadius: 12,
-            backgroundColor: isUser ? theme.colors?.bmGreenPrimary || '#1890ff' : '#f5f5f5',
-            color: isUser ? 'white' : '#333',
-            wordBreak: 'break-word',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            border: message.isPivot ? `2px solid ${message.pivotSuccess ? '#52c41a' : '#ff4d4f'}` : 'none'
-          }}
-        >
-          <div>{message.content}</div>
-          
-          {/* ✅ Capacidades del asistente */}
-          {message.capabilities && (
-            <div style={{ marginTop: 12 }}>
-              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-                Capacidades disponibles:
-              </Text>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {message.capabilities.map((capability, index) => (
-                  <Tag key={index} size="small" color="blue">
-                    {capability}
-                  </Tag>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* ✅ Ejemplos de pivoteo */}
-          {message.pivotExamples && (
-            <div style={{ marginTop: 12 }}>
-              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-                <ThunderboltOutlined style={{ marginRight: 4 }} />
-                Ejemplos de cambios que puedes pedir:
-              </Text>
-              {message.pivotExamples.map((example, index) => (
-                <div key={index} style={{ marginBottom: 4 }}>
-                  <Button
-                    type="link"
-                    size="small"
-                    onClick={() => handleUseSuggestion(example)}
-                    style={{ 
-                      padding: 0,
-                      height: 'auto',
-                      fontSize: 11,
-                      textAlign: 'left',
-                      color: '#1890ff'
-                    }}
-                  >
-                    "/{example}"
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {/* ✅ Gráficos generados */}
-          {message.charts && message.charts.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <Tag color="blue" icon={<BarChartOutlined />}>
-                {message.charts.length} gráfico(s) actualizado(s)
-              </Tag>
-            </div>
-          )}
-          
-          {/* ✅ Estado del pivot */}
-          {message.isPivot && (
-            <div style={{ marginTop: 8 }}>
-              <Tag 
-                color={message.pivotSuccess ? "green" : "red"} 
-                icon={message.pivotSuccess ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-              >
-                Pivot {message.pivotSuccess ? 'exitoso' : 'fallido'}
-                {message.executionTime && ` (${message.executionTime}ms)`}
-              </Tag>
-            </div>
-          )}
-          
-          {/* ✅ Recomendaciones */}
-          {message.recommendations && message.recommendations.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <Text strong style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
-                Recomendaciones:
-              </Text>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {message.recommendations.slice(0, 3).map((rec, index) => (
-                  <Tag key={index} color="green" size="small">
-                    {rec}
-                  </Tag>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* ✅ Indicadores especiales */}
-          <div style={{ 
-            fontSize: '11px', 
-            opacity: 0.7, 
-            marginTop: 6,
-            textAlign: isUser ? 'right' : 'left',
-            display: 'flex',
-            justifyContent: isUser ? 'flex-end' : 'flex-start',
-            alignItems: 'center',
-            gap: 4
-          }}>
-            <span>{new Date(message.timestamp).toLocaleTimeString()}</span>
-            {message.isOffline && <Tag size="small" color="orange">Offline</Tag>}
-            {message.isRealTime && <Tag size="small" color="green">Tiempo Real</Tag>}
-            {message.isProcessing && <Tag size="small" color="blue">Procesando</Tag>}
-            {message.source && <span style={{ fontSize: 10 }}>• {message.source}</span>}
-          </div>
-        </div>
-        
-        {isUser && (
-          <Avatar 
-            icon={<UserOutlined />} 
-            style={{ 
-              backgroundColor: '#52c41a',
-              marginLeft: 8,
-              flexShrink: 0
-            }} 
-          />
-        )}
-      </div>
-    );
-  }, [handleUseSuggestion]);
-
-  // ✅ RENDERIZAR SUGERENCIAS MEJORADAS
-  const renderSuggestions = useCallback(() => {
-    if (!suggestions || suggestions.length === 0) return null;
-
-    const suggestionItems = [{
-      key: '1',
-      label: (
-        <Space>
-          <BulbOutlined style={{ color: theme.colors?.bmGreenPrimary || '#1890ff' }} />
-          <Text strong>Sugerencias para comenzar ({suggestions.length})</Text>
-          <Badge count={mode === 'direccion' ? 'Dirección' : 'Gestor'} size="small" />
-          {currentChartConfig && <Tag color="green" size="small">Pivoteo disponible</Tag>}
-        </Space>
-      ),
-      children: (
-        <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-          <List
             size="small"
-            dataSource={suggestions}
-            renderItem={(suggestion, index) => {
-              const suggestionText = typeof suggestion === 'string' 
-                ? suggestion 
-                : suggestion?.text || suggestion?.content || `Sugerencia ${index + 1}`;
-
-              const isPivotSuggestion = detectPivotIntent(suggestionText);
-
-              return (
-                <List.Item key={index} style={{ padding: '4px 0' }}>
-                  <Button
-                    type="text"
-                    size="small"
-                    block
-                    style={{ 
-                      textAlign: 'left', 
-                      height: 'auto', 
-                      padding: '8px 12px',
-                      border: `1px dashed ${isPivotSuggestion ? '#722ed1' : '#e8e8e8'}`,
-                      borderRadius: 6,
-                      justifyContent: 'flex-start',
-                      transition: 'all 0.3s ease',
-                      backgroundColor: isPivotSuggestion ? '#722ed115' : 'transparent'
-                    }}
-                    onClick={() => handleUseSuggestion(suggestionText)}
-                  >
-                    <Space style={{ width: '100%', justifyContent: 'flex-start' }}>
-                      {isPivotSuggestion ? 
-                        <ThunderboltOutlined style={{ color: '#722ed1', fontSize: 12 }} /> :
-                        <MessageOutlined style={{ color: theme.colors?.bmGreenPrimary || '#1890ff', fontSize: 12 }} />
-                      }
-                      <span style={{ fontSize: 12, flex: 1, textAlign: 'left' }}>
-                        {suggestionText}
-                      </span>
-                      {isPivotSuggestion && <Tag size="small" color="purple">Pivot</Tag>}
-                    </Space>
-                  </Button>
-                </List.Item>
-              );
-            }}
           />
-        </div>
-      )
-    }];
-
-    return (
-      <Collapse 
-        defaultActiveKey={['1']} 
-        ghost
-        style={{ marginBottom: 16 }}
-        items={suggestionItems}
-        expandIcon={({ isActive }) => <DownOutlined rotate={isActive ? 180 : 0} />}
-      />
-    );
-  }, [suggestions, mode, currentChartConfig, handleUseSuggestion, detectPivotIntent]);
-
-  // ✅ VISTA DE ACTIVACIÓN MEJORADA
-  if (!isAssistantActive) {
-    return (
-      <Card 
-        className={className}
-        style={{ 
-          height: '100%', 
-          display: 'flex', 
-          flexDirection: 'column',
-          ...style 
-        }}
-      >
-        <div style={{ 
+          <div>
+            <Text strong style={{ fontSize: 13 }}>Chat IA</Text>
+            <div style={{ fontSize: 9, color: '#666', marginTop: -2 }}>
+              Perfect Integration v11.1 {isHttpOnlyMode && '(HTTP-Only)'}
+            </div>
+          </div>
+          <Space size="small">
+            <Tag color={isConnected ? 'green' : 'red'} size="small">
+              {isConnected ? (isHttpOnlyMode ? 'HTTP' : 'WS') : 'OFF'}
+            </Tag>
+            {integrationStatus === 'processing' && (
+              <Badge count="..." style={{ backgroundColor: '#1890ff', fontSize: 8 }} />
+            )}
+            {lastPivotSuccess && (
+              <Badge count="✅" style={{ backgroundColor: '#52c41a', fontSize: 8 }} />
+            )}
+          </Space>
+        </Space>
+      }
+      extra={
+        <Space size="small">
+          <Tooltip title={`Modo: ${aiMode} ${isHttpOnlyMode ? '(HTTP-Only)' : ''}`}>
+            <Avatar 
+              size="small"
+              style={{ 
+                backgroundColor: aiMode === 'pivot' ? '#52c41a' : 
+                               aiMode === 'analysis' ? '#1890ff' : '#f0f0f0',
+                color: aiMode !== 'chat' ? 'white' : '#666',
+                fontSize: 10
+              }}
+            >
+              {aiMode === 'pivot' ? 'P' : aiMode === 'analysis' ? 'A' : 'C'}
+            </Avatar>
+          </Tooltip>
+          <Dropdown menu={configMenu} placement="bottomRight">
+            <Button size="small" icon={<SettingOutlined />} />
+          </Dropdown>
+        </Space>
+      }
+      styles={{ 
+        body: {
+          padding: 0, 
           flex: 1, 
           display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          textAlign: 'center',
-          padding: 40
-        }}>
-          <div style={{ position: 'relative', marginBottom: 24 }}>
-            <RobotOutlined 
-              style={{ 
-                fontSize: 64, 
-                color: theme.colors?.bmGreenPrimary || '#1890ff',
-              }} 
-            />
-            <ThunderboltOutlined 
-              style={{
-                position: 'absolute',
-                top: -5,
-                right: -5,
-                fontSize: 20,
-                color: '#722ed1',
-                backgroundColor: 'white',
-                borderRadius: '50%',
-                padding: 2
-              }}
-            />
-          </div>
-          
-          <Title level={3} style={{ color: theme.colors?.textPrimary, marginBottom: 8 }}>
-            {assistantConfig.title}
-          </Title>
-          
-          <Text type="secondary" style={{ fontSize: 14, marginBottom: 8 }}>
-            Especializado en Pivoteo Conversacional de Gráficos
-          </Text>
-          
-          <Paragraph style={{ maxWidth: 500, marginBottom: 24, color: theme.colors?.textSecondary }}>
-            Activa tu asistente inteligente para <strong>cambiar gráficos mediante lenguaje natural</strong>, 
-            obtener análisis en tiempo real y recibir recomendaciones personalizadas sobre 
-            {mode === 'direccion' ? ' el rendimiento corporativo' : ' tu gestión comercial'}.
-          </Paragraph>
-
-          {/* ✅ Estado del gráfico actual */}
-          {currentChartConfig ? (
-            <Alert
-              message="Gráfico detectado"
-              description={`Gráfico "${currentChartConfig.meta?.title || 'Sin título'}" listo para pivoteo conversacional`}
-              type="success"
-              showIcon
-              style={{ marginBottom: 24, maxWidth: 500 }}
-            />
-          ) : (
-            <Alert
-              message="Sin gráfico activo"
-              description="Asegúrate de tener un gráfico visible en InteractiveCharts para usar el pivoteo"
-              type="info"
-              showIcon
-              style={{ marginBottom: 24, maxWidth: 500 }}
-            />
-          )}
-
-          {/* ✅ Capacidades destacadas */}
-          <div style={{ marginBottom: 32 }}>
-            <Text strong style={{ display: 'block', marginBottom: 12 }}>
-              Capacidades principales:
-            </Text>
-            <Space wrap>
-              {assistantConfig.capabilities.map((capability, index) => (
-                <Tag key={index} color="blue" style={{ margin: 2 }}>
-                  {capability}
-                </Tag>
-              ))}
-            </Space>
-          </div>
-          
-          <Button 
-            type="primary" 
-            size="large"
-            icon={<RobotOutlined />}
-            loading={loadingSuggestions}
-            onClick={handleActivateAssistant}
-            style={{ 
-              height: 48,
-              paddingLeft: 24,
-              paddingRight: 24,
-              borderRadius: 8,
-              backgroundColor: theme.colors?.bmGreenPrimary,
-              borderColor: theme.colors?.bmGreenPrimary
-            }}
-          >
-            {loadingSuggestions ? 'Iniciando Asistente...' : 'Activar Asistente IA'}
-          </Button>
-          
-          {/* ✅ Información contextual */}
-          <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              Modo: <Badge count={mode === 'direccion' ? 'Dirección' : 'Gestor'} size="small" />
-              {gestorId && ` • Gestor: ${gestorId}`}
-              {periodo && ` • Período: ${periodo}`}
-            </Text>
-            
-            <Space split={<span style={{ color: '#d9d9d9' }}>•</span>}>
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                WebSocket + HTTP
-              </Text>
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                Pivoteo inteligente
-              </Text>
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                Tiempo real
-              </Text>
-            </Space>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  // ✅ VISTA PRINCIPAL DEL CHAT ACTIVO
-  return (
-    <Card 
-      className={className}
-      style={{ 
-        height: '100%', 
-        display: 'flex', 
-        flexDirection: 'column',
-        ...style
-      }}
-      styles={{ 
-        body: { 
-          padding: 0, 
-          height: '100%', 
-          display: 'flex', 
-          flexDirection: 'column' 
+          flexDirection: 'column',
+          overflow: 'hidden' // ✅ CAMBIO CLAVE: Prevenir scroll externo
         }
       }}
     >
-      {/* ✅ HEADER MEJORADO CON ESTADÍSTICAS */}
-      <div style={{ 
-        padding: '16px 20px', 
-        borderBottom: '1px solid #f0f0f0',
-        flexShrink: 0
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Space>
-            <Avatar 
-              icon={<RobotOutlined />} 
-              style={{ 
-                backgroundColor: connectionStatus === 'connected' ? '#52c41a' : 
-                                connectionStatus === 'connecting' ? '#faad14' :
-                                connectionStatus === 'error' ? '#ff4d4f' : '#1890ff'
-              }} 
-            />
-            <div>
-              <Title level={5} style={{ margin: 0, color: theme.colors?.textPrimary }}>
-                {assistantConfig.title}
-                <ThunderboltOutlined style={{ marginLeft: 8, color: '#722ed1' }} />
-              </Title>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {mode === 'direccion' ? 'Dashboard Dirección' : `Gestor ${gestorId}`} • {periodo || 'Período Actual'}
-                </Text>
-                <Badge 
-                  status={connectionStatus === 'connected' ? 'success' : 
-                          connectionStatus === 'connecting' ? 'processing' :
-                          connectionStatus === 'error' ? 'error' : 'default'} 
-                  text={connectionStatus === 'connected' ? 'Conectado' :
-                        connectionStatus === 'connecting' ? 'Conectando' :
-                        connectionStatus === 'error' ? 'Error' : 'Desconectado'}
-                />
-                
-                {/* ✅ Estadísticas de chat */}
-                {chatStats.messageCount > 0 && (
-                  <Popover
-                    content={
-                      <div style={{ minWidth: 200 }}>
-                        <div style={{ marginBottom: 8 }}>
-                          <Text strong>Estadísticas de sesión</Text>
-                        </div>
-                        <div style={{ marginBottom: 4 }}>
-                          <Text>Mensajes: {chatStats.messageCount}</Text>
-                        </div>
-                        <div style={{ marginBottom: 4 }}>
-                          <Text>Pivots exitosos: {chatStats.pivotCount}</Text>
-                        </div>
-                        <div style={{ marginBottom: 8 }}>
-                          <Text>Tasa de éxito: {chatStats.successRate}%</Text>
-                        </div>
-                        <Progress 
-                          percent={parseFloat(chatStats.successRate)} 
-                          size="small"
-                          status={parseFloat(chatStats.successRate) >= 80 ? 'success' : 
-                                 parseFloat(chatStats.successRate) >= 60 ? 'active' : 'exception'}
-                        />
-                      </div>
-                    }
-                    title="Rendimiento del Asistente"
-                    trigger="hover"
-                  >
-                    <Tag color="blue" style={{ cursor: 'pointer' }}>
-                      {chatStats.messageCount} msgs • {chatStats.successRate}% éxito
-                    </Tag>
-                  </Popover>
-                )}
-              </div>
-            </div>
-          </Space>
-          
-          <Space>
-            <Tooltip title="Limpiar conversación">
-              <Button 
-                size="small" 
-                icon={<ClearOutlined />} 
-                onClick={handleClearConversation}
-                type="text"
-              />
-            </Tooltip>
-            
-            <Tooltip title={`Historial: ${pivotHistory.length} pivots`}>
-              <Badge count={pivotHistory.length} size="small" showZero>
-                <CommentOutlined style={{ fontSize: 16, color: theme.colors?.textSecondary }} />
-              </Badge>
-            </Tooltip>
-          </Space>
-        </div>
-        
-        {/* ✅ Indicador del gráfico activo */}
-        {currentChartConfig && (
-          <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
-            <Space>
-              <BarChartOutlined style={{ color: '#52c41a' }} />
-              <Text style={{ fontSize: 12, color: '#52c41a' }}>
-                <strong>Gráfico activo:</strong> {currentChartConfig.meta?.title || 'Sin título'} • Pivoteo disponible
-              </Text>
-              <Tag size="small" color="green">Listo</Tag>
-            </Space>
-          </div>
-        )}
-      </div>
-
-      {/* ✅ SUGERENCIAS COMPACTAS */}
-      {suggestions && suggestions.length > 0 && messages.length <= 1 && (
-        <div style={{ padding: '16px 20px 0', flexShrink: 0 }}>
-          {renderSuggestions()}
-        </div>
-      )}
-
-      {/* ✅ ÁREA DE MENSAJES */}
-      <div style={{ 
-        flex: 1, 
-        padding: '16px 20px', 
-        overflowY: 'auto',
-        minHeight: 0
-      }}>
+      {/* ✅ ÁREA DE MENSAJES COMPLETAMENTE RESPONSIVA */}
+      <div 
+        style={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          padding: '12px', 
+          backgroundColor: '#fafafa',
+          minHeight: 0 // ✅ CAMBIO CLAVE: Permite que flex shrink funcione
+        }}
+      >
         {messages.length === 0 ? (
-          <div style={{ 
-            textAlign: 'center', 
-            color: '#999', 
-            padding: 40 
-          }}>
-            <div style={{ marginBottom: 16 }}>
-              <MessageOutlined style={{ fontSize: 32 }} />
-            </div>
-            <div style={{ marginBottom: 8, fontSize: 14 }}>
-              Escribe un mensaje para comenzar
-            </div>
-            <div style={{ fontSize: 12, color: '#ccc', marginBottom: 16 }}>
-              Ejemplos de pivoteo: "Cambia a barras horizontales" • "Muestra como circular" • "Convierte a líneas"
-            </div>
-            {currentChartConfig ? (
-              <Tag color="green">✅ Gráfico detectado - Pivoteo disponible</Tag>
-            ) : (
-              <Tag color="orange">⚠️ Activa InteractiveCharts para usar pivoteo</Tag>
-            )}
-          </div>
+          <Empty 
+            image={<MessageOutlined style={{ fontSize: 24, color: '#ccc' }} />}
+            description={
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ marginBottom: 6 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Perfect Integration v11.1</Text>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    Modifica gráficos con lenguaje natural
+                  </Text>
+                </div>
+                {currentChartConfig ? (
+                  <Tag color="green" size="small">✅ Gráfico detectado</Tag>
+                ) : (
+                  <Tag color="orange" size="small">⚠️ Sin gráfico</Tag>
+                )}
+                {isHttpOnlyMode && (
+                  <Tag color="blue" size="small">📡 Modo HTTP-Only</Tag>
+                )}
+                <div style={{ marginTop: 6 }}>
+                  <Text type="secondary" style={{ fontSize: 10 }}>
+                    Modo: {mode}
+                  </Text>
+                </div>
+              </div>
+            }
+          />
         ) : (
-          messages.map(renderMessage)
+          messages.map(message => (
+            <div
+              key={message.id}
+              style={{
+                display: 'flex',
+                justifyContent: message.sender === 'user' ? 'flex-end' : 'flex-start',
+                marginBottom: 10,
+                alignItems: 'flex-start'
+              }}
+            >
+              {message.sender === 'assistant' && (
+                <Avatar 
+                  icon={<RobotOutlined />} 
+                  size="small"
+                  style={{ 
+                    backgroundColor: message.isError ? '#ff4d4f' : 
+                                   message.source === 'pivot_success' ? '#52c41a' :
+                                   message.aiMode === 'analysis' ? '#722ed1' : 
+                                   isHttpOnlyMode ? '#1890ff' : '#52c41a',
+                    marginRight: 6,
+                    marginTop: 2
+                  }} 
+                />
+              )}
+              
+              <div
+                style={{
+                  maxWidth: '80%',
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  backgroundColor: message.sender === 'user' ? 
+                    (theme.colors?.bmGreenPrimary || '#1890ff') : 
+                    (message.isError ? '#fff2f0' : 
+                     message.source === 'pivot_success' ? '#f6ffed' : '#f0f0f0'),
+                  color: message.sender === 'user' ? 'white' : '#333',
+                  wordBreak: 'break-word',
+                  fontSize: 12,
+                  lineHeight: 1.4,
+                  border: message.isError ? '1px solid #ffccc7' : 
+                         message.source === 'pivot_success' ? '1px solid #b7eb8f' : 'none',
+                  whiteSpace: 'pre-wrap'
+                }}
+              >
+                {message.text}
+                
+                {message.isWelcome && (
+                  <div style={{ marginTop: 8 }}>
+                    <Text strong style={{ fontSize: 10, display: 'block', marginBottom: 6, color: '#666' }}>
+                      <BulbOutlined /> Prueba:
+                    </Text>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {contextualSuggestions.slice(0, 2).map((suggestion, index) => (
+                        <Button
+                          key={index}
+                          type="link"
+                          size="small"
+                          onClick={() => handleUseSuggestion(suggestion)}
+                          style={{ 
+                            padding: '1px 0',
+                            height: 'auto',
+                            fontSize: 10,
+                            textAlign: 'left',
+                            color: '#1890ff'
+                          }}
+                        >
+                          "{suggestion}"
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div style={{ 
+                  fontSize: 9, 
+                  opacity: 0.7, 
+                  marginTop: 4,
+                  textAlign: message.sender === 'user' ? 'right' : 'left',
+                  display: 'flex',
+                  justifyContent: message.sender === 'user' ? 'flex-end' : 'flex-start',
+                  alignItems: 'center',
+                  gap: 4
+                }}>
+                  <span>{message.timestamp}</span>
+                  {message.aiMode && message.aiMode !== 'chat' && (
+                    <Tag size="small" color="blue" style={{ fontSize: 8, padding: '0 4px', lineHeight: '14px' }}>
+                      {message.aiMode.toUpperCase()}
+                    </Tag>
+                  )}
+                </div>
+              </div>
+              
+              {message.sender === 'user' && (
+                <Avatar 
+                  icon={<UserOutlined />} 
+                  size="small"
+                  style={{ 
+                    backgroundColor: '#52c41a',
+                    marginLeft: 6,
+                    marginTop: 2
+                  }} 
+                />
+              )}
+            </div>
+          ))
         )}
         
-        {/* ✅ INDICADOR DE CARGA MEJORADO */}
+        {/* ✅ INDICADOR DE CARGA MEJORADO Y COMPACTO */}
         {isLoading && (
           <div style={{ 
             display: 'flex', 
             justifyContent: 'flex-start', 
             alignItems: 'center',
-            marginBottom: 16
+            marginBottom: 10
           }}>
             <Avatar 
               icon={<RobotOutlined />} 
+              size="small"
               style={{ 
                 backgroundColor: '#1890ff',
-                marginRight: 8 
+                marginRight: 6,
+                marginTop: 2,
+                border: '2px solid #1890ff'
               }} 
             />
             <div style={{
-              padding: '12px 16px',
-              borderRadius: 12,
-              backgroundColor: '#f5f5f5',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              border: '2px solid #1890ff'
+              padding: '6px 10px',
+              borderRadius: 8,
+              backgroundColor: '#f0f0f0',
+              border: '2px solid #1890ff',
+              fontSize: 12
             }}>
-              <Space>
+              <Space size="small">
                 <Spin 
-                  indicator={<LoadingOutlined style={{ fontSize: 16 }} spin />} 
+                  indicator={<LoadingOutlined style={{ fontSize: 12 }} spin />} 
                 />
-                <span>Procesando consulta...</span>
-                {detectPivotIntent(inputMessage) && <Tag color="purple" size="small">Pivot detectado</Tag>}
+                <span>
+                  {integrationStatus === 'processing' ? 'Procesando...' : 'Procesando...'}
+                </span>
               </Space>
             </div>
           </div>
@@ -1184,75 +864,138 @@ const ConversationalPivot = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ✅ ÁREA DE INPUT MEJORADA */}
+      {/* ✅ SUGERENCIAS CONTEXTUALES COMPACTAS */}
+      {messages.length <= 1 && (
+        <div style={{ padding: '6px 12px', borderTop: '1px solid #f0f0f0', backgroundColor: '#fafafa' }}>
+          <Text strong style={{ fontSize: 10, display: 'block', marginBottom: 6, color: '#666' }}>
+            <ThunderboltOutlined /> Comandos rápidos:
+          </Text>
+          <Space wrap size="small">
+            {contextualSuggestions.map((suggestion, index) => (
+              <Button
+                key={index}
+                size="small"
+                type="dashed"
+                onClick={() => handleUseSuggestion(suggestion)}
+                style={{ fontSize: 9, padding: '2px 6px', height: 24 }}
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </Space>
+        </div>
+      )}
+
+      {/* ✅ ÁREA DE INPUT COMPLETAMENTE RESPONSIVA */}
       <div style={{ 
-        padding: 16, 
+        padding: 10, 
         borderTop: '1px solid #f0f0f0',
-        flexShrink: 0
+        backgroundColor: 'white',
+        flexShrink: 0 // ✅ CAMBIO CLAVE: Evita que se comprima
       }}>
         <Space.Compact style={{ width: '100%' }}>
           <TextArea
-            ref={inputRef}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={currentChartConfig ? 
-              "Escribe tu consulta o cambia el gráfico... (Ej: 'Cambia a barras horizontales')" :
-              "Escribe tu consulta... (Activa InteractiveCharts para pivoteo)"
-            }
-            autoSize={{ minRows: 1, maxRows: 3 }}
+            placeholder={`Comando para gráfico... (${mode})`}
+            autoSize={{ minRows: 1, maxRows: 2 }}
             disabled={isLoading}
+            maxLength={200}
             style={{ 
-              borderRadius: '8px 0 0 8px',
-              resize: 'none'
+              borderRadius: '4px 0 0 4px',
+              resize: 'none',
+              fontSize: 12,
+              borderColor: integrationStatus === 'processing' ? '#1890ff' : undefined
             }}
           />
           <Button
             type="primary"
-            icon={detectPivotIntent(inputMessage) ? <ThunderboltOutlined /> : <SendOutlined />}
+            icon={<SendOutlined />}
             onClick={handleSendMessage}
             loading={isLoading}
             disabled={!inputMessage.trim()}
+            size="small"
             style={{ 
-              height: '100%',
-              borderRadius: '0 8px 8px 0',
-              backgroundColor: detectPivotIntent(inputMessage) ? '#722ed1' : theme.colors?.bmGreenPrimary,
-              borderColor: detectPivotIntent(inputMessage) ? '#722ed1' : theme.colors?.bmGreenPrimary
+              borderRadius: '0 4px 4px 0',
+              backgroundColor: integrationStatus === 'processing' ? '#1890ff' :
+                             lastPivotSuccess ? '#52c41a' :
+                             theme.colors?.bmGreenPrimary || '#1890ff',
+              borderColor: integrationStatus === 'processing' ? '#1890ff' :
+                          lastPivotSuccess ? '#52c41a' :
+                          theme.colors?.bmGreenPrimary || '#1890ff'
             }}
           >
-            {detectPivotIntent(inputMessage) ? 'Pivotar' : 'Enviar'}
+            {integrationStatus === 'processing' ? '...' : 'Enviar'}
           </Button>
         </Space.Compact>
 
-        {/* ✅ INDICADORES DE ESTADO EN INPUT */}
-        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 11, color: '#999' }}>
-            {detectPivotIntent(inputMessage) && inputMessage.trim() && (
-              <Tag color="purple" size="small">
-                <ThunderboltOutlined /> Intención de pivot detectada
-              </Tag>
+        {/* ✅ ESTADO DE CONEXIÓN COMPACTO */}
+        <div style={{ marginTop: 6, textAlign: 'center' }}>
+          <Space split={<span>•</span>} size="small">
+            <Text type="secondary" style={{ fontSize: 9 }}>
+              Enter para enviar
+            </Text>
+            <Text type="secondary" style={{ fontSize: 9 }}>
+              {integrationStatus}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 9 }}>
+              {mode === 'direccion' ? 'Corporativo' : 'Personal'}
+            </Text>
+            {isHttpOnlyMode && (
+              <Text type="secondary" style={{ fontSize: 9, color: '#1890ff' }}>
+                HTTP-Only
+              </Text>
             )}
-          </div>
-          
-          <div style={{ fontSize: 11, color: '#ccc' }}>
-            Enter para enviar • Shift+Enter para nueva línea
-          </div>
+          </Space>
         </div>
       </div>
+
+      {/* ✅ ALERTAS DE ESTADO COMPACTAS */}
+      {!currentChartConfig && (
+        <Alert
+          message="Sin gráfico detectado"
+          description="Asegúrate de que InteractiveCharts esté visible"
+          type="warning"
+          showIcon
+          style={{ margin: '6px 10px 10px 10px', fontSize: 10 }}
+        />
+      )}
+
+      {integrationStatus === 'error' && !isHttpOnlyMode && (
+        <Alert
+          message="Error en Perfect Integration"
+          description="Revisa la conexión e intenta de nuevo"
+          type="error"
+          showIcon
+          closable
+          onClose={() => setIntegrationStatus('idle')}
+          style={{ margin: '6px 10px 10px 10px', fontSize: 10 }}
+        />
+      )}
+
+      {isHttpOnlyMode && (
+        <Alert
+          message="Modo HTTP-Only activo"
+          description="Funcionalidad completa via HTTP para evitar conflictos"
+          type="info"
+          showIcon
+          style={{ margin: '6px 10px 10px 10px', fontSize: 10 }}
+        />
+      )}
     </Card>
   );
 };
 
-// ✅ PROPTYPES COMPLETOS
+// ✅ PROP TYPES ACTUALIZADOS
 ConversationalPivot.propTypes = {
   mode: PropTypes.oneOf(['direccion', 'gestor']).isRequired,
   gestorId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   periodo: PropTypes.string,
   currentChartConfig: PropTypes.object,
   onChartUpdate: PropTypes.func.isRequired,
-  onChartPivot: PropTypes.func,
   className: PropTypes.string,
   style: PropTypes.object
 };
 
-export default ConversationalPivot;
+export default React.memo(ConversationalPivot);

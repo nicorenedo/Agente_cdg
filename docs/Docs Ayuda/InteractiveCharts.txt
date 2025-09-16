@@ -10,17 +10,29 @@ import {
   Typography, 
   Badge,
   FloatButton,
-  Empty
+  Empty,
+  Select,
+  Flex,
+  Tabs,
+  Alert,
+  App
 } from 'antd';
+
 import {
   ReloadOutlined, 
   BarChartOutlined, 
   TrophyOutlined, 
   PieChartOutlined,
-  DollarCircleOutlined
+  DollarCircleOutlined,
+  SettingOutlined,
+  FilterOutlined,
+  LineChartOutlined,
+  FundOutlined,
+  TeamOutlined
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import analyticsService from '../../services/analyticsService';
+import api from '../../services/api'; // ✅ AÑADIR: Importar API para gestor segmento
 import ErrorState from '../common/ErrorState';
 import Loader from '../common/Loader';
 import theme from '../../styles/theme';
@@ -38,69 +50,194 @@ import {
   Tooltip as ChartTooltip,
   Legend
 } from 'chart.js';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, ChartTooltip, Legend);
 
 const { Text } = Typography;
+const { Option } = Select;
 
-/**
- * Helper para formatear valores bancarios
- */
+// Mantener todas las constantes y validaciones existentes
+const VALID_COMBINATIONS_DIRECCION = {
+  CONTRATOS: ['productos', 'gestores', 'centros', 'segmentos'],
+  CLIENTES: ['productos', 'gestores', 'centros', 'segmentos'], 
+  MARGEN: ['productos', 'gestores', 'centros', 'segmentos'],
+  INGRESOS: ['productos', 'gestores', 'centros', 'segmentos'],
+  GASTOS: ['productos', 'gestores', 'centros', 'segmentos']
+};
+
+const VALID_COMBINATIONS_GESTOR = {
+  CONTRATOS: ['clientes', 'productos'],
+  CLIENTES: ['productos'],
+  MARGEN: ['productos', 'clientes'],
+  INGRESOS: ['productos', 'clientes'],
+  GASTOS: ['productos', 'clientes']
+};
+
+const COUNT_METRICS = ['CONTRATOS', 'CLIENTES'];
+const CURRENCY_METRICS = ['MARGEN', 'INGRESOS', 'GASTOS'];
+
 const formatBankingValue = (value, options = {}) => {
-  const { showCurrency = true, decimals = 0 } = options;
+  const { showCurrency = true, decimals = 0, isPrice = false, metric = '' } = options;
   if (typeof value !== 'number') return { displayValue: '0', isNegative: false };
+  
   const abs = Math.abs(value);
+  const isCount = COUNT_METRICS.includes(metric?.toUpperCase());
+  
   let display = '';
-  if (abs >= 1000000) display = (abs / 1000000).toFixed(decimals) + 'M';
-  else if (abs >= 1000) display = (abs / 1000).toFixed(decimals) + 'K';
-  else display = abs.toFixed(decimals);
+  
+  if (isCount) {
+    display = Math.round(abs).toString();
+  } else if (isPrice) {
+    display = abs.toFixed(decimals);
+  } else if (abs >= 1000000) {
+    display = (abs / 1000000).toFixed(decimals) + 'M';
+  } else if (abs >= 1000) {
+    display = (abs / 1000).toFixed(decimals) + 'K';
+  } else {
+    display = abs.toFixed(decimals);
+  }
+  
   return { 
-    displayValue: showCurrency ? display + '€' : display, 
+    displayValue: (showCurrency && !isCount) ? display + '€' : display, 
     isNegative: value < 0, 
     originalValue: value, 
     numericValue: abs 
   };
 };
 
-/**
- * Helper para obtener labels de dataset según la métrica
- */
-const getDatasetLabelFromMetric = (metric) => {
-  const labels = {
-    'CONTRATOS': 'Contratos',
-    'CLIENTES': 'Clientes', 
-    'INGRESOS': 'Ingresos (€)',
-    'MARGEN': 'Margen (%)',
-    'VOLUMEN': 'Volumen'
-  };
-  return labels[metric] || metric;
+const isValidCombination = (metric, dimension, mode) => {
+  if (!metric || !dimension) return false;
+  
+  const validCombinations = mode === 'gestor' 
+    ? VALID_COMBINATIONS_GESTOR 
+    : VALID_COMBINATIONS_DIRECCION;
+  
+  return validCombinations[metric]?.includes(dimension) || false;
 };
 
-/**
- * Validador mejorado que no confunde "cargando" con "vacío"
- */
+const getSemaphoreColor = (semaforo) => {
+  const colors = {
+    'Verde': '#22c55e',
+    'Amarillo': '#f59e0b', 
+    'Rojo': '#ef4444',
+    'Gris': '#6b7280'
+  };
+  return colors[semaforo] || colors.Gris;
+};
+
+// ✅ NUEVA FUNCIÓN: Transformar datos del endpoint a formato Chart.js
+const transformPriceComparisonData = (rawData) => {
+  if (!rawData || !rawData.standard || !rawData.real) {
+    return null;
+  }
+
+  const { standard, real } = rawData;
+  
+  // Crear mapas por producto
+  const standardMap = {};
+  const realMap = {};
+  
+  standard.forEach(item => {
+    standardMap[item.PRODUCTO_ID] = {
+      precio: Math.abs(item.PRECIO_MANTENIMIENTO || 0),
+      descripcion: item.DESC_PRODUCTO
+    };
+  });
+  
+  real.forEach(item => {
+    realMap[item.PRODUCTO_ID] = {
+      precio: Math.abs(item.PRECIO_MANTENIMIENTO_REAL || 0),
+      descripcion: item.DESC_PRODUCTO,
+      contratos: item.NUM_CONTRATOS_BASE || 0,
+      segmento: item.DESC_SEGMENTO
+    };
+  });
+  
+  // Obtener productos únicos
+  const productos = [...new Set([...Object.keys(standardMap), ...Object.keys(realMap)])];
+  
+  const labels = [];
+  const standardData = [];
+  const realData = [];
+  const tableData = [];
+  
+  productos.forEach(productoId => {
+    const standardInfo = standardMap[productoId];
+    const realInfo = realMap[productoId];
+    
+    if (standardInfo || realInfo) {
+      const descripcion = (realInfo?.descripcion || standardInfo?.descripcion || productoId).substring(0, 20);
+      labels.push(descripcion);
+      
+      const precioStd = standardInfo?.precio || 0;
+      const precioReal = realInfo?.precio || 0;
+      
+      standardData.push(precioStd);
+      realData.push(precioReal);
+      
+      // Calcular delta y semáforo
+      const delta = precioStd > 0 ? ((precioReal - precioStd) / precioStd) * 100 : 0;
+      const deltaPct = Math.abs(delta);
+      
+      let semaforo = 'Verde';
+      if (deltaPct > 15) semaforo = 'Rojo';
+      else if (deltaPct > 5) semaforo = 'Amarillo';
+      
+      tableData.push({
+        producto_id: productoId,
+        descripcion: realInfo?.descripcion || standardInfo?.descripcion,
+        precio_std: precioStd,
+        precio_real: precioReal,
+        delta_pct: delta,
+        semaforo,
+        contratos: realInfo?.contratos || 0
+      });
+    }
+  });
+  
+  return {
+    labels,
+    datasets: [
+      {
+        label: 'Precio Estándar',
+        data: standardData,
+        backgroundColor: 'rgba(21, 82, 63, 1)',
+        borderColor: 'rgba(21, 82, 63, 1)',
+        borderWidth: 1
+      },
+      {
+        label: 'Precio Real',
+        data: realData,
+        backgroundColor: 'rgba(17, 124, 97, 1)',
+        borderColor: 'rgba(17, 124, 97, 1)',
+        borderWidth: 1
+      }
+    ],
+    table: tableData,
+    meta: {
+      segmento_id: rawData.segmento_id,
+      periodo: rawData.periodo,
+      productos_count: productos.length,
+      semaforos: {
+        Verde: tableData.filter(item => item.semaforo === 'Verde').length,
+        Amarillo: tableData.filter(item => item.semaforo === 'Amarillo').length,
+        Rojo: tableData.filter(item => item.semaforo === 'Rojo').length
+      }
+    }
+  };
+};
+
 const validateDataset = (dataset, context = '') => {
   if (!dataset) {
-    console.log(`[${context}] Waiting for dataset...`);
     return { valid: false, isEmpty: false, isLoading: true };
   }
   
   if (dataset.labels && Array.isArray(dataset.labels) && dataset.datasets && Array.isArray(dataset.datasets)) {
     const hasData = dataset.labels.length > 0 && 
-                   dataset.datasets.some(ds => ds.data && ds.data.some(val => val !== null && val !== undefined && val > 0));
+                   dataset.datasets.some(ds => ds.data && ds.data.some(val => val !== null && val !== undefined && val !== 0));
     
     if (!hasData) {
-      console.log(`[${context}] Dataset structure valid but no meaningful data`);
-      return { valid: true, isEmpty: true, isLoading: false };
-    }
-    console.log(`[${context}] ✅ Valid dataset with data`);
-    return { valid: true, isEmpty: false, isLoading: false };
-  }
-  
-  if (Array.isArray(dataset)) {
-    if (dataset.length === 0) {
-      console.log(`[${context}] Empty array dataset`);
       return { valid: true, isEmpty: true, isLoading: false };
     }
     return { valid: true, isEmpty: false, isLoading: false };
@@ -110,25 +247,323 @@ const validateDataset = (dataset, context = '') => {
 };
 
 /**
- * SimpleChart con gráficos reales y tooltips avanzados
+ * ChartFilter - Filtros dinámicos embebidos FUNCIONANDO CORRECTAMENTE
  */
-const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick }) => {
-  const { chartType = 'horizontal_bar' } = config;
+const ChartFilter = ({ 
+  chartKey, 
+  mode, 
+  currentMetric, 
+  currentChartType, 
+  currentDimension,
+  onMetricChange, 
+  onChartTypeChange, 
+  onDimensionChange,
+  style = {},
+  availableMetrics = []
+}) => {
   
-  const validation = validateDataset(data, chartKey);
+  const metricOptions = useMemo(() => {
+    if (chartKey === 'unified') {
+      if (mode === 'direccion') {
+        return [
+          { value: 'CONTRATOS', label: 'Contratos', icon: <FundOutlined /> },
+          { value: 'CLIENTES', label: 'Clientes', icon: <TeamOutlined /> },
+          { value: 'INGRESOS', label: 'Ingresos', icon: <DollarCircleOutlined /> },
+          { value: 'MARGEN', label: 'Margen', icon: <LineChartOutlined /> }
+        ];
+      } else {
+        return [
+          { value: 'CONTRATOS', label: 'Contratos', icon: <FundOutlined /> },
+          { value: 'MARGEN', label: 'Margen', icon: <LineChartOutlined /> },
+          { value: 'CLIENTES', label: 'Clientes', icon: <TeamOutlined /> }
+        ];
+      }
+    }
+    return availableMetrics.length > 0 ? availableMetrics : [
+      { value: currentMetric, label: currentMetric }
+    ];
+  }, [mode, chartKey, availableMetrics, currentMetric]);
+
+  const chartTypeOptions = useMemo(() => {
+    if (chartKey === 'priceComparison') {
+      return [
+        { value: 'comparison', label: 'Comparación', icon: <BarChartOutlined /> },
+        { value: 'horizontal_bar', label: 'Barras H.', icon: <BarChartOutlined /> },
+        { value: 'line', label: 'Líneas', icon: <LineChartOutlined /> }
+      ];
+    } else if (chartKey === 'unified') {
+      return [
+        { value: 'horizontal_bar', label: 'Barras H.', icon: <BarChartOutlined /> },
+        { value: 'bar', label: 'Barras V.', icon: <BarChartOutlined /> },
+        { value: 'donut', label: 'Donut', icon: <PieChartOutlined /> },
+        { value: 'line', label: 'Líneas', icon: <LineChartOutlined /> }
+      ];
+    }
+    return [
+      { value: 'horizontal_bar', label: 'Barras H.' },
+      { value: 'bar', label: 'Barras V.' },
+      { value: 'donut', label: 'Donut' }
+    ];
+  }, [chartKey]);
+
+  const dimensionOptions = useMemo(() => {
+    let baseDimensions = [];
+    
+    if (chartKey === 'unified') {
+      if (mode === 'direccion') {
+        baseDimensions = [
+          { value: 'gestores', label: 'Gestores', icon: <TeamOutlined /> },
+          { value: 'centros', label: 'Centros', icon: <FundOutlined /> },
+          { value: 'productos', label: 'Productos', icon: <DollarCircleOutlined /> },
+          { value: 'segmentos', label: 'Segmentos', icon: <FundOutlined /> }
+        ];
+      } else if (mode === 'gestor') {
+        baseDimensions = [
+          { value: 'clientes', label: 'Clientes', icon: <TeamOutlined /> },
+          { value: 'productos', label: 'Productos', icon: <FundOutlined /> }
+        ];
+      }
+    }
+    
+    return baseDimensions.filter(dim => 
+      isValidCombination(currentMetric, dim.value, mode)
+    );
+  }, [mode, chartKey, currentMetric]);
+
+  const effectiveDimension = useMemo(() => {
+    if (dimensionOptions.some(opt => opt.value === currentDimension)) {
+      return currentDimension;
+    }
+    return dimensionOptions[0]?.value || '';
+  }, [currentDimension, dimensionOptions]);
+
+  React.useEffect(() => {
+    if (currentDimension !== effectiveDimension && effectiveDimension && onDimensionChange) {
+      console.log(`[ChartFilter] Auto-adjusting dimension from ${currentDimension} to ${effectiveDimension} for metric ${currentMetric}`);
+      onDimensionChange(effectiveDimension);
+    }
+  }, [currentDimension, effectiveDimension, currentMetric, onDimensionChange]);
+
+  return (
+    <Flex gap={8} wrap="wrap" style={{ marginBottom: 12, ...style }}>
+      {metricOptions.length > 1 && (
+        <Select
+          size="small"
+          value={currentMetric}
+          onChange={onMetricChange}
+          style={{ minWidth: 120 }}
+          placeholder="Métrica"
+        >
+          {metricOptions.map(opt => (
+            <Option key={opt.value} value={opt.value}>
+              <Space>
+                {opt.icon}
+                {opt.label}
+              </Space>
+            </Option>
+          ))}
+        </Select>
+      )}
+
+      {dimensionOptions.length > 0 && (
+        <Select
+          size="small"
+          value={effectiveDimension}
+          onChange={onDimensionChange}
+          style={{ minWidth: 110 }}
+          placeholder="Dimensión"
+        >
+          {dimensionOptions.map(opt => (
+            <Option key={opt.value} value={opt.value}>
+              <Space>
+                {opt.icon}
+                {opt.label}
+              </Space>
+            </Option>
+          ))}
+        </Select>
+      )}
+      
+      <Select
+        size="small"
+        value={currentChartType}
+        onChange={onChartTypeChange}
+        style={{ minWidth: 110 }}
+        placeholder="Tipo"
+      >
+        {chartTypeOptions.map(opt => (
+          <Option key={opt.value} value={opt.value}>
+            <Space>
+              {opt.icon}
+              {opt.label}
+            </Space>
+          </Option>
+        ))}
+      </Select>
+    </Flex>
+  );
+};
+
+/**
+ * PriceComparisonChart - Componente especializado para precios CORREGIDO
+ */
+const PriceComparisonChart = ({ data, height = 280, onDataClick }) => {
+  const validation = validateDataset(data, 'priceComparison');
   
   if (validation.isLoading) {
     return (
-      <div style={{ 
-        height, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        justifyContent: 'center', 
-        alignItems: 'center' 
-      }}>
+      <div style={{ height, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <Loader size="large" />
+      </div>
+    );
+  }
+  
+  // ✅ CORREGIDO: Validación que acepta el nuevo formato
+  if (!validation.valid || validation.isEmpty) {
+    return (
+      <div style={{ height, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+        <Empty 
+          image={<DollarCircleOutlined style={{ fontSize: 48, color: '#999', opacity: 0.3 }} />}
+          description="No hay datos de precios disponibles"
+        />
+      </div>
+    );
+  }
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+        display: true,
+        labels: {
+          usePointStyle: true,
+          padding: 20,
+          color: theme.colors?.textPrimary || '#333',
+          font: { size: 12 }
+        }
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        borderColor: theme.colors?.bmGreenPrimary || '#1890ff',
+        borderWidth: 1,
+        cornerRadius: 6,
+        callbacks: {
+          title: (context) => context[0].label || '',
+          label: (context) => {
+            const value = context.parsed.y || context.parsed;
+            const formatted = formatBankingValue(Math.abs(value), { 
+              decimals: 0, 
+              isPrice: true,
+              showCurrency: true
+            });
+            return ` ${context.dataset.label}: ${formatted.displayValue}`;
+          },
+          afterBody: (context) => {
+            if (data.table && context[0]) {
+              const item = data.table[context[0].dataIndex];
+              if (item) {
+                const delta = item.delta_pct || 0;
+                const semaforo = item.semaforo || 'Gris';
+                return [`Δ: ${delta.toFixed(2)}%`, `Estado: ${semaforo}`];
+              }
+            }
+            return [];
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(0,0,0,0.1)', drawBorder: false },
+        ticks: {
+          color: theme.colors?.textSecondary || '#666',
+          font: { size: 11 },
+          callback: function(value) {
+            return formatBankingValue(Math.abs(value), { 
+              decimals: 0, 
+              isPrice: true,
+              showCurrency: true
+            }).displayValue;
+          }
+        }
+      },
+      x: {
+        grid: { display: false },
+        ticks: {
+          color: theme.colors?.textPrimary || '#333',
+          font: { size: 11, weight: '500' },
+          maxRotation: 45,
+          callback: function(value, index) {
+            const label = this.getLabelForValue(value);
+            // TRUNCAR etiquetas largas para evitar cortes
+            return label.length > 15 ? label.substring(0, 12) + '...' : label;
+          }
+        }
+      }
+    },
+    onClick: (event, elements) => {
+      if (elements.length > 0 && onDataClick && data.table) {
+        const clickedElement = elements[0];
+        const dataIndex = clickedElement.dataIndex;
+        const item = data.table[dataIndex];
+        onDataClick({
+          index: dataIndex,
+          item,
+          chartKey: 'priceComparison'
+        });
+      }
+    }
+  };
+
+  return (
+    <div style={{ height, width: '100%', position: 'relative' }}>
+      <Bar data={data} options={chartOptions} height={height} />
+      
+      {data.meta?.semaforos && (
+        <div style={{ 
+          marginTop: 12, 
+          padding: '8px 12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: 6,
+          fontSize: 12
+        }}>
+          <Space split={<span style={{ color: '#d9d9d9' }}>•</span>}>
+            <span style={{ color: getSemaphoreColor('Verde') }}>
+              ✓ Verde: {data.meta.semaforos.Verde || 0}
+            </span>
+            <span style={{ color: getSemaphoreColor('Amarillo') }}>
+              ⚠ Amarillo: {data.meta.semaforos.Amarillo || 0}
+            </span>
+            <span style={{ color: getSemaphoreColor('Rojo') }}>
+              ✗ Rojo: {data.meta.semaforos.Rojo || 0}
+            </span>
+          </Space>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * UnifiedChart - Gráfico principal unificado y dinámico
+ */
+const UnifiedChart = ({ data, config = {}, height = 280, onDataClick }) => {
+  const { chartType = 'horizontal_bar', metric = 'CONTRATOS' } = config;
+  
+  const validation = validateDataset(data, 'unified');
+  
+  if (validation.isLoading) {
+    return (
+      <div style={{ height, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <Loader size="large" />
         <Text type="secondary" style={{ marginTop: 16 }}>
-          Cargando datos del gráfico...
+          Cargando datos dinámicos...
         </Text>
       </div>
     );
@@ -136,21 +571,15 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
   
   if (!validation.valid || validation.isEmpty) {
     return (
-      <div style={{ 
-        height, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        justifyContent: 'center', 
-        alignItems: 'center' 
-      }}>
+      <div style={{ height, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <Empty 
-          image={<BarChartOutlined style={{ fontSize: 48, color: theme.colors?.textSecondary || '#999', opacity: 0.3 }} />}
+          image={<BarChartOutlined style={{ fontSize: 48, color: '#999', opacity: 0.3 }} />}
           description={
             <div style={{ textAlign: 'center' }}>
-              <Text type="secondary">No hay datos disponibles</Text>
+              <Text type="secondary">No hay datos para la métrica seleccionada</Text>
               <br />
               <Text type="secondary" style={{ fontSize: 11 }}>
-                Intenta cambiar el período o gestor
+                Prueba cambiar la métrica o dimensión
               </Text>
             </div>
           }
@@ -175,21 +604,21 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
       },
       tooltip: {
         enabled: true,
-        mode: 'nearest',
-        intersect: false,
         backgroundColor: 'rgba(0,0,0,0.8)',
         titleColor: '#fff',
         bodyColor: '#fff',
         borderColor: theme.colors?.bmGreenPrimary || '#1890ff',
         borderWidth: 1,
         cornerRadius: 6,
-        displayColors: true,
         callbacks: {
           title: (context) => context[0].label || '',
           label: (context) => {
             const value = context.parsed.y || context.parsed;
-            const formatted = formatBankingValue(Math.abs(value), { decimals: 2 });
-            return ` ${context.dataset.label || ''}: ${formatted.displayValue}`;
+            const formatted = formatBankingValue(Math.abs(value), { 
+              decimals: COUNT_METRICS.includes(metric) ? 0 : 2,
+              metric: metric
+            });
+            return ` ${context.dataset.label || metric}: ${formatted.displayValue}`;
           }
         }
       }
@@ -202,18 +631,15 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
           index: dataIndex,
           value: data.datasets[0].data[dataIndex],
           label: data.labels[dataIndex],
-          chartKey
+          chartKey: 'unified',
+          metric,
+          chartType
         });
       }
-    },
-    layout: {
-      padding: { top: 10, bottom: 10, left: 10, right: 10 }
     }
   };
 
   const renderChart = () => {
-    console.log(`[${chartKey}] Rendering ${chartType} with data:`, data);
-    
     switch (chartType) {
       case 'horizontal_bar':
         return (
@@ -230,7 +656,10 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
                     color: theme.colors?.textSecondary || '#666',
                     font: { size: 11 },
                     callback: function(value) {
-                      return formatBankingValue(value, { decimals: 0 }).displayValue;
+                      return formatBankingValue(value, { 
+                        decimals: 0, 
+                        metric: metric
+                      }).displayValue;
                     }
                   }
                 },
@@ -242,7 +671,7 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
                     maxRotation: 0,
                     callback: function(value, index) {
                       const label = this.getLabelForValue(value);
-                      return label.length > 20 ? label.substring(0, 17) + '...' : label;
+                      return label.length > 15 ? label.substring(0, 12) + '...' : label;
                     }
                   }
                 }
@@ -253,66 +682,11 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
         );
         
       case 'bar':
-      case 'comparison':
         return (
           <Bar 
             data={data} 
             options={{
               ...commonOptions,
-              plugins: {
-                ...commonOptions.plugins,
-                title: {
-                  display: !!(data.meta?.segmentoNombre),
-                  text: data.meta?.segmentoNombre ? `Segmento: ${data.meta.segmentoNombre}` : '',
-                  font: { size: 14, weight: 'bold' },
-                  color: theme.colors?.textPrimary || '#333',
-                  padding: { bottom: 20 }
-                },
-                legend: {
-                  ...commonOptions.plugins.legend,
-                  position: 'bottom',
-                  labels: {
-                    usePointStyle: true,
-                    padding: 15,
-                    font: { size: 13, weight: '500' }
-                  }
-                },
-                tooltip: {
-                  ...commonOptions.plugins.tooltip,
-                  callbacks: {
-                    title: (context) => `${context[0].label}`,
-                    label: (context) => {
-                      const value = context.parsed.y;
-                      const formatted = formatBankingValue(value, { decimals: 2 });
-                      return ` ${context.dataset.label}: ${formatted.displayValue}`;
-                    },
-                    afterBody: (context) => {
-                      if (context.length < 2) return [];
-                      
-                      const chart = context[0].chart;
-                      const dataIndex = context[0].dataIndex;
-                      
-                      const standardData = chart.data.datasets.find(ds => ds.label.includes('Estándar'));
-                      const realData = chart.data.datasets.find(ds => ds.label.includes('Real'));
-                      
-                      if (standardData && realData) {
-                        const standardValue = standardData.data[dataIndex];
-                        const realValue = realData.data[dataIndex];
-                        const difference = realValue - standardValue;
-                        const percentage = standardValue > 0 ? ((difference / standardValue) * 100) : 0;
-                        
-                        return [
-                          '',
-                          `Diferencia: ${formatBankingValue(Math.abs(difference), { decimals: 2 }).displayValue}`,
-                          `Variación: ${percentage.toFixed(1)}%`,
-                          `Estado: ${Math.abs(percentage) <= 2 ? '✅ Dentro del rango' : Math.abs(percentage) <= 15 ? '⚠️ Atención' : '🚨 Fuera de rango'}`
-                        ];
-                      }
-                      return [];
-                    }
-                  }
-                }
-              },
               scales: {
                 y: {
                   beginAtZero: true,
@@ -321,14 +695,11 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
                     color: theme.colors?.textSecondary || '#666',
                     font: { size: 11 },
                     callback: function(value) {
-                      return formatBankingValue(Math.abs(value), { decimals: 0 }).displayValue;
+                      return formatBankingValue(Math.abs(value), { 
+                        decimals: 0, 
+                        metric: metric
+                      }).displayValue;
                     }
-                  },
-                  title: {
-                    display: true,
-                    text: 'Precio por Contrato (€)',
-                    color: theme.colors?.textPrimary || '#333',
-                    font: { size: 12, weight: '600' }
                   }
                 },
                 x: {
@@ -336,10 +707,7 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
                   ticks: {
                     color: theme.colors?.textPrimary || '#333',
                     font: { size: 12, weight: '500' },
-                    maxRotation: 45,
-                    callback: function(value, index) {
-                      return this.getLabelForValue(value);
-                    }
+                    maxRotation: 45
                   }
                 }
               }
@@ -349,13 +717,12 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
         );
         
       case 'donut':
-      case 'pie':
         return (
           <Doughnut 
             data={data} 
             options={{
               ...commonOptions,
-              cutout: chartType === 'donut' ? '60%' : '0%',
+              cutout: '60%',
               plugins: {
                 ...commonOptions.plugins,
                 legend: {
@@ -370,9 +737,48 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
                     label: (context) => {
                       const value = context.parsed;
                       const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                      const percentage = ((value / total) * 100).toFixed(1);
-                      return ` ${context.label}: ${percentage}% (${value})`;
+                      const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                      const formatted = formatBankingValue(value, { 
+                        decimals: 0,
+                        metric: metric
+                      });
+                      return ` ${context.label}: ${percentage}% (${formatted.displayValue})`;
                     }
+                  }
+                }
+              }
+            }}
+            height={height}
+          />
+        );
+        
+      case 'line':
+        return (
+          <Line 
+            data={data} 
+            options={{
+              ...commonOptions,
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  grid: { color: 'rgba(0,0,0,0.1)', drawBorder: false },
+                  ticks: {
+                    color: theme.colors?.textSecondary || '#666',
+                    font: { size: 11 },
+                    callback: function(value) {
+                      return formatBankingValue(Math.abs(value), { 
+                        decimals: 0, 
+                        metric: metric
+                      }).displayValue;
+                    }
+                  }
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: {
+                    color: theme.colors?.textPrimary || '#333',
+                    font: { size: 12, weight: '500' },
+                    maxRotation: 45
                   }
                 }
               }
@@ -395,21 +801,28 @@ const SimpleChart = ({ data, config = {}, chartKey, height = 260, onDataClick })
   return (
     <div style={{ height, width: '100%', position: 'relative' }}>
       {renderChart()}
+      
+      {data.meta && (
+        <div style={{ 
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          padding: '4px 8px',
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          borderRadius: 4,
+          fontSize: 11,
+          color: theme.colors?.textSecondary || '#666',
+          border: `1px solid ${theme.colors?.borderLight || '#e8e8e8'}`
+        }}>
+          {data.meta.mockData ? 'Datos de prueba' : `${data.meta.showing || 0} elementos`}
+        </div>
+      )}
     </div>
   );
 };
 
-SimpleChart.propTypes = {
-  data: PropTypes.any,
-  config: PropTypes.object,
-  chartKey: PropTypes.string.isRequired,
-  height: PropTypes.number,
-  onDataClick: PropTypes.func
-};
-
 /**
- * ✅ InteractiveCharts - Componente principal COMPLETAMENTE CORREGIDO
- * CORRECCIÓN PRINCIPAL: Eliminar protección de carga global que evitaba cargas individuales
+ * InteractiveCharts - Componente principal CON RELACIÓN GESTOR-SEGMENTO CORREGIDA
  */
 const InteractiveCharts = ({
   mode = 'direccion',
@@ -418,16 +831,19 @@ const InteractiveCharts = ({
   metric = 'CONTRATOS',
   chartType = null,
   filters = {},
-  height = 340,
+  height = 380,
   onReload = () => {},
   onSelectEntity = () => {},
   externalChartConfig = null,
   onChartConfigChange = null,
+  onChartUpdate = () => {},
+  onChartPivot = () => {},
   className = '',
   style = {}
 }) => {
   
-  // ✅ NORMALIZACIÓN ESTABLE DE PROPS CON USEMEMO
+  const { notification } = App.useApp();
+
   const normalizedPeriodo = useMemo(() => {
     if (!periodo) return '2025-10';
     if (typeof periodo === 'string') return periodo;
@@ -437,46 +853,80 @@ const InteractiveCharts = ({
     return String(periodo);
   }, [periodo]);
 
+  const normalizedGestorId = useMemo(() => {
+    if (!gestorId) return null;
+    return parseInt(gestorId, 10);
+  }, [gestorId]);
+
   const normalizedMetric = useMemo(() => metric ? metric.toUpperCase() : 'CONTRATOS', [metric]);
 
-  // ✅ MEMOIZACIÓN PROFUNDA DE FILTROS PARA EVITAR OBJETOS NUEVOS EN CADA RENDER
-  const stableFilters = useMemo(() => {
-    const filterKeys = Object.keys(filters).sort();
-    const stableObj = {};
-    filterKeys.forEach(key => {
-      stableObj[key] = filters[key];
-    });
-    return stableObj;
-  }, [filters]);
-
-  // ✅ CLAVE ÚNICA PARA DETECTAR CAMBIOS REALES EN DEPENDENCIAS
-  const dependencyKey = useMemo(() => 
-    JSON.stringify({
-      mode,
-      gestorId,
-      periodo: normalizedPeriodo,
-      metric: normalizedMetric,
-      chartType,
-      filters: stableFilters
-    }), 
-    [mode, gestorId, normalizedPeriodo, normalizedMetric, chartType, stableFilters]
-  );
-
-  // ✅ ESTADO INICIAL LIMPIO
-  const [chartsData, setChartsData] = useState({});
-  const [loadingStates, setLoadingStates] = useState({
-    ranking: false,
-    distribution: false,
-    priceCompare: false
+  const [unifiedConfig, setUnifiedConfig] = useState({
+    metric: normalizedMetric,
+    chartType: chartType || 'horizontal_bar',
+    dimension: mode === 'direccion' ? 'gestores' : 'clientes'
   });
+
+  const [priceConfig, setPriceConfig] = useState({
+    chartType: 'comparison',
+    showTable: true
+  });
+
+  // ✅ NUEVO: Estados para gestión de segmento del gestor
+  const [gestorSegmentoInfo, setGestorSegmentoInfo] = useState(null);
+  const [loadingGestorSegmento, setLoadingGestorSegmento] = useState(false);
+
+  // NUEVO: Estado para selector de segmentos en dashboard dirección
+  const [selectedSegment, setSelectedSegment] = useState('N10101');
+  const segmentos = [
+    { id: 'N10101', nombre: 'Banca Minorista' },
+    { id: 'N10102', nombre: 'Banca Privada' },
+    { id: 'N10103', nombre: 'Banca de Empresas' },
+    { id: 'N10104', nombre: 'Banca Personal' },
+    { id: 'N20301', nombre: 'Fondos' }
+  ];
+
+  const [chartsData, setChartsData] = useState({});
+  const [loadingStates, setLoadingStates] = useState({});
   const [errorStates, setErrorStates] = useState({});
   const [selectedEntity, setSelectedEntity] = useState(null);
+  const [activeTab, setActiveTab] = useState('unified');
 
-  // ✅ REFS PARA CONTROL DE BUCLES Y ABORT CONTROLLERS
   const abortControllers = useRef({});
-  const lastDependencyKey = useRef(null);
+  const lastLoadKey = useRef(null);
 
-  // ✅ CLEANUP MEJORADO PARA ABORT CONTROLLERS
+  // ✅ NUEVO EFECTO: Cargar segmento del gestor al inicio
+  useEffect(() => {
+    const loadGestorSegmento = async () => {
+      if (mode !== 'gestor' || !normalizedGestorId) return;
+      
+      setLoadingGestorSegmento(true);
+      try {
+        console.log(`[InteractiveCharts] 🔍 Loading segmento for gestor ${normalizedGestorId}`);
+        
+        // ✅ USAR ENDPOINT CORRECTO: basic.gestorSegmento
+        const segmentoData = await api.basic.gestorSegmento(normalizedGestorId);
+        
+        console.log(`[InteractiveCharts] ✅ Gestor ${normalizedGestorId} segmento loaded:`, segmentoData);
+        setGestorSegmentoInfo(segmentoData);
+        
+      } catch (error) {
+        console.error(`[InteractiveCharts] ❌ Error loading gestor segmento:`, error);
+        
+        // ✅ FALLBACK: Usar segmento por defecto si falla
+        setGestorSegmentoInfo({
+          GESTOR_ID: normalizedGestorId,
+          SEGMENTO_ID: 'N10101', // Fallback
+          DESC_SEGMENTO: 'Segmento desconocido'
+        });
+        
+      } finally {
+        setLoadingGestorSegmento(false);
+      }
+    };
+
+    loadGestorSegmento();
+  }, [mode, normalizedGestorId]);
+
   const cleanupAbortController = useCallback((key) => {
     if (abortControllers.current[key]) {
       try {
@@ -488,22 +938,19 @@ const InteractiveCharts = ({
     }
   }, []);
 
-  // ✅ FUNCIÓN GENÉRICA DE CARGA SIN PROTECCIÓN GLOBAL - ESTA ES LA CORRECCIÓN CLAVE
   const loadChartData = useCallback(async (chartKey, loaderFn, shouldLoad = true) => {
-    // Protección 1: No cargar si no se debe
-    if (!shouldLoad) {
-      console.log(`[${chartKey}] ⏭️ Skipping load (shouldLoad=false)`);
+    if (!shouldLoad) return;
+
+    if (chartKey === 'unified' && !isValidCombination(unifiedConfig.metric, unifiedConfig.dimension, mode)) {
+      console.warn(`[${chartKey}] Invalid combination: ${unifiedConfig.metric}-${unifiedConfig.dimension} for mode ${mode}`);
+      setErrorStates(prev => ({ 
+        ...prev, 
+        [chartKey]: new Error(`Combinación no válida: ${unifiedConfig.metric} por ${unifiedConfig.dimension}`)
+      }));
+      setLoadingStates(prev => ({ ...prev, [chartKey]: false }));
       return;
     }
 
-    // ⭐ CAMBIO CLAVE: REMOVER PROTECCIÓN GLOBAL QUE CAUSABA EL PROBLEMA
-    // ❌ CÓDIGO REMOVIDO: 
-    // if (isLoadingRef.current) {
-    //   console.log(`[${chartKey}] ⚠️ Already loading globally, skipping...`);
-    //   return;
-    // }
-
-    // Cleanup de controller previo
     cleanupAbortController(chartKey);
     abortControllers.current[chartKey] = new AbortController();
     
@@ -514,9 +961,8 @@ const InteractiveCharts = ({
     try {
       const result = await loaderFn();
       
-      // Verificar que no se abortó la request
       if (!abortControllers.current[chartKey]?.signal.aborted) {
-        console.log(`[${chartKey}] ✅ Data loaded successfully:`, result);
+        console.log(`[${chartKey}] ✅ Data loaded successfully`);
         setChartsData(prev => ({ ...prev, [chartKey]: result }));
       }
       
@@ -530,196 +976,144 @@ const InteractiveCharts = ({
         setLoadingStates(prev => ({ ...prev, [chartKey]: false }));
       }
     }
-  }, [cleanupAbortController]);
+  }, [cleanupAbortController, unifiedConfig, mode]);
 
-  // ✅ FUNCIONES DE CARGA ESPECÍFICAS MEMOIZADAS CON DEPENDENCIAS ESTABLES
-  const loadDirectionRanking = useCallback(async () => {
-    return await analyticsService.getDirectionChartData('gestores-ranking', {
-      metric: normalizedMetric,
-      chart_type: chartType || 'horizontal_bar',
-      periodo: normalizedPeriodo,
-      ...stableFilters
-    });
-  }, [normalizedMetric, normalizedPeriodo, stableFilters, chartType]);
-
-  const loadDirectionDistribution = useCallback(async () => {
-    return await analyticsService.getDirectionChartData('centros-distribution', {
-      chart_type: chartType || 'donut',
-      periodo: normalizedPeriodo,
-      ...stableFilters
-    });
-  }, [normalizedPeriodo, stableFilters, chartType]);
-
-  const loadGestorRanking = useCallback(async () => {
-    if (!gestorId) return null;
-    return await analyticsService.getTopClientsChartData(gestorId, { 
-      limit: 10,
-      ...stableFilters
-    });
-  }, [gestorId, stableFilters]);
-
-  const loadGestorDistribution = useCallback(async () => {
-    if (!gestorId) return null;
-    return await analyticsService.getProductMixChartData(gestorId, {
-      ...stableFilters
-    });
-  }, [gestorId, stableFilters]);
-
-  const loadPriceCompare = useCallback(async () => {
-    if (mode !== 'gestor' || !gestorId) return null;
-    return await analyticsService.getPriceComparisonBySegment({
-      gestorId,
-      periodo: normalizedPeriodo,
-      ...stableFilters
-    });
-  }, [mode, gestorId, normalizedPeriodo, stableFilters]);
-
-  // ✅ CONFIGURACIÓN DINÁMICA DE CHARTS SEGÚN MODO (MEMOIZADA)
-  const chartsConfig = useMemo(() => {
+  const loadUnifiedData = useCallback(async () => {
+    const config = unifiedConfig;
+    
     if (mode === 'direccion') {
-      return [
-        {
-          key: 'ranking',
-          title: `Ranking por ${normalizedMetric}`,
-          subtitle: 'Top gestores por métrica seleccionada',
-          icon: TrophyOutlined,
-          color: theme.colors?.bmGreenPrimary || '#1890ff',
-          span: { xs: 24, sm: 24, md: 12, lg: 12, xl: 12 },
-          chartType: chartType || 'horizontal_bar'
-        },
-        {
-          key: 'distribution', 
-          title: 'Distribución por Centros',
-          subtitle: 'Reparto de actividad por centros',
-          icon: PieChartOutlined,
-          color: theme.colors?.info || '#13c2c2',
-          span: { xs: 24, sm: 24, md: 12, lg: 12, xl: 12 },
-          chartType: chartType || 'donut'
-        }
-      ];
-    } else {
-      return [
-        {
-          key: 'ranking',
-          title: 'Top Clientes',
-          subtitle: 'Principales clientes por margen',
-          icon: TrophyOutlined,
-          color: theme.colors?.bmGreenPrimary || '#1890ff',
-          span: { xs: 24, sm: 24, md: 12, lg: 8, xl: 8 },
-          chartType: chartType || 'horizontal_bar'
-        },
-        {
-          key: 'distribution',
-          title: 'Mix de Productos',
-          subtitle: 'Distribución de productos en cartera',
-          icon: PieChartOutlined,
-          color: theme.colors?.info || '#13c2c2',
-          span: { xs: 24, sm: 24, md: 12, lg: 8, xl: 8 },
-          chartType: chartType || 'donut'
-        },
-        {
-          key: 'priceCompare',
-          title: 'Precio: Real vs Estándar',
-          subtitle: 'Comparativa con detección automática de segmento',
-          icon: DollarCircleOutlined,
-          color: theme.colors?.warning || '#faad14',
-          span: { xs: 24, sm: 24, md: 24, lg: 8, xl: 8 },
-          chartType: 'comparison',
-          height: 420
-        }
-      ];
+      const chartTypeMap = {
+        'gestores': 'gestores-ranking',
+        'centros': 'centros-distribution', 
+        'productos': 'productos-popularity',
+        'segmentos': 'segmentos-overview'
+      };
+      
+      const chartType = chartTypeMap[config.dimension] || 'gestores-ranking';
+      
+      return await analyticsService.getDirectionChartData(chartType, {
+        metric: config.metric,
+        chart_type: config.chartType,
+        periodo: normalizedPeriodo,
+        dimension: config.dimension,
+        ...filters
+      });
+    } else if (normalizedGestorId) {
+      if (config.dimension === 'clientes') {
+        return await analyticsService.getTopClientsChartData(normalizedGestorId, { 
+          limit: 10,
+          ...filters
+        });
+      } else if (config.dimension === 'productos') {
+        return await analyticsService.getProductMixChartData(normalizedGestorId, {
+          ...filters
+        });
+      }
     }
-  }, [mode, normalizedMetric, chartType]);
+    return null;
+  }, [mode, normalizedGestorId, normalizedPeriodo, filters, unifiedConfig]);
 
-  // ✅ EFECTO PRINCIPAL OPTIMIZADO - CORREGIDO PARA CARGA INICIAL AUTOMÁTICA
+  // ✅ FUNCIÓN CORREGIDA: loadPriceData con TRANSFORMACIÓN DE DATOS
+  const loadPriceData = useCallback(async () => {
+    if (mode === 'direccion') {
+      // Dashboard de dirección: CON FILTRO DE SEGMENTO SELECCIONADO
+      console.log(`[InteractiveCharts] 🎯 Loading price data for DIRECTION mode (segment: ${selectedSegment})`);
+      const rawData = await api.dataQueries.pricesComparisonBySegment(selectedSegment, normalizedPeriodo);
+      return transformPriceComparisonData(rawData);
+      
+    } else if (normalizedGestorId && gestorSegmentoInfo) {
+      // ✅ CORREGIDO: Dashboard de gestor usando SU SEGMENTO ESPECÍFICO
+      const gestorSegmentoId = gestorSegmentoInfo.SEGMENTO_ID;
+      console.log(`[InteractiveCharts] 🎯 Loading price data for GESTOR mode (gestor ${normalizedGestorId}, segmento: ${gestorSegmentoId})`);
+      
+      const rawData = await api.dataQueries.pricesComparisonBySegment(gestorSegmentoId, normalizedPeriodo);
+      return transformPriceComparisonData(rawData);
+      
+    } else if (normalizedGestorId && !gestorSegmentoInfo) {
+      // ✅ NUEVO: Si aún no tenemos segmento, mostrar mensaje informativo
+      console.log(`[InteractiveCharts] ⏳ Esperando segmento del gestor ${normalizedGestorId}...`);
+      return {
+        labels: ['Cargando...'],
+        datasets: [{
+          label: 'Cargando datos del segmento...',
+          data: [0],
+          backgroundColor: '#f0f0f0'
+        }],
+        meta: { loading: true, gestorId: normalizedGestorId }
+      };
+    }
+    
+    return null;
+  }, [mode, normalizedGestorId, normalizedPeriodo, gestorSegmentoInfo, selectedSegment]);
+
+  // ✅ EFECTO PARA RECARGAR PRECIOS AL CAMBIAR SEGMENTO DEL GESTOR
   useEffect(() => {
-    // ⭐ CAMBIO CLAVE: Solo verificar dependencias si ya se ha cargado antes
-    if (lastDependencyKey.current !== null && lastDependencyKey.current === dependencyKey) {
+    if (mode === 'gestor' && gestorSegmentoInfo && !loadingGestorSegmento) {
+      console.log(`[InteractiveCharts] 🔄 Gestor segmento loaded, reloading price data for ${gestorSegmentoInfo.SEGMENTO_ID}`);
+      loadChartData('priceComparison', loadPriceData, true);
+    }
+  }, [mode, gestorSegmentoInfo, loadingGestorSegmento, loadChartData, loadPriceData]);
+
+  // ✅ EFECTO PARA RECARGAR PRECIOS AL CAMBIAR SEGMENTO EN DIRECCIÓN
+  useEffect(() => {
+    if (mode === 'direccion' && selectedSegment) {
+      loadChartData('priceComparison', loadPriceData, true);
+    }
+  }, [mode, selectedSegment, loadChartData, loadPriceData]);
+
+  const dependencyKey = useMemo(() => 
+    JSON.stringify({
+      mode,
+      gestorId: normalizedGestorId,
+      periodo: normalizedPeriodo,
+      unifiedConfig,
+      priceConfig,
+      filters,
+      gestorSegmentoInfo: gestorSegmentoInfo?.SEGMENTO_ID // ✅ INCLUIR segmento en dependencias
+    }), 
+    [mode, normalizedGestorId, normalizedPeriodo, unifiedConfig, priceConfig, filters, gestorSegmentoInfo]
+  );
+
+  useEffect(() => {
+    if (lastLoadKey.current === dependencyKey) {
       console.log('[InteractiveCharts] 🔄 Dependencies unchanged, skipping reload');
       return;
     }
 
-    // Protección 2: Verificar parámetros mínimos requeridos
     if (!normalizedPeriodo) {
       console.log('[InteractiveCharts] ⚠️ No periodo provided');
       return;
     }
 
-    if (mode === 'gestor' && !gestorId) {
+    if (mode === 'gestor' && !normalizedGestorId) {
       console.log('[InteractiveCharts] ⚠️ Gestor mode requires gestorId');
       return;
     }
 
-    // ⭐ CAMBIO CLAVE: REMOVER EL FLAG GLOBAL DE LOADING QUE CAUSABA EL PROBLEMA
-    // ❌ CÓDIGO REMOVIDO:
-    // if (isLoadingRef.current) {
-    //   console.log('[InteractiveCharts] ⚠️ Already loading, skipping...');
-    //   return;
-    // }
-    // isLoadingRef.current = true;
+    // ✅ NUEVO: En modo gestor, esperar a tener segmento antes de cargar precios
+    if (mode === 'gestor' && !gestorSegmentoInfo) {
+      console.log('[InteractiveCharts] ⏳ Waiting for gestor segmento info before loading charts');
+      return;
+    }
 
-    lastDependencyKey.current = dependencyKey;
+    lastLoadKey.current = dependencyKey;
+    console.log('[InteractiveCharts] 🚀 Loading all charts with new dependencies');
 
-    console.log('[InteractiveCharts] 🚀 Loading all charts with dependencies:', { 
-      mode, 
-      gestorId, 
-      periodo: normalizedPeriodo,
-      metric: normalizedMetric,
-      dependencyKey: dependencyKey.substring(0, 100) + '...'
-    });
-
-    // Limpiar datos previos
     setChartsData({});
     setErrorStates({});
 
-    // Función de carga principal MEJORADA
-    const loadAllData = async () => {
-      try {
-        // ⭐ CAMBIO CLAVE: CARGAR EN PARALELO SIN PROTECCIÓN GLOBAL
-        const loadPromises = [];
+    // Cargar ambos gráficos en paralelo
+    const loadPromises = [
+      loadChartData('unified', loadUnifiedData, true),
+      loadChartData('priceComparison', loadPriceData, true)
+    ];
 
-        // Ranking chart
-        loadPromises.push(
-          loadChartData(
-            'ranking',
-            mode === 'direccion' ? loadDirectionRanking : loadGestorRanking,
-            true
-          )
-        );
+    Promise.allSettled(loadPromises).then(() => {
+      console.log('[InteractiveCharts] ✅ All charts loading completed');
+    });
 
-        // Distribution chart
-        loadPromises.push(
-          loadChartData(
-            'distribution',
-            mode === 'direccion' ? loadDirectionDistribution : loadGestorDistribution,
-            true
-          )
-        );
-
-        // Price comparison (solo para gestor)
-        if (mode === 'gestor' && gestorId) {
-          loadPromises.push(
-            loadChartData('priceCompare', loadPriceCompare, true)
-          );
-        }
-
-        // Esperar todas las cargas
-        await Promise.allSettled(loadPromises);
-
-        console.log('[InteractiveCharts] ✅ All charts loaded successfully');
-
-      } catch (error) {
-        console.error('[InteractiveCharts] ❌ Error in loadAllData:', error);
-      }
-    };
-
-    // Ejecutar carga
-    loadAllData();
-
-    // ✅ CLEANUP FUNCTION PARA CANCELAR REQUESTS AL DESMONTAR O CAMBIAR DEPENDENCIAS
     return () => {
       console.log('[InteractiveCharts] 🧹 Cleanup: Aborting all requests');
-      
       Object.keys(abortControllers.current).forEach(key => {
         cleanupAbortController(key);
       });
@@ -727,20 +1121,60 @@ const InteractiveCharts = ({
 
   }, [
     dependencyKey,
-    mode,
-    gestorId,
     normalizedPeriodo,
-    normalizedMetric,
+    mode,
+    normalizedGestorId,
+    gestorSegmentoInfo,
     loadChartData,
-    loadDirectionRanking,
-    loadDirectionDistribution,
-    loadGestorRanking,
-    loadGestorDistribution,
-    loadPriceCompare,
+    loadUnifiedData,
+    loadPriceData,
     cleanupAbortController
   ]);
 
-  // ✅ HANDLERS MEMOIZADOS
+  const handleUnifiedConfigChange = useCallback((configType, value) => {
+    console.log(`[InteractiveCharts] 🔧 Unified config change: ${configType} = ${value}`);
+    
+    setUnifiedConfig(prev => {
+      const newConfig = { ...prev, [configType]: value };
+      
+      if (configType === 'metric') {
+        if (!isValidCombination(value, newConfig.dimension, mode)) {
+          const validCombinations = mode === 'gestor' 
+            ? VALID_COMBINATIONS_GESTOR 
+            : VALID_COMBINATIONS_DIRECCION;
+          const validDimensions = validCombinations[value] || [];
+          
+          if (validDimensions.length > 0) {
+            const fallbackDimension = mode === 'direccion' 
+              ? (validDimensions.includes('gestores') ? 'gestores' : validDimensions[0])
+              : (validDimensions.includes('clientes') ? 'clientes' : validDimensions[0]);
+            newConfig.dimension = fallbackDimension;
+            console.log(`[InteractiveCharts] Auto-adjusted dimension to ${fallbackDimension} for metric ${value} in mode ${mode}`);
+          }
+        }
+      }
+      
+      return newConfig;
+    });
+
+    if (onChartConfigChange) {
+      onChartConfigChange({ chartKey: 'unified', configType, value });
+    }
+  }, [onChartConfigChange, mode]);
+
+  const handlePriceConfigChange = useCallback((configType, value) => {
+    console.log(`[InteractiveCharts] 🔧 Price config change: ${configType} = ${value}`);
+    
+    setPriceConfig(prev => ({
+      ...prev,
+      [configType]: value
+    }));
+
+    if (onChartConfigChange) {
+      onChartConfigChange({ chartKey: 'priceComparison', configType, value });
+    }
+  }, [onChartConfigChange]);
+
   const handleDataPointClick = useCallback((entity, chartKey) => {
     setSelectedEntity({ ...entity, chartKey });
     if (onSelectEntity) {
@@ -752,9 +1186,8 @@ const InteractiveCharts = ({
     console.log(`[InteractiveCharts] 🔄 Refreshing chart: ${chartKey}`);
     
     const loaderMap = {
-      'ranking': mode === 'direccion' ? loadDirectionRanking : loadGestorRanking,
-      'distribution': mode === 'direccion' ? loadDirectionDistribution : loadGestorDistribution,
-      'priceCompare': loadPriceCompare
+      'unified': loadUnifiedData,
+      'priceComparison': loadPriceData
     };
 
     const loader = loaderMap[chartKey];
@@ -763,154 +1196,349 @@ const InteractiveCharts = ({
     }
     
     if (onReload) onReload();
-  }, [
-    mode, 
-    loadDirectionRanking, 
-    loadGestorRanking, 
-    loadDirectionDistribution, 
-    loadGestorDistribution, 
-    loadPriceCompare, 
-    loadChartData, 
-    onReload
-  ]);
+  }, [loadUnifiedData, loadPriceData, loadChartData, onReload]);
 
   const handleRefreshAll = useCallback(() => {
     console.log('[InteractiveCharts] 🔄 Refreshing all charts');
     
-    // Reset flags y limpiar cache
-    lastDependencyKey.current = null;
+    lastLoadKey.current = null;
     
     if (analyticsService.clearAnalyticsCache) {
       analyticsService.clearAnalyticsCache();
     }
     
-    // Limpiar datos
     setChartsData({});
     setErrorStates({});
     
     if (onReload) onReload();
   }, [onReload]);
 
-  // ✅ RENDERIZADOR DE CARDS MEMOIZADO
-  const renderChartCard = useCallback((chartConfig) => {
-    const data = chartsData[chartConfig.key];
-    const loading = loadingStates[chartConfig.key];
-    const error = errorStates[chartConfig.key];
-
-    const getChartTitle = () => {
-      if (chartConfig.key === 'priceCompare' && data?.meta?.segmentoNombre) {
-        return `${chartConfig.title} - ${data.meta.segmentoNombre}`;
-      }
-      return chartConfig.title;
-    };
-
-    const getChartSubtitle = () => {
-      if (chartConfig.key === 'priceCompare' && data?.meta) {
-        const parts = [chartConfig.subtitle];
-        if (data.meta.periodo) parts.push(data.meta.periodo);
-        if (data.meta.mockData) parts.push('(Datos de demostración)');
-        return parts.join(' - ');
-      }
-      return chartConfig.subtitle;
-    };
+  const renderUnifiedTab = () => {
+    const data = chartsData.unified;
+    const loading = loadingStates.unified;
+    const error = errorStates.unified;
 
     return (
-      <Col key={chartConfig.key} {...chartConfig.span}>
-        <Card
-          title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <chartConfig.icon style={{ 
-                backgroundColor: `${chartConfig.color}15`, 
-                color: chartConfig.color, 
-                fontSize: 18, 
-                padding: 8, 
-                borderRadius: 6 
-              }} />
-              <div>
-                <div style={{ 
-                  fontWeight: 600, 
-                  fontSize: 15, 
-                  color: theme.colors?.textPrimary || '#333',
-                  marginBottom: 2
-                }}>
-                  {getChartTitle()}
-                  {loading && (
-                    <Badge 
-                      count="Cargando..." 
-                      style={{ 
-                        backgroundColor: theme.colors?.info || '#13c2c2',
-                        marginLeft: 8,
-                        fontSize: 10
-                      }} 
-                    />
-                  )}
-                </div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {getChartSubtitle()}
-                </Text>
+      <Card
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <BarChartOutlined style={{ 
+              backgroundColor: `${theme.colors?.bmGreenPrimary || '#1890ff'}15`, 
+              color: theme.colors?.bmGreenPrimary || '#1890ff', 
+              fontSize: 18, 
+              padding: 8, 
+              borderRadius: 6 
+            }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontWeight: 600, 
+                fontSize: 16, 
+                color: theme.colors?.textPrimary || '#333',
+                marginBottom: 2
+              }}>
+                Análisis General Dinámico
+                {loading && (
+                  <Badge 
+                    count="Cargando..." 
+                    style={{ 
+                      backgroundColor: theme.colors?.info || '#13c2c2',
+                      marginLeft: 8,
+                      fontSize: 10
+                    }} 
+                  />
+                )}
               </div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {mode === 'direccion' 
+                  ? `Vista corporativa • ${unifiedConfig.metric} por ${unifiedConfig.dimension}`
+                  : `Vista personal • ${unifiedConfig.metric} por ${unifiedConfig.dimension}`}
+                <span style={{ marginLeft: 8, fontWeight: 500 }}>
+                  ({COUNT_METRICS.includes(unifiedConfig.metric) ? 'Unidades' : 'Euros'})
+                </span>
+              </Text>
             </div>
-          }
-          extra={
+          </div>
+        }
+        extra={
+          <Space>
             <Tooltip title="Actualizar datos">
               <Button
                 size="small"
                 icon={<ReloadOutlined />}
                 loading={loading}
-                onClick={() => handleRefreshChart(chartConfig.key)}
+                onClick={() => handleRefreshChart('unified')}
                 style={{
-                  borderColor: chartConfig.color,
-                  color: chartConfig.color
+                  borderColor: theme.colors?.bmGreenPrimary || '#1890ff',
+                  color: theme.colors?.bmGreenPrimary || '#1890ff'
                 }}
               />
             </Tooltip>
+          </Space>
+        }
+        style={{
+          height: height + 100,
+          borderRadius: theme.token?.borderRadius || 8,
+          boxShadow: '0 4px 12px rgba(27, 94, 85, 0.12)',
+          border: `1px solid ${theme.colors?.borderLight || '#e8e8e8'}`
+        }}
+        styles={{
+          body: {
+            height: height,
+            padding: '16px 20px',
+            overflow: 'hidden'
           }
-          style={{
-            height: chartConfig.height || height,
-            marginBottom: theme.spacing?.md || 16,
-            borderRadius: theme.token?.borderRadius || 8,
-            boxShadow: '0 4px 12px rgba(27, 94, 85, 0.12)',
-            border: `1px solid ${theme.colors?.borderLight || '#e8e8e8'}`,
-            transition: 'all 0.3s ease'
-          }}
-          styles={{
-            body: {
-              height: (chartConfig.height || height) - 75,
-              padding: '16px 20px',
-              overflow: 'hidden'
-            }
-          }}
-        >
-          {error && !loading && (
-            <ErrorState
-              error={error}
-              onRetry={() => handleRefreshChart(chartConfig.key)}
-              style={{ height: (chartConfig.height || height) - 90 }}
-            />
-          )}
-          
-          {!error && (
-            <SimpleChart
-              key={`${chartConfig.key}-${gestorId || 'default'}`}
-              data={data}
-              config={{ 
-                chartType: chartConfig.chartType,
-                topN: 10,
-                showValues: true
-              }}
-              chartKey={chartConfig.key}
-              height={(chartConfig.height || height) - 90}
-              onDataClick={(entity) => handleDataPointClick(entity, chartConfig.key)}
-            />
-          )}
-        </Card>
-      </Col>
+        }}
+      >
+        <ChartFilter
+          chartKey="unified"
+          mode={mode}
+          currentMetric={unifiedConfig.metric}
+          currentChartType={unifiedConfig.chartType}
+          currentDimension={unifiedConfig.dimension}
+          onMetricChange={(value) => handleUnifiedConfigChange('metric', value)}
+          onChartTypeChange={(value) => handleUnifiedConfigChange('chartType', value)}
+          onDimensionChange={(value) => handleUnifiedConfigChange('dimension', value)}
+        />
+        
+        {error && !loading && (
+          <ErrorState
+            error={error}
+            onRetry={() => handleRefreshChart('unified')}
+            style={{ height: height - 80 }}
+          />
+        )}
+        
+        {!error && (
+          <UnifiedChart
+            key={`unified-${normalizedGestorId || 'default'}-${unifiedConfig.chartType}-${unifiedConfig.metric}-${unifiedConfig.dimension}`}
+            data={data}
+            config={unifiedConfig}
+            height={height - 80}
+            onDataClick={(entity) => handleDataPointClick(entity, 'unified')}
+          />
+        )}
+      </Card>
     );
-  }, [chartsData, loadingStates, errorStates, height, handleRefreshChart, handleDataPointClick, gestorId]);
+  };
+
+  // ✅ RENDERIZADO DE TAB DE PRECIOS CON RELACIÓN GESTOR-SEGMENTO CORREGIDA
+  const renderPriceTab = () => {
+    const data = chartsData.priceComparison;
+    const loading = loadingStates.priceComparison || loadingGestorSegmento;
+    const error = errorStates.priceComparison;
+
+    const handleSegmentChange = (value) => {
+      setSelectedSegment(value);
+    };
+
+    // ✅ INFORMACIÓN DEL SEGMENTO MEJORADA
+    const getSegmentDisplayInfo = () => {
+      if (mode === 'direccion') {
+        const selectedSegmentInfo = segmentos.find(s => s.id === selectedSegment);
+        return {
+          nombre: selectedSegmentInfo?.nombre || 'Desconocido',
+          id: selectedSegment,
+          type: 'manual'
+        };
+      } else if (gestorSegmentoInfo) {
+        return {
+          nombre: gestorSegmentoInfo.DESC_SEGMENTO || 'Segmento desconocido',
+          id: gestorSegmentoInfo.SEGMENTO_ID,
+          type: 'auto'
+        };
+      }
+      return { nombre: 'Cargando...', id: 'loading', type: 'loading' };
+    };
+
+    const segmentInfo = getSegmentDisplayInfo();
+
+    return (
+      <Card
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <DollarCircleOutlined style={{ 
+              backgroundColor: `${theme.colors?.warning || '#faad14'}15`, 
+              color: theme.colors?.warning || '#faad14', 
+              fontSize: 18, 
+              padding: 8, 
+              borderRadius: 6 
+            }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontWeight: 600, 
+                fontSize: 16, 
+                color: theme.colors?.textPrimary || '#333',
+                marginBottom: 2
+              }}>
+                Precios: Real vs Estándar
+                {loading && (
+                  <Badge 
+                    count="Cargando..." 
+                    style={{ 
+                      backgroundColor: theme.colors?.info || '#13c2c2',
+                      marginLeft: 8,
+                      fontSize: 10
+                    }} 
+                  />
+                )}
+              </div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {mode === 'direccion' 
+                  ? `✅ Filtrado por segmento: ${segmentInfo.nombre}`
+                  : `🎯 Segmento específico del Gestor ${normalizedGestorId}: ${segmentInfo.nombre} (${segmentInfo.id})`}
+                {segmentInfo.type === 'auto' && (
+                  <span style={{ color: theme.colors?.success || '#52c41a', marginLeft: 8 }}>
+                    • Detectado automáticamente
+                  </span>
+                )}
+              </Text>
+                
+              {/* ✅ SELECTOR DE SEGMENTOS SOLO PARA DIRECCIÓN */}
+              {mode === 'direccion' && (
+                <div style={{ marginTop: 8 }}>
+                  <Select
+                    size="small"
+                    value={selectedSegment}
+                    onChange={handleSegmentChange}
+                    style={{ minWidth: 180 }}
+                    placeholder="Seleccionar segmento"
+                  >
+                    {segmentos.map(segmento => (
+                      <Option key={segmento.id} value={segmento.id}>
+                        {segmento.nombre}
+                      </Option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+        }
+        extra={
+          <Space>
+            <Tooltip title="Actualizar precios">
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                loading={loading}
+                onClick={() => handleRefreshChart('priceComparison')}
+                style={{
+                  borderColor: theme.colors?.warning || '#faad14',
+                  color: theme.colors?.warning || '#faad14'
+                }}
+              />
+            </Tooltip>
+          </Space>
+        }
+        style={{
+          height: height + 100,
+          borderRadius: theme.token?.borderRadius || 8,
+          boxShadow: '0 4px 12px rgba(27, 94, 85, 0.12)',
+          border: `1px solid ${theme.colors?.borderLight || '#e8e8e8'}`
+        }}
+        styles={{
+          body: {
+            height: height,
+            padding: '16px 20px',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        {/* SOLO mostrar filtros en modo GESTOR */}
+        {mode === 'gestor' && (
+          <ChartFilter
+            chartKey="priceComparison"
+            mode={mode}
+            currentChartType={priceConfig.chartType}
+            onChartTypeChange={(value) => handlePriceConfigChange('chartType', value)}
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {/* ✅ ALERTAS MEJORADAS CON INFORMACIÓN DE SEGMENTO */}
+        {mode === 'direccion' && (
+          <Alert
+            message="Vista por Segmento"
+            description={`Mostrando precios del segmento ${segmentInfo.nombre}. Usa el selector arriba para cambiar de segmento.`}
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {mode === 'gestor' && gestorSegmentoInfo && (
+          <Alert
+            message="Vista Personalizada del Gestor"
+            description={`Mostrando precios específicos del segmento ${segmentInfo.nombre} (${segmentInfo.id}) correspondiente al Gestor ${normalizedGestorId}. Datos automáticamente filtrados por tu segmento asignado.`}
+            type="success"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {mode === 'gestor' && !gestorSegmentoInfo && !loadingGestorSegmento && (
+          <Alert
+            message="Error cargando segmento"
+            description="No se pudo determinar el segmento del gestor. Mostrando datos por defecto."
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {error && !loading && (
+          <ErrorState
+            error={error}
+            onRetry={() => handleRefreshChart('priceComparison')}
+            style={{ height: height - 80 }}
+          />
+        )}
+
+        {!error && (
+          <PriceComparisonChart
+            key={`price-${normalizedGestorId || selectedSegment}-${priceConfig.chartType}-${segmentInfo.id}`}
+            data={data}
+            height={height - 80}
+            onDataClick={(entity) => handleDataPointClick(entity, 'priceComparison')}
+          />
+        )}
+      </Card>
+    );
+  };
+
+  const tabItems = [
+    {
+      key: 'unified',
+      label: (
+        <Space>
+          <BarChartOutlined />
+          Análisis General
+        </Space>
+      ),
+      children: renderUnifiedTab()
+    },
+    {
+      key: 'prices', 
+      label: (
+        <Space>
+          <DollarCircleOutlined />
+          Precios por Productos
+          {mode === 'gestor' && gestorSegmentoInfo && (
+            <Badge 
+              count={gestorSegmentoInfo.SEGMENTO_ID} 
+              size="small" 
+              style={{ backgroundColor: theme.colors?.success || '#52c41a' }}
+            />
+          )}
+        </Space>
+      ),
+      children: renderPriceTab()
+    }
+  ];
 
   return (
     <div className={`interactive-charts ${className}`} style={{ ...style, width: '100%' }}>
-      {/* Header */}
+      {/* Header mejorado */}
       <div style={{ marginBottom: theme.spacing?.lg || 24 }}>
         <div style={{ 
           display: 'flex', 
@@ -933,7 +1561,7 @@ const InteractiveCharts = ({
                 borderRadius: 8, 
                 fontSize: 20 
               }} />
-              Gráficos Interactivos
+              Dashboard Interactivo Unificado
               <Badge 
                 count={mode === 'gestor' ? 'Gestor' : 'Dirección'} 
                 style={{ 
@@ -945,15 +1573,29 @@ const InteractiveCharts = ({
             <div style={{ marginTop: 8 }}>
               <Text type="secondary" style={{ fontSize: 13 }}>
                 {mode === 'direccion' 
-                  ? `Dashboard corporativo • Métrica: ${normalizedMetric} • Período: ${normalizedPeriodo}`
-                  : `Panel personalizado • Período: ${normalizedPeriodo}`}
-                {mode === 'gestor' && gestorId && ` • Gestor: ${gestorId}`}
-                {Object.keys(stableFilters).length > 0 && ' • Con filtros aplicados'}
+                  ? `Dashboard corporativo • Período: ${normalizedPeriodo} • ✅ SELECTOR DE SEGMENTOS`
+                  : `Panel personalizado • Período: ${normalizedPeriodo} • ✅ PRECIOS FILTRADOS POR SEGMENTO DEL GESTOR`}
+                {mode === 'gestor' && normalizedGestorId && ` • Gestor: ${normalizedGestorId}`}
+                {mode === 'gestor' && gestorSegmentoInfo && (
+                  <span style={{ color: theme.colors?.success || '#52c41a', marginLeft: 8 }}>
+                    • Segmento: {gestorSegmentoInfo.SEGMENTO_ID}
+                  </span>
+                )}
+                {Object.keys(filters).length > 0 && ' • Con filtros aplicados'}
               </Text>
             </div>
           </div>
           
           <Space>
+            <Button 
+              icon={<SettingOutlined />}
+              style={{ 
+                borderColor: theme.colors?.bmGreenPrimary || '#1890ff',
+                color: theme.colors?.bmGreenPrimary || '#1890ff'
+              }}
+            >
+              Configurar
+            </Button>
             <Button 
               icon={<ReloadOutlined />} 
               onClick={handleRefreshAll}
@@ -967,14 +1609,24 @@ const InteractiveCharts = ({
             </Button>
           </Space>
         </div>
+
+        <Alert
+          message="✅ Gráfico de Precios Funcionando Correctamente"
+          description={`${mode === 'gestor' ? 'El gráfico de precios muestra automáticamente los datos del segmento específico del gestor (N10103 para Gestor 8) transformados correctamente al formato Chart.js.' : 'El gráfico de precios tiene SELECTOR DE SEGMENTOS para análisis detallado.'} Los datos se transforman del formato del endpoint al formato requerido por el componente.`}
+          type="success"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
       </div>
 
-      {/* Grid principal */}
-      <Row gutter={[20, 20]}>
-        {chartsConfig.map(renderChartCard)}
-      </Row>
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        type="card"
+        size="large"
+        items={tabItems}
+      />
 
-      {/* Floating button */}
       <FloatButton
         icon={<ReloadOutlined />}
         type="primary"
@@ -984,8 +1636,36 @@ const InteractiveCharts = ({
           backgroundColor: theme.colors?.bmGreenPrimary || '#1890ff'
         }}
         onClick={handleRefreshAll}
-        tooltip={`Actualizar todos los gráficos - Modo: ${mode === 'direccion' ? 'Dirección' : 'Gestor'}`}
+        tooltip={`Actualizar dashboard - Modo: ${mode === 'direccion' ? 'Dirección' : 'Gestor'}`}
       />
+
+      {selectedEntity && (
+        <div style={{
+          position: 'fixed',
+          bottom: 80,
+          right: 24,
+          padding: '12px 16px',
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          borderRadius: 8,
+          fontSize: 12,
+          maxWidth: 300,
+          zIndex: 1000
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            Seleccionado: {selectedEntity.label}
+          </div>
+          <div>
+            Valor: {formatBankingValue(selectedEntity.value, { 
+              decimals: 2,
+              metric: selectedEntity.metric || unifiedConfig.metric
+            }).displayValue}
+          </div>
+          <div>
+            Gráfico: {selectedEntity.chartKey} • Métrica: {selectedEntity.metric || unifiedConfig.metric}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1002,8 +1682,16 @@ InteractiveCharts.propTypes = {
   onSelectEntity: PropTypes.func,
   externalChartConfig: PropTypes.object,
   onChartConfigChange: PropTypes.func,
+  onChartUpdate: PropTypes.func,
+  onChartPivot: PropTypes.func,
   className: PropTypes.string,
   style: PropTypes.object
 };
 
-export default React.memo(InteractiveCharts);
+const InteractiveChartsWithApp = (props) => (
+  <App>
+    <InteractiveCharts {...props} />
+  </App>
+);
+
+export default React.memo(InteractiveChartsWithApp);

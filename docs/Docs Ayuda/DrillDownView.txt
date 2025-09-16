@@ -6,38 +6,38 @@ import {
   Input, 
   Button, 
   Space, 
-  Breadcrumb, 
   Tag, 
   Tooltip, 
-  Badge, 
   Typography, 
   Row, 
   Col,
   Statistic,
   Empty,
-  Divider
+  Divider,
+  Alert,
+  Progress
 } from 'antd';
 import {
   SearchOutlined,
   ReloadOutlined,
-  HomeOutlined,
   BankOutlined,
   UserOutlined,
   FileTextOutlined,
   DollarOutlined,
   TrophyOutlined,
-  WarningOutlined,
+  PercentageOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
   MinusOutlined,
-  RightOutlined,
   BarChartOutlined,
   TeamOutlined,
-  ShopOutlined,
-  AppstoreOutlined
+  AppstoreOutlined,
+  CalendarOutlined,
+  EuroCircleOutlined
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import api from '../../services/api';
+import analyticsService from '../../services/analyticsService';
 import ErrorState from '../common/ErrorState';
 import Loader from '../common/Loader';
 import theme from '../../styles/theme';
@@ -45,28 +45,36 @@ import theme from '../../styles/theme';
 const { Search } = Input;
 const { Title, Text } = Typography;
 
-/**
- * DrillDownView - Navegación jerárquica para análisis detallado CDG
- * Soporte para dos modos: Dirección (vista corporativa) y Gestor (vista personal)
- */
 const DrillDownView = ({
   mode = 'direccion',
   periodo,
   gestorId = null,
-  defaultRootTab = null,
   onSelectLeaf = null,
   refreshToken = null,
   style = {},
   className = '',
 }) => {
-  const [currentPath, setCurrentPath] = useState([]);
-  const [tableData, setTableData] = useState([]);
+  // Normalizar período
+  const normalizedPeriodo = useMemo(() => {
+    if (!periodo) return "2025-10";
+    if (typeof periodo === 'string') return periodo;
+    if (typeof periodo === 'object') {
+      return periodo.latest || periodo.periodo || periodo.value || "2025-10";
+    }
+    return String(periodo);
+  }, [periodo]);
+
+  // Estados
+  const [rootData, setRootData] = useState([]);
+  const [expandedRowKeys, setExpandedRowKeys] = useState([]);
+  const [childDataMap, setChildDataMap] = useState({});
+  const [loadingChildren, setLoadingChildren] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchText, setSearchText] = useState('');
-  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [metricsCache, setMetricsCache] = useState({});
 
-  // Configuración de niveles por modo
+  // ✅ CONFIGURACIÓN ACTUALIZADA con nuevos endpoints de métricas
   const drillConfig = useMemo(() => ({
     direccion: [
       { 
@@ -75,31 +83,51 @@ const DrillDownView = ({
         icon: BankOutlined, 
         color: theme.colors.bmGreenPrimary,
         endpoint: () => api.basic.centros(),
-        columns: ['nombre', 'contratos', 'ingresos', 'margen', 'margen_pct', 'gestores_count']
+        metricsEndpoint: (centroId) => Promise.all([
+          analyticsService.getCentroKPIsFinancieros(centroId, normalizedPeriodo),
+          analyticsService.getCentroMargen(centroId, normalizedPeriodo),
+          analyticsService.getCentroBonusTotal(centroId, normalizedPeriodo)
+        ]),
+        idKey: 'CENTRO_ID',
+        nameKey: 'DESC_CENTRO',
+        metricsKeys: ['ingresos', 'gastos', 'beneficio', 'roe', 'margen_pct', 'bonus_total']
       },
       { 
         key: 'gestores', 
         label: 'Gestores', 
         icon: UserOutlined, 
         color: theme.colors.bmGreenLight,
-        endpoint: (parentId) => api.basic.gestoresByCentro(parentId),
-        columns: ['nombre', 'contratos', 'ingresos', 'margen', 'margen_pct', 'clientes_count']
+        endpoint: (centroId) => api.basic.gestoresByCentro(centroId),
+        metricsEndpoint: (gestorId) => Promise.all([
+          analyticsService.getGestorKPIsFinancieros(gestorId, normalizedPeriodo),
+          analyticsService.getGestorROE(gestorId, normalizedPeriodo),
+          analyticsService.getIncentivesGestorDetalle(gestorId, normalizedPeriodo)
+        ]),
+        idKey: 'GESTOR_ID',
+        nameKey: 'DESC_GESTOR',
+        metricsKeys: ['ingresos', 'gastos', 'beneficio', 'roe', 'margen_pct', 'bonus_total']
       },
       { 
         key: 'clientes', 
         label: 'Clientes', 
         icon: TeamOutlined, 
         color: theme.colors.info,
-        endpoint: (parentId) => api.basic.clientesByGestor(parentId),
-        columns: ['nombre', 'contratos', 'volumen', 'margen', 'productos_count', 'last_activity']
+        endpoint: (gestorId) => api.basic.clientesByGestor(gestorId),
+        metricsEndpoint: (clienteId) => analyticsService.getClienteMetricas(clienteId, normalizedPeriodo),
+        idKey: 'CLIENTE_ID',
+        nameKey: 'NOMBRE_CLIENTE',
+        metricsKeys: ['beneficio', 'ingresos', 'num_contratos']
       },
       { 
         key: 'contratos', 
         label: 'Contratos', 
         icon: FileTextOutlined, 
         color: theme.colors.success,
-        endpoint: (parentId) => api.basic.contractsByCliente(parentId),
-        columns: ['numero', 'producto', 'fecha_alta', 'volumen', 'estado', 'margen_pct'],
+        endpoint: (clienteId) => api.basic.contractsByCliente(clienteId),
+        metricsEndpoint: (contratoId) => analyticsService.getContratoDetalleCompleto(contratoId),
+        idKey: 'CONTRATO_ID',
+        nameKey: 'CONTRATO_ID',
+        metricsKeys: ['importe', 'ingresos', 'margen', 'fecha_alta'],
         isLeaf: true
       }
     ],
@@ -108,583 +136,920 @@ const DrillDownView = ({
         key: 'clientes', 
         label: 'Mis Clientes', 
         icon: TeamOutlined, 
-        color: theme.colors.bmGreenPrimary,
-        endpoint: () => api.basic.clientesByGestor(gestorId),
-        columns: ['nombre', 'contratos', 'volumen', 'margen', 'productos_count', 'last_contact']
-      },
-      { 
-        key: 'productos', 
-        label: 'Productos', 
-        icon: AppstoreOutlined, 
-        color: theme.colors.bmGreenLight,
-        endpoint: (parentId) => api.basic.productosByGestor(gestorId),
-        columns: ['nombre', 'contratos_count', 'volumen_total', 'margen_avg', 'precio_std', 'precio_real']
+        color: theme.colors.info,
+        endpoint: (gestorIdParam) => api.basic.clientesByGestor(gestorIdParam || gestorId),
+        metricsEndpoint: (clienteId) => analyticsService.getClienteMetricas(clienteId, normalizedPeriodo),
+        idKey: 'CLIENTE_ID',
+        nameKey: 'NOMBRE_CLIENTE',
+        metricsKeys: ['beneficio', 'ingresos', 'num_contratos']
       },
       { 
         key: 'contratos', 
         label: 'Contratos', 
         icon: FileTextOutlined, 
-        color: theme.colors.info,
-        endpoint: (parentId) => api.basic.contractsByCliente(parentId),
-        columns: ['numero', 'cliente', 'producto', 'fecha_alta', 'volumen', 'margen_pct'],
+        color: theme.colors.success,
+        endpoint: (clienteId) => api.basic.contractsByCliente(clienteId),
+        metricsEndpoint: (contratoId) => analyticsService.getContratoDetalleCompleto(contratoId),
+        idKey: 'CONTRATO_ID',
+        nameKey: 'CONTRATO_ID',
+        metricsKeys: ['importe', 'ingresos', 'margen', 'fecha_alta'],
         isLeaf: true
       }
     ]
-  }), [mode, gestorId]);
+  }), [gestorId, normalizedPeriodo]);
 
-  // Configurar ruta inicial
-  const initialLevel = useMemo(() => {
-    const levels = drillConfig[mode];
-    const rootKey = defaultRootTab || levels[0].key;
-    return levels.find(level => level.key === rootKey) || levels[0];
-  }, [mode, defaultRootTab, drillConfig]);
+  // ✅ FUNCIÓN MEJORADA PARA CARGAR MÉTRICAS REALES
+  const loadMetrics = useCallback(async (id, levelConfig) => {
+    const cacheKey = `${levelConfig.key}_${id}_${normalizedPeriodo}`;
+    
+    if (metricsCache[cacheKey]) {
+      console.log(`[DrillDownView] Using cached metrics for ${levelConfig.key}:${id}`);
+      return metricsCache[cacheKey];
+    }
 
-  // Cargar datos del nivel actual
-  const loadLevelData = useCallback(async (levelConfig, parentId = null) => {
+    try {
+      console.log(`[DrillDownView] 📊 Loading metrics for ${levelConfig.key}:${id}...`);
+      let metrics = {};
+      
+      if (levelConfig.metricsEndpoint) {
+        const metricsData = await levelConfig.metricsEndpoint(id);
+        console.log(`[DrillDownView] Raw metrics data for ${id}:`, metricsData);
+        
+        // ✅ PROCESAMIENTO ESPECÍFICO POR TIPO DE ENDPOINT
+        if (Array.isArray(metricsData)) {
+          // Para centros y gestores que devuelven arrays de promesas
+          const [kpisData, roeData, bonusData] = metricsData;
+          
+          metrics = {
+            ingresos: kpisData?.total_ingresos || kpisData?.ingresos_totales || 0,
+            gastos: kpisData?.total_gastos || kpisData?.gastos_totales || 0,
+            beneficio: kpisData?.beneficio_neto || kpisData?.margen_total || (kpisData?.total_ingresos || 0) - (kpisData?.total_gastos || 0),
+            roe: roeData?.roe_pct || kpisData?.roe_pct || 0,
+            margen_pct: kpisData?.margen_neto_pct || kpisData?.margen_pct || 0,
+            bonus_total: bonusData?.total_incentivos || bonusData?.bonus_total || bonusData?.incentivo_final_eur || 0,
+            clasificacion_roe: roeData?.clasificacion || kpisData?.clasificacion_roe || 'N/A',
+            clasificacion_margen: kpisData?.clasificacion_margen || 'N/A'
+          };
+        } else if (metricsData && typeof metricsData === 'object') {
+          // ✅ PROCESAMIENTO MEJORADO para clientes y contratos
+          if (levelConfig.key === 'contratos') {
+            // Para contratos usando el endpoint detalle-completo
+            metrics = {
+              ingresos: Math.abs(metricsData.ingresos_total || metricsData.importe || 0),
+              gastos: Math.abs(metricsData.gastos_total || 0),
+              beneficio: metricsData.beneficio_neto || 0,
+              margen: metricsData.margen_neto_pct || 0,
+              margen_pct: metricsData.margen_neto_pct || 0,
+              num_movimientos: metricsData.num_movimientos || 0,
+              fecha_alta: metricsData.FECHA_ALTA || metricsData.fecha_alta,
+              producto: metricsData.DESC_PRODUCTO || metricsData.producto,
+              promedio_movimiento: metricsData.promedio_por_movimiento || 0
+            };
+          } else {
+            // Para clientes usando el endpoint cliente/metricas
+            metrics = {
+              ingresos: Math.abs(metricsData.ingresos_totales || metricsData.total_ingresos || 0),
+              beneficio: metricsData.beneficio_neto || metricsData.beneficio || 0,
+              margen: metricsData.margen_neto || 0,
+              margen_pct: metricsData.margen_pct || 0,
+              num_contratos: metricsData.num_contratos || metricsData.total_contratos || 0,
+              total_movimientos: metricsData.total_movimientos || 0
+            };
+          }
+        }
+      }
+      
+      console.log(`[DrillDownView] ✅ Processed metrics for ${levelConfig.key}:${id}:`, metrics);
+      setMetricsCache(prev => ({ ...prev, [cacheKey]: metrics }));
+      return metrics;
+      
+    } catch (error) {
+      console.warn(`[DrillDownView] ⚠️ Error loading metrics for ${levelConfig.key}:${id}:`, error.message);
+      return {};
+    }
+  }, [metricsCache, normalizedPeriodo]);
+
+  // ✅ NUEVA FUNCIÓN: Cargar métricas bajo demanda para centros
+  const loadCentroMetricsOnDemand = useCallback(async (centroId) => {
+    const levelConfig = drillConfig.direccion[0]; // Configuración de centros
+    if (!levelConfig?.metricsEndpoint) return {};
+
+    console.log(`[DrillDownView] 📊 Loading on-demand metrics for centro: ${centroId}`);
+    
+    try {
+      const metrics = await loadMetrics(centroId, levelConfig);
+      
+      // Actualizar el rootData con las métricas cargadas
+      setRootData(prevData => 
+        prevData.map(item => {
+          if (item.id === centroId) {
+            const ingresos = Math.round(Math.abs(metrics.ingresos || 0));
+            const gastos = Math.round(Math.abs(metrics.gastos || 0));
+            const beneficio = Math.round(metrics.beneficio || (ingresos - gastos));
+            const margen_pct = Math.round((metrics.margen_pct || 0) * 100) / 100;
+            const roe = Math.round((metrics.roe || 0) * 100) / 100;
+            const alerta = Math.abs(margen_pct) >= 15 ? 'success' : 
+                          Math.abs(margen_pct) >= 10 ? 'warning' : 
+                          beneficio < 0 ? 'error' : 'warning';
+
+            return {
+              ...item,
+              ingresos,
+              gastos,
+              beneficio,
+              margen_pct,
+              roe,
+              bonus_total: Math.round(metrics.bonus_total || 0),
+              alerta,
+              clasificacion_roe: metrics.clasificacion_roe || 'N/A',
+              clasificacion_margen: metrics.clasificacion_margen || 'N/A',
+              _needsMetricsLoad: false,
+              _metrics: metrics
+            };
+          }
+          return item;
+        })
+      );
+      
+      return metrics;
+    } catch (error) {
+      console.warn(`[DrillDownView] ⚠️ Error loading centro metrics for ${centroId}:`, error.message);
+      return {};
+    }
+  }, [drillConfig, loadMetrics]);
+
+  // ✅ NORMALIZACIÓN MEJORADA con métricas reales - CORREGIDO PARA CENTROS
+  const normalizeData = useCallback(async (rawData, levelConfig, forceLoadMetrics = false) => {
+    if (!Array.isArray(rawData)) return [];
+    
+    console.log(`[DrillDownView] 🔄 Normalizing ${rawData.length} items for level: ${levelConfig.key}`);
+    
+    const normalizedData = await Promise.all(
+      rawData.map(async (item, index) => {
+        const id = item[levelConfig.idKey] || item.id || index;
+        let nombre = item[levelConfig.nameKey] || item.nombre || `Item ${index + 1}`;
+        
+        // Para contratos, mostrar ID + Producto
+        if (levelConfig.key === 'contratos') {
+          nombre = `${item.CONTRATO_ID} - ${item.DESC_PRODUCTO || 'Producto'}`;
+        }
+
+        // ✅ CARGAR MÉTRICAS REALES - FORZAR CARGA O CARGAR BAJO DEMANDA
+        let metrics = {};
+        if (levelConfig.metricsEndpoint && (forceLoadMetrics || levelConfig.key !== 'centros')) {
+          console.log(`[DrillDownView] 📊 Loading metrics for ${levelConfig.key}:${id} (forced: ${forceLoadMetrics})`);
+          metrics = await loadMetrics(id, levelConfig);
+        } else if (levelConfig.key === 'centros') {
+          console.log(`[DrillDownView] ⚠️ Deferred metrics loading for centro ${id}`);
+          // Para centros, usar datos básicos disponibles y marcar para carga posterior
+          metrics = {
+            ingresos: 0,
+            gastos: 0,
+            beneficio: 0,
+            roe: 0,
+            margen_pct: 0,
+            bonus_total: 0,
+            _needsMetricsLoad: true
+          };
+        }
+        
+        // ✅ CÁLCULOS MEJORADOS basados en datos reales o básicos
+        const ingresos = metrics.ingresos || item.ingresos_total || item.total_ingresos || 0;
+        const gastos = metrics.gastos || item.gastos_total || item.total_gastos || 0;
+        const beneficio = metrics.beneficio || (ingresos - gastos);
+        
+        // Margen porcentual más robusto
+        let margen_pct = metrics.margen_pct || metrics.margen || 0;
+        if (margen_pct === 0 && ingresos > 0) {
+          margen_pct = (beneficio / ingresos) * 100;
+        }
+        
+        // ROE y score
+        const roe = metrics.roe || 0;
+        const score = Math.min(Math.round((roe * 0.4) + (Math.abs(margen_pct) * 0.6)), 100);
+        
+        // ✅ ESTADO DE ALERTA MEJORADO - Para centros sin métricas, estado neutral
+        const alerta = metrics._needsMetricsLoad ? 'warning' :
+                      Math.abs(margen_pct) >= 15 ? 'success' : 
+                      Math.abs(margen_pct) >= 10 ? 'warning' : 
+                      beneficio < 0 ? 'error' : 'warning';
+        
+        return {
+          key: id,
+          id: id,
+          nombre: nombre,
+          ingresos: Math.round(Math.abs(ingresos)),
+          gastos: Math.round(Math.abs(gastos)),
+          beneficio: Math.round(beneficio),
+          margen_pct: Math.round(margen_pct * 100) / 100,
+          roe: Math.round(roe * 100) / 100,
+          bonus_total: Math.round(metrics.bonus_total || 0),
+          num_contratos: metrics.num_contratos || item.num_contratos || 0,
+          score: Math.max(0, score),
+          alerta: alerta,
+          clasificacion_roe: metrics.clasificacion_roe || 'N/A',
+          clasificacion_margen: metrics.clasificacion_margen || 'N/A',
+          _needsMetricsLoad: metrics._needsMetricsLoad || false,
+          
+          // Datos específicos por tipo
+          segmento: item.DESC_SEGMENTO || item.segmento || null,
+          fechaAlta: metrics.fecha_alta || item.FECHA_ALTA || null,
+          producto: metrics.producto || item.DESC_PRODUCTO || null,
+          centro: item.DESC_CENTRO || null,
+          num_movimientos: metrics.num_movimientos || 0,
+          
+          // Metadatos
+          _originalData: item,
+          _level: levelConfig.key,
+          _metrics: metrics
+        };
+      })
+    );
+    
+    // Ordenar por ingresos descendente
+    const sorted = normalizedData.sort((a, b) => (b.ingresos || 0) - (a.ingresos || 0));
+    console.log(`[DrillDownView] ✅ Normalized ${sorted.length} items for ${levelConfig.key}`);
+    return sorted;
+  }, [loadMetrics]);
+
+  // ✅ CARGA DE DATOS RAÍZ - FORZAR CARGA DE MÉTRICAS PARA CENTROS
+  const loadRootData = useCallback(async () => {
+    const levelConfig = drillConfig[mode] && drillConfig[mode][0];
+    if (!levelConfig) return;
+
     try {
       setLoading(true);
       setError(null);
-
-      const rawData = await levelConfig.endpoint(parentId);
+      console.log(`[DrillDownView] 🚀 Loading root data for mode: ${mode}...`);
       
-      // Normalizar datos a formato uniforme
-      const normalizedData = Array.isArray(rawData) ? rawData.map((item, index) => {
-        return {
-          key: item.id || item.CENTROID || item.GESTORID || item.CLIENTEID || item.CONTRATOID || index,
-          id: item.id || item.CENTROID || item.GESTORID || item.CLIENTEID || item.CONTRATOID || index,
-          nombre: item.nombre || item.DESCCENTRO || item.DESCGESTOR || item.NOMBRE_CLIENTE || item.DESC_PRODUCTO || item.NUMERO_CONTRATO || `Item ${index + 1}`,
-          tipo: levelConfig.key,
-          kpis: {
-            contratos: item.numcontratos || item.contratos_count || item.contratos || calculateContracts(item),
-            ingresos: item.ingresos || item.volumen || item.importe || calculateIngresos(item),
-            margen: item.margen || item.margen_neto || calculateMargen(item),
-            margen_pct: item.margen_pct || item.margen_porcentaje || calculateMargenPct(item),
-            clientes_count: item.clientes_count || item.numclientes || 0,
-            gestores_count: item.gestores_count || 0,
-            productos_count: item.productos_count || item.numproductos || 0,
-          },
-          flags: {
-            alerta: checkAlerta(item),
-            tendencia: calculateTendencia(item),
-            score: calculateScore(item),
-          },
-          meta: {
-            fecha_alta: item.fecha_alta,
-            fecha_modificacion: item.fecha_modificacion,
-            estado: item.estado || 'ACTIVO',
-            centro: item.centro || item.CENTROID,
-            gestor: item.gestor || item.GESTORID,
-            last_activity: item.last_activity,
-            last_contact: item.last_contact,
-            precio_std: item.precio_std,
-            precio_real: item.precio_real,
-          }
-        };
-      }) : [];
-
-      setTableData(normalizedData);
+      let rawData;
+      if (mode === 'gestor' && gestorId) {
+        rawData = await levelConfig.endpoint(gestorId);
+        console.log(`[DrillDownView] ✅ Root data loaded for gestor ${gestorId}:`, rawData);
+      } else {
+        rawData = await levelConfig.endpoint();
+        console.log('[DrillDownView] ✅ Root data loaded:', rawData);
+      }
+      
+      // ✅ FORZAR CARGA DE MÉTRICAS PARA CENTROS EN MODO DIRECCIÓN
+      const shouldForceLoad = mode === 'direccion' && levelConfig.key === 'centros';
+      const normalizedData = await normalizeData(rawData, levelConfig, shouldForceLoad);
+      setRootData(normalizedData);
       
     } catch (err) {
-      console.error(`[DrillDownView] Error loading level ${levelConfig.key}:`, err);
+      console.error('[DrillDownView] ❌ Error loading root data:', err);
       setError(err);
-      // Fallback con datos mock para desarrollo
-      setTableData(generateMockData(levelConfig));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode, drillConfig, normalizeData, gestorId]);
 
-  // Helpers para cálculos y normalización de datos
-  const calculateContracts = (item) => item.total_contratos || item.num_contratos || 0;
-  const calculateIngresos = (item) => item.ingresos_totales || item.volumen_total || item.importe_total || 0;
-  const calculateMargen = (item) => item.margen_total || item.beneficio || (item.ingresos - item.gastos) || 0;
-  const calculateMargenPct = (item) => item.ingresos > 0 ? ((item.margen || 0) / item.ingresos) * 100 : 0;
-  
-  const checkAlerta = (item) => {
-    const margenPct = calculateMargenPct(item);
-    return margenPct < 10 ? 'rojo' : margenPct < 15 ? 'amarillo' : 'verde';
-  };
-  
-  const calculateTendencia = (item) => {
-    const variacion = item.variacion_mes || item.crecimiento || 0;
-    return variacion > 5 ? 'up' : variacion < -5 ? 'down' : 'stable';
-  };
-  
-  const calculateScore = (item) => {
-    const margen = calculateMargenPct(item);
-    const contratos = calculateContracts(item);
-    return Math.round((margen * 0.6) + (Math.min(contratos / 10, 10) * 4));
-  };
+  const getLevelConfig = useCallback((levelIndex) => {
+    const configs = drillConfig[mode];
+    if (!configs || !Array.isArray(configs) || levelIndex >= configs.length) {
+      return null;
+    }
+    return configs[levelIndex];
+  }, [drillConfig, mode]);
 
-  // Mock data generator para desarrollo
-  const generateMockData = (levelConfig) => {
-    const mockItems = {
-      centros: [
-        { id: 1, nombre: 'Madrid Centro', contratos: 245, ingresos: 2850000, margen: 428000, margen_pct: 15.2, gestores_count: 12 },
-        { id: 2, nombre: 'Barcelona Norte', contratos: 189, ingresos: 2145000, margen: 298000, margen_pct: 13.9, gestores_count: 9 },
-        { id: 3, nombre: 'Valencia', contratos: 156, ingresos: 1890000, margen: 245000, margen_pct: 13.0, gestores_count: 7 },
-      ],
-      gestores: [
-        { id: 101, nombre: 'Ana García López', contratos: 34, ingresos: 485000, margen: 72000, margen_pct: 14.8, clientes_count: 28 },
-        { id: 102, nombre: 'Carlos Martín Sánchez', contratos: 28, ingresos: 395000, margen: 58000, margen_pct: 14.7, clientes_count: 24 },
-        { id: 103, nombre: 'María José Ruiz', contratos: 31, ingresos: 445000, margen: 62000, margen_pct: 13.9, clientes_count: 26 },
-      ],
-      clientes: [
-        { id: 201, nombre: 'Constructora ABC S.L.', contratos: 5, volumen: 250000, margen: 35000, productos_count: 3, last_contact: '2025-09-01' },
-        { id: 202, nombre: 'Tech Solutions Inc.', contratos: 3, volumen: 180000, margen: 28000, productos_count: 2, last_contact: '2025-09-05' },
-        { id: 203, nombre: 'Familia González', contratos: 2, volumen: 120000, margen: 18000, productos_count: 2, last_contact: '2025-09-03' },
-      ],
-      contratos: [
-        { id: 301, numero: 'CT-2025-001', producto: 'Hipoteca Variable', fecha_alta: '2025-01-15', volumen: 180000, margen_pct: 2.5, estado: 'ACTIVO' },
-        { id: 302, numero: 'CT-2025-002', producto: 'Préstamo Personal', fecha_alta: '2025-02-20', volumen: 45000, margen_pct: 5.2, estado: 'ACTIVO' },
-        { id: 303, numero: 'CT-2025-003', producto: 'Cuenta Corriente Premium', fecha_alta: '2025-03-10', volumen: 25000, margen_pct: 8.1, estado: 'ACTIVO' },
-      ]
-    };
-    
-    return (mockItems[levelConfig.key] || []).map(item => ({
-      key: item.id,
-      id: item.id,
-      nombre: item.nombre || item.numero,
-      tipo: levelConfig.key,
-      kpis: {
-        contratos: item.contratos || 0,
-        ingresos: item.ingresos || item.volumen || 0,
-        margen: item.margen || 0,
-        margen_pct: item.margen_pct || 0,
-        clientes_count: item.clientes_count || 0,
-        gestores_count: item.gestores_count || 0,
-        productos_count: item.productos_count || 0,
-      },
-      flags: {
-        alerta: item.margen_pct > 15 ? 'verde' : item.margen_pct > 10 ? 'amarillo' : 'rojo',
-        tendencia: 'stable',
-        score: Math.round(item.margen_pct || 50),
-      },
-      meta: {
-        fecha_alta: item.fecha_alta,
-        estado: item.estado || 'ACTIVO',
-        last_contact: item.last_contact,
+  // ✅ MANEJO DE EXPANSIÓN - ACTUALIZADO para cargar métricas de centros si es necesario
+  const handleRowExpand = useCallback(async (expanded, record) => {
+    const recordId = record.id;
+    console.log(`[DrillDownView] 🔽 Row expand ${expanded ? 'OPEN' : 'CLOSE'}:`, recordId);
+
+    if (expanded) {
+      setExpandedRowKeys(prev => {
+        if (!prev.includes(recordId)) {
+          return [...prev, recordId];
+        }
+        return prev;
+      });
+
+      // ✅ CARGAR MÉTRICAS DE CENTROS BAJO DEMANDA SI ES NECESARIO
+      if (record._needsMetricsLoad && record._level === 'centros') {
+        console.log(`[DrillDownView] 🔄 Loading centro metrics on expand for: ${recordId}`);
+        await loadCentroMetricsOnDemand(recordId);
       }
-    }));
-  };
 
-  // Navegación
-  const handleDrillDown = useCallback((record) => {
-    const currentLevel = getCurrentLevel();
-    if (!currentLevel || currentLevel.isLeaf) {
-      // Es un nodo hoja, disparar callback
-      if (onSelectLeaf) {
-        onSelectLeaf(record);
+      if (!childDataMap[recordId]) {
+        const currentLevel = record._level || (mode === 'gestor' ? 'clientes' : 'centros');
+        const currentLevelIndex = drillConfig[mode] ? drillConfig[mode].findIndex(level => level.key === currentLevel) : -1;
+        const nextLevelIndex = currentLevelIndex + 1;
+        const nextLevelConfig = getLevelConfig(nextLevelIndex);
+        
+        if (!nextLevelConfig) {
+          console.log('[DrillDownView] 🍃 No next level config, this is a leaf');
+          return;
+        }
+
+        console.log(`[DrillDownView] 📡 Fetching ${nextLevelConfig.key} for ${recordId}...`);
+        
+        try {
+          setLoadingChildren(prev => ({ ...prev, [recordId]: true }));
+          
+          const rawChildData = await nextLevelConfig.endpoint(recordId);
+          console.log(`[DrillDownView] ✅ Child data loaded for ${recordId}:`, rawChildData);
+          
+          // ✅ PARA GESTORES (hijos de centros), FORZAR CARGA DE MÉTRICAS
+          const forceLoadMetrics = nextLevelConfig.key === 'gestores';
+          const normalizedChildData = await normalizeData(rawChildData, nextLevelConfig, forceLoadMetrics);
+          
+          setChildDataMap(prev => ({
+            ...prev,
+            [recordId]: {
+              data: normalizedChildData,
+              level: nextLevelIndex,
+              config: nextLevelConfig
+            }
+          }));
+          
+        } catch (err) {
+          console.error(`[DrillDownView] ❌ Error loading child data for ${recordId}:`, err);
+          
+          setChildDataMap(prev => ({
+            ...prev,
+            [recordId]: {
+              data: [],
+              level: nextLevelIndex,
+              config: nextLevelConfig,
+              error: err.message
+            }
+          }));
+        } finally {
+          setLoadingChildren(prev => {
+            const updated = { ...prev };
+            delete updated[recordId];
+            return updated;
+          });
+        }
       }
-      return;
+    } else {
+      setExpandedRowKeys(prev => prev.filter(key => key !== recordId));
     }
+  }, [mode, drillConfig, normalizeData, childDataMap, getLevelConfig, loadCentroMetricsOnDemand]);
 
-    // Navegar al siguiente nivel
-    const nextLevelIndex = currentPath.length;
-    const nextLevel = drillConfig[mode][nextLevelIndex + 1];
-    
-    if (nextLevel) {
-      setCurrentPath([...currentPath, { 
-        level: currentLevel, 
-        record, 
-        id: record.id, 
-        nombre: record.nombre 
-      }]);
-      loadLevelData(nextLevel, record.id);
-    }
-  }, [currentPath, drillConfig, mode, loadLevelData, onSelectLeaf]);
-
-  const handleBreadcrumbClick = useCallback((targetIndex) => {
-    if (targetIndex === -1) {
-      // Volver al inicio
-      setCurrentPath([]);
-      loadLevelData(initialLevel);
-    } else if (targetIndex < currentPath.length) {
-      // Volver a un nivel específico
-      const newPath = currentPath.slice(0, targetIndex + 1);
-      setCurrentPath(newPath);
-      const targetLevel = drillConfig[mode][targetIndex + 1];
-      const parentId = targetIndex >= 0 ? newPath[targetIndex].id : null;
-      loadLevelData(targetLevel, parentId);
-    }
-  }, [currentPath, drillConfig, mode, loadLevelData, initialLevel]);
-
-  // Obtener configuración del nivel actual
-  const getCurrentLevel = useCallback(() => {
-    return drillConfig[mode][currentPath.length];
-  }, [drillConfig, mode, currentPath.length]);
-
-  // Configurar columnas de la tabla
-  const getTableColumns = useCallback(() => {
-    const currentLevel = getCurrentLevel();
-    if (!currentLevel) return [];
-
-    const baseColumns = [
+  // ✅ COLUMNAS DINÁMICAS ACTUALIZADAS con indicadores de carga
+  const getColumns = useCallback((levelConfig) => {
+    const columns = [
       {
-        title: 'Nombre',
+        title: levelConfig.key === 'contratos' ? 'Contrato - Producto' : 
+               levelConfig.key === 'centros' ? 'Centro' :
+               levelConfig.key === 'gestores' ? 'Gestor' : 'Cliente',
         dataIndex: 'nombre',
         key: 'nombre',
         fixed: 'left',
-        width: 250,
+        width: levelConfig.key === 'contratos' ? 320 : 280,
         render: (text, record) => (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <currentLevel.icon style={{ color: currentLevel.color, fontSize: 16 }} />
+            <levelConfig.icon style={{ color: levelConfig.color, fontSize: 16 }} />
             <div>
               <div style={{ fontWeight: 500, color: theme.colors.textPrimary }}>
                 {text}
               </div>
-              {record.meta?.estado && (
-                <Tag size="small" color={record.meta.estado === 'ACTIVO' ? 'green' : 'orange'}>
-                  {record.meta.estado}
+              {record.segmento && (
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  Segmento: {record.segmento}
+                </Text>
+              )}
+              {record.fechaAlta && (
+                <Text type="secondary" style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CalendarOutlined /> {new Date(record.fechaAlta).toLocaleDateString('es-ES')}
+                </Text>
+              )}
+              {record.num_movimientos > 0 && (
+                <Text type="secondary" style={{ fontSize: 10 }}>
+                  {record.num_movimientos} movimientos
+                </Text>
+              )}
+              {record.clasificacion_roe && record.clasificacion_roe !== 'N/A' && (
+                <Tag size="small" color={record.alerta === 'success' ? 'green' : record.alerta === 'warning' ? 'orange' : 'red'}>
+                  {record.clasificacion_roe}
                 </Tag>
               )}
             </div>
           </div>
         ),
-        sorter: (a, b) => a.nombre.localeCompare(b.nombre),
         filteredValue: searchText ? [searchText] : null,
         onFilter: (value, record) =>
           record.nombre.toLowerCase().includes(value.toLowerCase()),
-      },
-      {
-        title: 'Contratos',
-        dataIndex: ['kpis', 'contratos'],
-        key: 'contratos',
-        width: 120,
-        render: (value) => (
-          <Statistic
-            value={value || 0}
-            formatter={val => new Intl.NumberFormat('es-ES').format(val)}
-            valueStyle={{ fontSize: 14, color: theme.colors.textPrimary }}
-          />
-        ),
-        sorter: (a, b) => (a.kpis.contratos || 0) - (b.kpis.contratos || 0),
-      },
-      {
-        title: 'Ingresos',
-        dataIndex: ['kpis', 'ingresos'],
-        key: 'ingresos',
-        width: 150,
-        render: (value) => (
-          <Statistic
-            value={value || 0}
-            formatter={val => new Intl.NumberFormat('es-ES', {
-              style: 'currency',
-              currency: 'EUR',
-              minimumFractionDigits: 0,
-              maximumFractionDigits: 0,
-            }).format(val)}
-            valueStyle={{ fontSize: 14, color: theme.colors.textPrimary }}
-          />
-        ),
-        sorter: (a, b) => (a.kpis.ingresos || 0) - (b.kpis.ingresos || 0),
-      },
-      {
-        title: 'Margen',
-        dataIndex: ['kpis', 'margen'],
-        key: 'margen',
-        width: 140,
-        render: (value, record) => (
-          <Tooltip title={`Margen: ${((record.kpis.margen_pct || 0)).toFixed(1)}%`}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Statistic
-                value={value || 0}
-                formatter={val => new Intl.NumberFormat('es-ES', {
-                  style: 'currency',
-                  currency: 'EUR',
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                }).format(val)}
-                valueStyle={{ fontSize: 14, color: theme.colors.textPrimary }}
-              />
-              <Badge 
-                status={record.flags.alerta === 'verde' ? 'success' : 
-                       record.flags.alerta === 'amarillo' ? 'warning' : 'error'} 
-              />
-            </div>
-          </Tooltip>
-        ),
-        sorter: (a, b) => (a.kpis.margen || 0) - (b.kpis.margen || 0),
-      },
-      {
-        title: 'Margen %',
-        dataIndex: ['kpis', 'margen_pct'],
-        key: 'margen_pct',
-        width: 120,
-        render: (value, record) => {
-          const TrendIcon = record.flags.tendencia === 'up' ? ArrowUpOutlined :
-                           record.flags.tendencia === 'down' ? ArrowDownOutlined : MinusOutlined;
-          const trendColor = record.flags.tendencia === 'up' ? theme.colors.success :
-                            record.flags.tendencia === 'down' ? theme.colors.error : theme.colors.textSecondary;
-          
-          return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 500 }}>
-                {(value || 0).toFixed(1)}%
-              </span>
-              <TrendIcon style={{ fontSize: 12, color: trendColor }} />
-            </div>
-          );
-        },
-        sorter: (a, b) => (a.kpis.margen_pct || 0) - (b.kpis.margen_pct || 0),
-        defaultSortOrder: 'descend',
-      },
-      {
-        title: 'Score',
-        dataIndex: ['flags', 'score'],
-        key: 'score',
-        width: 100,
-        render: (value) => (
-          <div style={{ textAlign: 'center' }}>
-            <div 
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                backgroundColor: value >= 70 ? theme.colors.success :
-                               value >= 50 ? theme.colors.warning : theme.colors.error,
-                color: 'white',
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {value || 0}
-            </div>
-          </div>
-        ),
-        sorter: (a, b) => (a.flags.score || 0) - (b.flags.score || 0),
       }
     ];
 
-    return baseColumns;
-  }, [getCurrentLevel, searchText]);
+    // ✅ INGRESOS (siempre mostrar) - ACTUALIZADO con indicador de carga
+    columns.push({
+      title: 'Ingresos',
+      dataIndex: 'ingresos',
+      key: 'ingresos',
+      width: 120,
+      render: (value, record) => (
+        <div>
+          <Statistic
+            value={value || 0}
+            prefix={record._needsMetricsLoad ? 
+              <Tooltip title="Expandir fila para cargar métricas">
+                <BarChartOutlined style={{ color: theme.colors.warning }} />
+              </Tooltip> : 
+              <EuroCircleOutlined />
+            }
+            formatter={val => record._needsMetricsLoad ? 'Pendiente...' : new Intl.NumberFormat('es-ES', { 
+              style: 'currency', 
+              currency: 'EUR',
+              notation: 'compact'
+            }).format(val)}
+            valueStyle={{ 
+              fontSize: 13, 
+              color: record._needsMetricsLoad ? theme.colors.warning : theme.colors.textPrimary 
+            }}
+          />
+          {record._needsMetricsLoad && (
+            <div style={{ fontSize: 10, color: theme.colors.warning }}>
+              Expandir para cargar
+            </div>
+          )}
+        </div>
+      ),
+      sorter: (a, b) => (a.ingresos || 0) - (b.ingresos || 0),
+    });
 
-  // Efectos
-  useEffect(() => {
-    if (periodo && (mode === 'direccion' || (mode === 'gestor' && gestorId))) {
-      setCurrentPath([]);
-      loadLevelData(initialLevel);
+    // ✅ BENEFICIO/MARGEN para centros y gestores
+    if (levelConfig.key === 'centros' || levelConfig.key === 'gestores') {
+      columns.push({
+        title: 'Beneficio',
+        dataIndex: 'beneficio',
+        key: 'beneficio',
+        width: 120,
+        render: (value, record) => (
+          <div>
+            <Statistic
+              value={value || 0}
+              formatter={val => record._needsMetricsLoad ? 'Pendiente...' : new Intl.NumberFormat('es-ES', { 
+                style: 'currency', 
+                currency: 'EUR',
+                notation: 'compact'
+              }).format(val)}
+              valueStyle={{ 
+                fontSize: 13, 
+                color: record._needsMetricsLoad ? theme.colors.warning : 
+                       value >= 0 ? theme.colors.success : theme.colors.error 
+              }}
+            />
+            <div style={{ fontSize: 10, color: '#666' }}>
+              Margen: {record._needsMetricsLoad ? '-' : `${Math.abs(record.margen_pct || 0).toFixed(1)}%`}
+            </div>
+          </div>
+        ),
+        sorter: (a, b) => (a.beneficio || 0) - (b.beneficio || 0),
+      });
+
+      // ✅ ROE para centros y gestores
+      columns.push({
+        title: 'ROE',
+        dataIndex: 'roe',
+        key: 'roe',
+        width: 100,
+        render: (value, record) => (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ 
+              fontWeight: 600, 
+              fontSize: 14,
+              color: record._needsMetricsLoad ? theme.colors.warning :
+                     value >= 15 ? theme.colors.success : 
+                     value >= 10 ? theme.colors.warning : theme.colors.error 
+            }}>
+              {record._needsMetricsLoad ? '-' : `${value?.toFixed(1) || 0}%`}
+            </div>
+            {!record._needsMetricsLoad && (
+              <Progress 
+                percent={Math.min(value || 0, 25) * 4} 
+                showInfo={false}
+                strokeColor={value >= 15 ? theme.colors.success : 
+                            value >= 10 ? theme.colors.warning : theme.colors.error}
+                size="small"
+              />
+            )}
+          </div>
+        ),
+        sorter: (a, b) => (a.roe || 0) - (b.roe || 0),
+      });
+
+      // ✅ BONUS para centros y gestores
+      columns.push({
+        title: 'Bonus',
+        dataIndex: 'bonus_total',
+        key: 'bonus_total',
+        width: 100,
+        render: (value, record) => (
+          <Statistic
+            value={value || 0}
+            prefix={<TrophyOutlined />}
+            formatter={val => record._needsMetricsLoad ? '-' : new Intl.NumberFormat('es-ES', { 
+              style: 'currency', 
+              currency: 'EUR',
+              notation: 'compact'
+            }).format(val)}
+            valueStyle={{ 
+              fontSize: 12, 
+              color: record._needsMetricsLoad ? theme.colors.warning :
+                     value > 0 ? theme.colors.bmGreenPrimary : theme.colors.textSecondary 
+            }}
+          />
+        ),
+        sorter: (a, b) => (a.bonus_total || 0) - (b.bonus_total || 0),
+      });
     }
-  }, [periodo, mode, gestorId, initialLevel, loadLevelData, refreshToken]);
+
+    // ✅ BENEFICIO para clientes
+    if (levelConfig.key === 'clientes') {
+      columns.push({
+        title: 'Beneficio',
+        dataIndex: 'beneficio',
+        key: 'beneficio',
+        width: 120,
+        render: (value, record) => (
+          <div>
+            <Statistic
+              value={value || 0}
+              formatter={val => new Intl.NumberFormat('es-ES', { 
+                style: 'currency', 
+                currency: 'EUR',
+                notation: 'compact'
+              }).format(val)}
+              valueStyle={{ 
+                fontSize: 13, 
+                color: value >= 0 ? theme.colors.success : theme.colors.error 
+              }}
+            />
+            <div style={{ fontSize: 10, color: '#666' }}>
+              {record.num_contratos} contrato{record.num_contratos !== 1 ? 's' : ''}
+            </div>
+          </div>
+        ),
+        sorter: (a, b) => (a.beneficio || 0) - (b.beneficio || 0),
+      });
+    }
+
+    // ✅ IMPORTE para contratos
+    if (levelConfig.key === 'contratos') {
+      columns.push({
+        title: 'Importe',
+        dataIndex: 'ingresos',
+        key: 'importe_contrato',
+        width: 120,
+        render: (value, record) => (
+          <div>
+            <Statistic
+              value={value || 0}
+              formatter={val => new Intl.NumberFormat('es-ES', { 
+                style: 'currency', 
+                currency: 'EUR'
+              }).format(val)}
+              valueStyle={{ fontSize: 13, color: theme.colors.textPrimary }}
+            />
+            {record.margen_pct !== 0 && (
+              <div style={{ 
+                fontSize: 10, 
+                color: record.margen_pct > 0 ? theme.colors.success : theme.colors.error 
+              }}>
+                {record.margen_pct > 0 ? '+' : ''}{Math.abs(record.margen_pct).toFixed(1)}% margen
+              </div>
+            )}
+          </div>
+        ),
+        sorter: (a, b) => (a.ingresos || 0) - (b.ingresos || 0),
+      });
+    }
+
+    // ✅ ESTADO/ALERTA (común para todos)
+    columns.push({
+      title: 'Estado',
+      dataIndex: 'alerta',
+      key: 'estado',
+      width: 100,
+      render: (value, record) => (
+        <div style={{ textAlign: 'center' }}>
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              backgroundColor: value === 'success' ? theme.colors.success :
+                             value === 'warning' ? theme.colors.warning : theme.colors.error,
+              color: 'white',
+              fontSize: 12,
+              fontWeight: 600,
+              marginBottom: 4
+            }}
+          >
+            {record._needsMetricsLoad ? '⏳' : 
+             value === 'success' ? '✓' : value === 'warning' ? '!' : '✗'}
+          </div>
+          <div style={{ fontSize: 10, color: '#666' }}>
+            {record._needsMetricsLoad ? 'Pendiente' :
+             value === 'success' ? 'Óptimo' : value === 'warning' ? 'Atención' : 'Crítico'}
+          </div>
+        </div>
+      ),
+      filters: [
+        { text: 'Óptimo', value: 'success' },
+        { text: 'Atención', value: 'warning' },
+        { text: 'Crítico', value: 'error' }
+      ],
+      onFilter: (value, record) => record.alerta === value,
+    });
+
+    return columns;
+  }, [searchText]);
+
+  // ✅ RENDERIZADO DE FILAS EXPANDIDAS MEJORADO
+  const expandedRowRender = useCallback((record) => {
+    const recordId = record.id;
+    const childInfo = childDataMap[recordId];
+    const isLoading = loadingChildren[recordId];
+
+    if (isLoading) {
+      return (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <Loader tip={`Cargando ${record._level === 'centros' ? 'gestores' : 
+                                   record._level === 'gestores' ? 'clientes' : 'contratos'}...`} />
+        </div>
+      );
+    }
+
+    if (childInfo?.error) {
+      return (
+        <div style={{ padding: '20px' }}>
+          <ErrorState
+            error={childInfo.error}
+            message={`Error al cargar datos de ${record.nombre}`}
+            size="small"
+          />
+        </div>
+      );
+    }
+
+    if (!childInfo || !childInfo.data) {
+      return (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <Empty 
+            description={`No hay datos disponibles para ${record.nombre}`} 
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </div>
+      );
+    }
+
+    const { data, config } = childInfo;
+    const columns = getColumns(config);
+
+    // ✅ MÉTRICAS AGREGADAS mejoradas
+    const totalIngresos = data.reduce((acc, item) => acc + (item.ingresos || 0), 0);
+    const totalBeneficio = data.reduce((acc, item) => acc + (item.beneficio || 0), 0);
+    const avgMargen = data.length > 0 ? data.reduce((acc, item) => acc + Math.abs(item.margen_pct || 0), 0) / data.length : 0;
+    const totalBonus = data.reduce((acc, item) => acc + (item.bonus_total || 0), 0);
+
+    return (
+      <div style={{ 
+        margin: '16px 0', 
+        backgroundColor: '#fafafa', 
+        borderRadius: 6, 
+        padding: '16px',
+        border: `1px solid ${theme.colors.borderLight}`,
+        maxHeight: '600px',
+        overflow: 'auto'
+      }}>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <Text strong style={{ color: theme.colors.bmGreenPrimary, fontSize: 16 }}>
+                <config.icon style={{ marginRight: 8 }} />
+                {config.label} de {record.nombre}
+              </Text>
+              <Text type="secondary" style={{ marginLeft: 12, fontSize: 12 }}>
+                {data.length} registros encontrados
+              </Text>
+            </div>
+          </div>
+          
+          {/* ✅ PANEL DE MÉTRICAS AGREGADAS */}
+          <Row gutter={16} style={{ marginBottom: 12 }}>
+            <Col span={6}>
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="Total Ingresos" 
+                  value={totalIngresos}
+                  formatter={val => new Intl.NumberFormat('es-ES', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    notation: 'compact'
+                  }).format(val)}
+                  valueStyle={{ fontSize: 14, color: theme.colors.bmGreenPrimary }}
+                />
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="Total Beneficio" 
+                  value={totalBeneficio}
+                  formatter={val => new Intl.NumberFormat('es-ES', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    notation: 'compact'
+                  }).format(val)}
+                  valueStyle={{ 
+                    fontSize: 14, 
+                    color: totalBeneficio >= 0 ? theme.colors.success : theme.colors.error 
+                  }}
+                />
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <Statistic 
+                  title="Margen Promedio" 
+                  value={avgMargen}
+                  formatter={val => `${val.toFixed(1)}%`}
+                  valueStyle={{ 
+                    fontSize: 14,
+                    color: avgMargen >= 15 ? theme.colors.success : 
+                           avgMargen >= 10 ? theme.colors.warning : theme.colors.error
+                  }}
+                />
+              </Card>
+            </Col>
+            {totalBonus > 0 && (
+              <Col span={6}>
+                <Card size="small" style={{ textAlign: 'center' }}>
+                  <Statistic 
+                    title="Total Bonus" 
+                    value={totalBonus}
+                    prefix={<TrophyOutlined />}
+                    formatter={val => new Intl.NumberFormat('es-ES', {
+                      style: 'currency',
+                      currency: 'EUR',
+                      notation: 'compact'
+                    }).format(val)}
+                    valueStyle={{ fontSize: 14, color: theme.colors.bmGreenPrimary }}
+                  />
+                </Card>
+              </Col>
+            )}
+          </Row>
+        </div>
+
+        <Table
+          columns={columns}
+          dataSource={data}
+          size="small"
+          pagination={{
+            size: 'small',
+            pageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: ['5', '10', '20']
+          }}
+          scroll={{ x: true }}
+          expandable={config.isLeaf ? undefined : {
+            onExpand: handleRowExpand,
+            expandedRowKeys: expandedRowKeys,
+            expandedRowRender: expandedRowRender
+          }}
+          locale={{
+            emptyText: <Empty description={`No hay ${config.label.toLowerCase()} disponibles`} />
+          }}
+        />
+      </div>
+    );
+  }, [childDataMap, loadingChildren, getColumns, expandedRowKeys, handleRowExpand]);
+
+  // Effects
+  useEffect(() => {
+    loadRootData();
+  }, [loadRootData]);
+
+  useEffect(() => {
+    if (refreshToken) {
+      loadRootData();
+    }
+  }, [refreshToken, loadRootData]);
 
   // Handlers
   const handleRefresh = useCallback(() => {
-    const currentLevel = getCurrentLevel();
-    if (currentLevel) {
-      const parentId = currentPath.length > 0 ? currentPath[currentPath.length - 1].id : null;
-      loadLevelData(currentLevel, parentId);
-    }
-  }, [getCurrentLevel, currentPath, loadLevelData]);
+    setChildDataMap({});
+    setExpandedRowKeys([]);
+    setMetricsCache({});
+    loadRootData();
+  }, [loadRootData]);
 
-  const handleReset = useCallback(() => {
-    setCurrentPath([]);
-    setSearchText('');
-    setSelectedRowKeys([]);
-    loadLevelData(initialLevel);
-  }, [initialLevel, loadLevelData]);
+  const handleSearch = useCallback((value) => {
+    setSearchText(value);
+  }, []);
 
-  // Renderizado
-  const currentLevel = getCurrentLevel();
-  const breadcrumbItems = [
-    {
-      title: (
-        <span onClick={() => handleBreadcrumbClick(-1)} style={{ cursor: 'pointer' }}>
-          <HomeOutlined /> Inicio
-        </span>
-      )
-    },
-    ...currentPath.map((pathItem, index) => ({
-      title: (
-        <span 
-          onClick={() => handleBreadcrumbClick(index)} 
-          style={{ cursor: 'pointer' }}
-        >
-          <pathItem.level.icon style={{ marginRight: 4 }} />
-          {pathItem.nombre}
-        </span>
-      )
-    })),
-    ...(currentLevel ? [{
-      title: (
-        <span style={{ color: theme.colors.bmGreenPrimary, fontWeight: 500 }}>
-          <currentLevel.icon style={{ marginRight: 4 }} />
-          {currentLevel.label}
-        </span>
-      )
-    }] : [])
-  ];
+  if (loading) {
+    return <Loader tip="Cargando análisis navegable..." />;
+  }
 
-  // Calcular resumen del nivel actual
-  const summary = useMemo(() => {
-    if (!tableData.length) return null;
-    
-    return {
-      total_items: tableData.length,
-      total_contratos: tableData.reduce((sum, item) => sum + (item.kpis.contratos || 0), 0),
-      total_ingresos: tableData.reduce((sum, item) => sum + (item.kpis.ingresos || 0), 0),
-      total_margen: tableData.reduce((sum, item) => sum + (item.kpis.margen || 0), 0),
-      avg_margen_pct: tableData.length > 0 ? 
-        tableData.reduce((sum, item) => sum + (item.kpis.margen_pct || 0), 0) / tableData.length : 0,
-      alertas: tableData.reduce((acc, item) => {
-        acc[item.flags.alerta] = (acc[item.flags.alerta] || 0) + 1;
-        return acc;
-      }, { verde: 0, amarillo: 0, rojo: 0 })
-    };
-  }, [tableData]);
-
-  if (!currentLevel) {
+  if (error) {
     return (
-      <Card className={className} style={style}>
-        <Empty description="Configuración de drill-down no disponible" />
+      <ErrorState 
+        error={error} 
+        onRetry={handleRefresh}
+        style={{ height: '100%' }}
+      />
+    );
+  }
+
+  const currentLevelConfig = drillConfig[mode] && drillConfig[mode][0];
+  if (!currentLevelConfig) {
+    return (
+      <Card style={style} className={className}>
+        <Empty 
+          description="Configuración no disponible para este modo" 
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       </Card>
     );
   }
 
+  const columns = getColumns(currentLevelConfig);
+
   return (
     <Card
-      className={`drill-down-view ${className}`}
-      style={{
-        borderRadius: theme.token.borderRadius,
-        boxShadow: '0 4px 12px rgba(27, 94, 85, 0.08)',
-        ...style
-      }}
-    >
-      {/* Header */}
-      <div style={{ marginBottom: theme.spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: theme.spacing.md }}>
-          <div>
-            <Title level={4} style={{ margin: 0, color: theme.colors.bmGreenPrimary }}>
-              <BarChartOutlined style={{ marginRight: 8 }} />
-              Análisis Navegable {mode === 'gestor' ? '- Mi Cartera' : '- Vista Corporativa'}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Space>
+            <BarChartOutlined style={{ color: theme.colors.bmGreenPrimary }} />
+            <Title level={5} style={{ margin: 0 }}>
+              Análisis Navegable - Vista {mode === 'gestor' ? 'Personal' : 'Corporativa'}
             </Title>
             <Text type="secondary">
-              Explora los datos por niveles jerárquicos • Período: {periodo}
-              {mode === 'gestor' && gestorId && ` • Gestor: ${gestorId}`}
+              Navega por la jerarquía expandiendo filas • Período: {normalizedPeriodo}
             </Text>
-          </div>
+          </Space>
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={loading}>
+            <Search
+              placeholder={`Buscar ${currentLevelConfig.label.toLowerCase()}...`}
+              allowClear
+              onSearch={handleSearch}
+              style={{ width: 200 }}
+            />
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={handleRefresh}
+              disabled={loading}
+            >
               Actualizar
-            </Button>
-            <Button onClick={handleReset} disabled={currentPath.length === 0}>
-              Reiniciar
             </Button>
           </Space>
         </div>
-
-        {/* Breadcrumb */}
-        <Breadcrumb 
-          separator={<RightOutlined />}
-          style={{ marginBottom: theme.spacing.sm }}
-          items={breadcrumbItems}
-        />
-
-        {/* Herramientas y Resumen */}
-        <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} sm={12} md={8}>
-            <Search
-              placeholder={`Buscar en ${currentLevel.label.toLowerCase()}...`}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: '100%' }}
-              allowClear
-            />
-          </Col>
-          
-          {summary && (
-            <Col xs={24} sm={12} md={16}>
-              <div style={{ 
-                display: 'flex', 
-                gap: theme.spacing.lg, 
-                alignItems: 'center',
-                padding: theme.spacing.sm,
-                backgroundColor: theme.colors.backgroundLight,
-                borderRadius: 6,
-                border: `1px solid ${theme.colors.borderLight}`
-              }}>
-                <Statistic
-                  title="Items"
-                  value={summary.total_items}
-                  valueStyle={{ fontSize: 16, color: theme.colors.textPrimary }}
-                />
-                <Divider type="vertical" />
-                <Statistic
-                  title="Contratos"
-                  value={summary.total_contratos}
-                  valueStyle={{ fontSize: 16, color: theme.colors.textPrimary }}
-                />
-                <Divider type="vertical" />
-                <Statistic
-                  title="Margen Promedio"
-                  value={summary.avg_margen_pct}
-                  suffix="%"
-                  precision={1}
-                  valueStyle={{ fontSize: 16, color: theme.colors.bmGreenPrimary }}
-                />
-                <Divider type="vertical" />
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <Badge status="success" text={summary.alertas.verde} />
-                  <Badge status="warning" text={summary.alertas.amarillo} />
-                  <Badge status="error" text={summary.alertas.rojo} />
-                </div>
-              </div>
-            </Col>
-          )}
-        </Row>
-      </div>
-
-      {/* Contenido Principal */}
-      {loading ? (
-        <Loader 
-          tip={`Cargando ${currentLevel.label.toLowerCase()}...`}
-          style={{ minHeight: 400 }}
-        />
-      ) : error ? (
-        <ErrorState
-          error={error}
-          message={`Error al cargar ${currentLevel.label.toLowerCase()}`}
-          onRetry={handleRefresh}
-          style={{ minHeight: 400 }}
-        />
-      ) : (
-        <Table
-          columns={getTableColumns()}
-          dataSource={tableData}
-          loading={loading}
-          pagination={{
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} de ${total} items`,
-            pageSizeOptions: ['10', '20', '50', '100'],
-            defaultPageSize: 20,
-          }}
-          rowSelection={{
-            selectedRowKeys,
-            onChange: setSelectedRowKeys,
-            type: 'checkbox',
-          }}
-          onRow={(record) => ({
-            onClick: () => handleDrillDown(record),
-            style: { cursor: 'pointer' },
-          })}
-          scroll={{ x: 1000 }}
-          size="middle"
-          bordered={false}
-          className="drill-down-table"
-        />
-      )}
+      }
+      style={style}
+      className={className}
+      styles={{ body: { padding: '16px' } }}
+    >
+      <Table
+        columns={columns}
+        dataSource={rootData}
+        size="middle"
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: true,
+          showQuickJumper: true,
+          pageSizeOptions: ['5', '10', '20', '50'],
+          showTotal: (total, range) => 
+            `${range[0]}-${range[1]} de ${total} ${currentLevelConfig.label.toLowerCase()}`
+        }}
+        scroll={{ x: 1200 }}
+        expandable={{
+          onExpand: handleRowExpand,
+          expandedRowKeys: expandedRowKeys,
+          expandedRowRender: expandedRowRender,
+          expandIcon: ({ expanded, onExpand, record }) => 
+            expanded ? (
+              <MinusOutlined onClick={e => onExpand(record, e)} style={{ color: theme.colors.bmGreenPrimary }} />
+            ) : (
+              <ArrowDownOutlined onClick={e => onExpand(record, e)} style={{ color: theme.colors.bmGreenPrimary }} />
+            )
+        }}
+        locale={{
+          emptyText: <Empty description={`No hay ${currentLevelConfig.label.toLowerCase()} disponibles`} />
+        }}
+        rowClassName={(record) => 
+          record.alerta === 'error' ? 'row-critical' : 
+          record.alerta === 'warning' ? 'row-warning' : 'row-success'
+        }
+      />
     </Card>
   );
 };
 
 DrillDownView.propTypes = {
   mode: PropTypes.oneOf(['direccion', 'gestor']).isRequired,
-  periodo: PropTypes.string.isRequired,
+  periodo: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
   gestorId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  defaultRootTab: PropTypes.string,
   onSelectLeaf: PropTypes.func,
   refreshToken: PropTypes.any,
   style: PropTypes.object,

@@ -78,6 +78,176 @@ const DIRECTION_COLORS = Object.freeze({
   general: ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff"]
 });
 
+/* =========================================
+ * ✅ CONFIGURACIÓN PARA PIVOTEO DINÁMICO v11.0
+ * ========================================= */
+
+/**
+ * ✅ CONFIGURACIÓN CENTRALIZADA: Métricas, dimensiones y tipos de gráfico pivoteables
+ */
+const PIVOTABLE_CONFIG = Object.freeze({
+  // Métricas disponibles para pivoteo
+  metrics: {
+    'CONTRATOS': {
+      label: 'Contratos',
+      defaultValue: 0,
+      format: '0,0',
+      color: '#22c55e',
+      endpoints: {
+        gestor: 'basic.contractsByGestor',
+        centro: 'basic.contractsByCentro', 
+        producto: 'basic.contractsByProducto',
+        cliente: 'basic.contractsByCliente',
+        ranking: 'charts.gestoresRanking'
+      }
+    },
+    'CLIENTES': {
+      label: 'Clientes',
+      defaultValue: 0,
+      format: '0,0',
+      color: '#3b82f6',
+      endpoints: {
+        gestor: 'basic.clientesByGestor',
+        centro: 'basic.clientesByCentro',
+        ranking: 'basic.gestoresRanking'
+      }
+    },
+    'ROE': {
+      label: 'ROE (%)',
+      defaultValue: 0,
+      format: '0.00%',
+      color: '#f59e0b',
+      endpoints: {
+        gestor: 'kpis.gestorROE',
+        centro: 'kpis.centroFinancieros',
+        ranking: 'comparatives.gestoresRanking'
+      }
+    },
+    'MARGEN_NETO': {
+      label: 'Margen Neto (%)',
+      defaultValue: 0,
+      format: '0.00%', 
+      color: '#ef4444',
+      endpoints: {
+        gestor: 'comparatives.gestoresMargen',
+        centro: 'comparatives.centrosMargen',
+        segmento: 'comparatives.segmentosMargen',
+        ranking: 'comparatives.gestoresRanking'
+      }
+    },
+    'INGRESOS': {
+      label: 'Ingresos (€)',
+      defaultValue: 0,
+      format: '€0,0',
+      color: '#10b981',
+      endpoints: {
+        gestor: 'analytics.gestorMetricasCompletas',
+        centro: 'analytics.centroMetricas',
+        segmento: 'analytics.segmentoMetricas'
+      }
+    },
+    'INCENTIVOS': {
+      label: 'Incentivos (€)',
+      defaultValue: 0,
+      format: '€0,0',
+      color: '#8b5cf6',
+      endpoints: {
+        gestor: 'incentives.gestorDetalle',
+        centro: 'incentives.centroTotal',
+        pool: 'incentives.bonusPool'
+      }
+    }
+  },
+
+  // Dimensiones disponibles para pivoteo
+  dimensions: {
+    'gestor': {
+      label: 'Gestores',
+      idField: 'gestor_id',
+      nameField: 'nombre_gestor',
+      defaultChartType: 'horizontal_bar',
+      supportedChartTypes: ['horizontal_bar', 'bar', 'pie', 'donut']
+    },
+    'centro': {
+      label: 'Centros', 
+      idField: 'centro_id',
+      nameField: 'nombre_centro',
+      defaultChartType: 'donut',
+      supportedChartTypes: ['donut', 'pie', 'bar', 'horizontal_bar']
+    },
+    'producto': {
+      label: 'Productos',
+      idField: 'producto_id', 
+      nameField: 'nombre_producto',
+      defaultChartType: 'horizontal_bar',
+      supportedChartTypes: ['horizontal_bar', 'bar', 'pie']
+    },
+    'cliente': {
+      label: 'Clientes',
+      idField: 'cliente_id',
+      nameField: 'nombre_cliente', 
+      defaultChartType: 'bar',
+      supportedChartTypes: ['bar', 'horizontal_bar']
+    },
+    'segmento': {
+      label: 'Segmentos',
+      idField: 'segmento_id',
+      nameField: 'nombre_segmento',
+      defaultChartType: 'pie',
+      supportedChartTypes: ['pie', 'donut', 'bar']
+    }
+  },
+
+  // Tipos de gráfico soportados
+  chartTypes: {
+    'bar': { label: 'Barras', icon: '📊' },
+    'horizontal_bar': { label: 'Barras Horizontales', icon: '📈' },
+    'pie': { label: 'Circular', icon: '🥧' },
+    'donut': { label: 'Donut', icon: '🍩' },
+    'line': { label: 'Líneas', icon: '📉' },
+    'area': { label: 'Área', icon: '🏔️' }
+  }
+});
+
+/**
+ * ✅ Valida si una combinación métrica/dimensión/tipo es soportada
+ */
+function validatePivotCombination(metric, dimension, chartType) {
+  const metricConfig = PIVOTABLE_CONFIG.metrics[metric];
+  const dimensionConfig = PIVOTABLE_CONFIG.dimensions[dimension];
+  const chartTypeConfig = PIVOTABLE_CONFIG.chartTypes[chartType];
+
+  if (!metricConfig) {
+    return { valid: false, reason: `Métrica '${metric}' no soportada` };
+  }
+
+  if (!dimensionConfig) {
+    return { valid: false, reason: `Dimensión '${dimension}' no soportada` };
+  }
+
+  if (!chartTypeConfig) {
+    return { valid: false, reason: `Tipo de gráfico '${chartType}' no soportado` };
+  }
+
+  // Verificar si la métrica tiene endpoint para esta dimensión
+  if (!metricConfig.endpoints[dimension] && !metricConfig.endpoints.ranking) {
+    return { 
+      valid: false, 
+      reason: `Métrica '${metric}' no soporta dimensión '${dimension}'` 
+    };
+  }
+
+  // Verificar si la dimensión soporta este tipo de gráfico
+  if (!dimensionConfig.supportedChartTypes.includes(chartType)) {
+    return { 
+      valid: false, 
+      reason: `Dimensión '${dimension}' no soporta gráfico '${chartType}'` 
+    };
+  }
+
+  return { valid: true };
+}
+
 /** ✅ OBTENCIÓN DINÁMICA DE SEGMENTOS desde /catalogs */
 let SEGMENT_INFO_CACHE = null;
 let SEGMENT_CACHE_EXPIRY = 0;
@@ -1512,17 +1682,18 @@ function transformBackendChartData(backendData, chartType) {
 }
 
 /**
- * ✅ FUNCIÓN PARA PIVOTEO CONVERSACIONAL CORREGIDA: Cambia gráficos usando lenguaje natural
+ * ✅ FUNCIÓN MEJORADA: Pivoteo conversacional que integra con getPivotableChartData
  */
 async function pivotChart(userId, message, currentChartConfig = {}, chartInteractionType = "pivot", options = {}) {
   if (!userId || !message) {
     throw new Error('userId and message are required for pivot');
   }
   
-  console.log(`[Analytics] 🔄 Pivoting chart with message: "${message}"`);
-  
+  console.log(`[Analytics] 🔄 Enhanced pivot with message: "${message}"`);
+  console.log(`[Analytics] Current config:`, currentChartConfig);
+
   try {
-    // ✅ CORREGIDO: Usar el método correcto del api.js
+    // 1. Intentar usar backend para pivoteo
     const result = await chartsAPI.pivot({ 
       userId, 
       message, 
@@ -1530,14 +1701,45 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
       chartInteractionType 
     }, options);
     
-    console.log(`[Analytics] ✅ Pivot successful`);
-    
+    console.log(`[Analytics] ✅ Backend pivot successful`);
     return transformBackendChartData(result, 'pivot_result');
-  } catch (error) {
-    console.error(`[Analytics] ❌ Error pivoting chart:`, error.message);
-    throw error;
+    
+  } catch (backendError) {
+    console.warn(`[Analytics] ⚠️ Backend pivot failed, trying local parsing:`, backendError.message);
+
+    // 2. Fallback: usar parser local desde chatService si está disponible
+    const chatService = await import('./chatService.js');
+    const parsedIntent = chatService.parsePivotIntent?.(message, currentChartConfig);
+
+    if (parsedIntent && parsedIntent.intent === 'pivot') {
+      console.log(`[Analytics] ✅ Local parsing successful:`, parsedIntent);
+      
+      // 3. Usar función unificada para obtener datos
+      const pivotedData = await getPivotableChartData(
+        parsedIntent.metric || currentChartConfig.metric || 'CONTRATOS',
+        parsedIntent.dimension || currentChartConfig.dimension || 'gestor', 
+        parsedIntent.chartType || currentChartConfig.chartType || 'bar',
+        { ...options, userId }
+      );
+
+      // Añadir metadatos de pivoteo
+      pivotedData.meta = {
+        ...pivotedData.meta,
+        pivot_source: 'local_parser',
+        original_message: message,
+        changes_made: [
+          `Pivoteo: ${pivotedData.meta.metricLabel} por ${pivotedData.meta.dimensionLabel} como ${pivotedData.meta.chartType}`
+        ]
+      };
+
+      return pivotedData;
+    }
+
+    // 4. Si todo falla, mantener configuración actual pero mostrar error
+    throw new Error(`No se pudo interpretar la intención de pivoteo: "${message}"`);
   }
 }
+
 
 /**
  * ✅ FUNCIÓN PARA OBTENER METADATOS DE CHARTS: Obtiene tipos de gráfico soportados y configuraciones
@@ -1585,6 +1787,294 @@ async function getChartMeta() {
     };
   }
 }
+
+/* =========================================
+ * ✅ FUNCIÓN UNIFICADA PARA PIVOTEO DINÁMICO v11.0
+ * ========================================= */
+
+/**
+ * ✅ FUNCIÓN PRINCIPAL: Obtiene datos para cualquier combinación métrica/dimensión/tipo
+ */
+async function getPivotableChartData(metric, dimension, chartType = 'bar', options = {}) {
+  const { periodo = '2025-10', gestorId, centroId, limit = 10 } = options;
+  
+  console.log(`[Analytics] 🎯 getPivotableChartData: ${metric} by ${dimension} as ${chartType}`);
+  
+ validation = validatePivotCombination(metric, dimension, chartType);
+  if (!validation.valid) {
+    throw new Error(`❌ ${validation.reason}`);
+  }
+
+  const cacheKey = { metric, dimension, chartType, periodo, gestorId, centroId, type: 'pivotable' };
+  const cached = _getCached("pivotable_chart", cacheKey);
+  if (cached) {
+    console.log(`[Analytics] Using cached pivotable data`);
+    return cached;
+  }
+
+  try {
+    const metricConfig = PIVOTABLE_CONFIG.metrics[metric];
+    const dimensionConfig = PIVOTABLE_CONFIG.dimensions[dimension];
+    
+    // Determinar qué endpoint usar
+    const endpointKey = metricConfig.endpoints[dimension] || metricConfig.endpoints.ranking;
+    if (!endpointKey) {
+      throw new Error(`No endpoint available for ${metric} by ${dimension}`);
+    }
+
+    console.log(`[Analytics] Using endpoint: ${endpointKey}`);
+
+    // Llamar al endpoint correspondiente
+    let rawData;
+    const endpointParts = endpointKey.split('.');
+    const apiModule = endpointParts[0]; // 'basic', 'kpis', etc.
+    const apiMethod = endpointParts[1]; // 'gestoresRanking', etc.
+
+    // Construir parámetros dinámicamente
+    const params = { periodo };
+    if (gestorId) params.gestorId = gestorId;
+    if (centroId) params.centroId = centroId;
+    if (metric === 'CONTRATOS') params.metric = 'CONTRATOS';
+
+    // Ejecutar llamada dinámica al API
+    switch (apiModule) {
+      case 'basic':
+        rawData = await basicAPI[apiMethod](gestorId || centroId, { ...params });
+        break;
+      case 'kpis':
+        rawData = await kpisAPI[apiMethod](gestorId || centroId, periodo, { ...params });
+        break;
+      case 'comparatives':
+        rawData = await comparativesAPI[apiMethod](periodo, { ...params });
+        break;
+      case 'charts':
+        rawData = await chartsAPI[apiMethod]({ ...params, chartType });
+        break;
+      case 'analytics':
+        rawData = await analyticsAPI[apiMethod](gestorId || centroId, periodo, { ...params });
+        break;
+      case 'incentives':
+        rawData = await incentivesAPI[apiMethod](gestorId || centroId, periodo, { ...params });
+        break;
+      default:
+        throw new Error(`API module '${apiModule}' not supported`);
+    }
+
+    console.log(`[Analytics] Raw data received:`, { 
+      type: typeof rawData, 
+      length: Array.isArray(rawData) ? rawData.length : 'N/A',
+      hasChart: !!rawData?.chart
+    });
+
+    // Transformar datos usando la función existente o crear nueva estructura
+    const transformed = transformPivotableData(rawData, {
+      metric,
+      dimension,
+      chartType,
+      metricConfig,
+      dimensionConfig,
+      limit
+    });
+
+    _setCached("pivotable_chart", cacheKey, transformed, DEFAULT_TTL_MS);
+    
+    console.log(`[Analytics] ✅ Pivotable chart data ready:`, {
+      labels: transformed.labels?.length || 0,
+      datasets: transformed.datasets?.length || 0
+    });
+
+    return transformed;
+
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error in getPivotableChartData:`, error.message);
+    
+    // Fallback con datos mock
+    return generateMockPivotableChart(metric, dimension, chartType, options);
+  }
+}
+
+/**
+ * ✅ Transforma datos del backend al formato pivoteable unificado
+ */
+function transformPivotableData(rawData, context) {
+  const { metric, dimension, chartType, metricConfig, dimensionConfig, limit = 10 } = context;
+  
+  console.log(`[Analytics] 🔄 Transforming pivotable data: ${metric} by ${dimension}`);
+
+  let items = [];
+  let labels = [];
+  let values = [];
+
+  // Manejar diferentes formatos de respuesta del backend
+  if (rawData?.chart?.data) {
+    // Respuesta de charts API (formato estándar)
+    items = rawData.chart.data.slice(0, limit);
+    labels = items.map(item => item.label || 'Sin Etiqueta');
+    values = items.map(item => item.value || metricConfig.defaultValue);
+    
+  } else if (Array.isArray(rawData)) {
+    // Respuesta directa de array
+    items = rawData.slice(0, limit);
+    
+    labels = items.map(item => {
+      // Extraer nombre usando configuración de dimensión
+      const nameField = dimensionConfig.nameField;
+      return item[nameField] || 
+             item.DESC_GESTOR || item.DESC_CENTRO || item.DESC_PRODUCTO ||
+             item.nombre_gestor || item.nombre_centro || item.nombre_producto ||
+             item.nombre || item.label || 
+             `${dimensionConfig.label} ${item.id || '?'}`;
+    });
+    
+    values = items.map(item => {
+      // Extraer valor usando configuración de métrica
+      const value = item[metric.toLowerCase()] || 
+                   item[`${metric.toLowerCase()}_pct`] ||
+                   item.total_contratos || item.margen_neto || item.roe_pct ||
+                   item.value || metricConfig.defaultValue;
+      return Number(value) || metricConfig.defaultValue;
+    });
+    
+  } else if (rawData && typeof rawData === 'object') {
+    // Respuesta de objeto único
+    items = [rawData];
+    labels = [rawData[dimensionConfig.nameField] || dimensionConfig.label];
+    values = [rawData[metric.toLowerCase()] || metricConfig.defaultValue];
+    
+  } else {
+    console.warn('[Analytics] Unexpected data format, using empty data');
+    items = [];
+    labels = ['No hay datos'];
+    values = [0];
+  }
+
+  // Generar colores basados en la métrica
+  const colors = values.map((_, index) => {
+    const baseColor = metricConfig.color;
+    // Variaciones de opacity para múltiples elementos
+    const opacity = 1 - (index * 0.1);
+    return `${baseColor}${Math.floor(opacity * 255).toString(16).padStart(2, '0')}`;
+  });
+
+  const transformed = {
+    labels,
+    datasets: [{
+      label: metricConfig.label,
+      data: values,
+      backgroundColor: colors,
+      borderRadius: 4,
+      borderWidth: chartType.includes('bar') ? 0 : 2,
+      borderColor: metricConfig.color,
+    }],
+    raw: items,
+    meta: {
+      type: 'pivotable_chart',
+      metric,
+      dimension,
+      chartType,
+      metricLabel: metricConfig.label,
+      dimensionLabel: dimensionConfig.label,
+      total: items.length,
+      showing: Math.min(items.length, limit),
+      format: metricConfig.format,
+      pivot_enabled: true,
+      interactive: true,
+      generated_at: new Date().toISOString()
+    }
+  };
+
+  console.log(`[Analytics] ✅ Pivotable transform complete:`, {
+    metric: transformed.meta.metricLabel,
+    dimension: transformed.meta.dimensionLabel,
+    items: transformed.meta.showing
+  });
+
+  return transformed;
+}
+
+/**
+ * ✅ Genera datos mock para pivoteo cuando falla el backend
+ */
+function generateMockPivotableChart(metric, dimension, chartType, options = {}) {
+  console.log(`[Analytics] 🎭 Generating mock pivotable data: ${metric} by ${dimension}`);
+  
+  const metricConfig = PIVOTABLE_CONFIG.metrics[metric];
+  const dimensionConfig = PIVOTABLE_CONFIG.dimensions[dimension];
+  
+  // Datos mock basados en la dimensión
+  const mockData = {
+    gestor: {
+      labels: ['Gestor A', 'Gestor B', 'Gestor C', 'Gestor D', 'Gestor E'],
+      values: [45, 38, 32, 28, 22]
+    },
+    centro: {
+      labels: ['Madrid', 'Barcelona', 'Valencia', 'Sevilla'],
+      values: [35, 25, 18, 12]
+    },
+    producto: {
+      labels: ['Hipotecas', 'Depósitos', 'Fondos'],
+      values: [50, 30, 20]
+    },
+    cliente: {
+      labels: ['Cliente Premium', 'Cliente Gold', 'Cliente Silver'],
+      values: [65, 45, 25]
+    },
+    segmento: {
+      labels: ['Banca Minorista', 'Banca Privada', 'Empresas'],
+      values: [40, 35, 25]
+    }
+  };
+
+  const mock = mockData[dimension] || mockData.gestor;
+  
+  // Ajustar valores según la métrica
+  const adjustedValues = mock.values.map(v => {
+    switch (metric) {
+      case 'ROE':
+      case 'MARGEN_NETO':
+        return v; // Ya son porcentajes
+      case 'CONTRATOS':
+        return v;
+      case 'CLIENTES':
+        return Math.floor(v * 0.7);
+      case 'INGRESOS':
+        return v * 1000;
+      case 'INCENTIVOS':
+        return v * 500;
+      default:
+        return v;
+    }
+  });
+
+  return {
+    labels: mock.labels,
+    datasets: [{
+      label: metricConfig?.label || metric,
+      data: adjustedValues,
+      backgroundColor: metricConfig?.color || '#22c55e',
+      borderRadius: 4,
+    }],
+    raw: mock.labels.map((label, idx) => ({
+      label,
+      value: adjustedValues[idx],
+      mock: true
+    })),
+    meta: {
+      type: 'pivotable_chart',
+      metric,
+      dimension,
+      chartType,
+      metricLabel: metricConfig?.label || metric,
+      dimensionLabel: dimensionConfig?.label || dimension,
+      total: mock.labels.length,
+      showing: mock.labels.length,
+      mockData: true,
+      note: 'Datos de demostración - Error al cargar datos reales',
+      ...options
+    }
+  };
+}
+
 
 /* =========================================
  * ✅ NUEVAS FUNCIONES PARA DEVIATIONS v11.0
@@ -2953,6 +3443,16 @@ const analyticsService = {
   _clearCacheForPeriod,
   _clearCacheForGestor,
 
+  // ✅ NUEVAS FUNCIONES PARA PIVOTEO DINÁMICO v11.0
+  getPivotableChartData,
+  transformPivotableData,
+  generateMockPivotableChart,
+  validatePivotCombination,
+  
+  // configuración de pivoteo
+  PIVOTABLE_CONFIG,
+
+
   // constantes
   SCOPE,
   VS,
@@ -3032,6 +3532,14 @@ export {
   // ✅ NUEVAS EXPORTACIONES QUICK CHARTS v11.0
   createQuickChart,
   getAvailableQuickQueries,
+
+  // ✅ NUEVAS EXPORTACIONES PARA PIVOTEO DINÁMICO v11.0
+  getPivotableChartData,
+  transformPivotableData,
+  generateMockPivotableChart,
+  validatePivotCombination,
+  PIVOTABLE_CONFIG,
+
   
   // ✅ OPTIMIZACIÓN NUEVA
   getUnifiedKPIData,

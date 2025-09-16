@@ -627,7 +627,7 @@ class BasicQueries:
             # Calcular métricas derivadas
             ingresos = result_ingresos['ingresos_total'] or 0
             gastos_totales = result_gastos['gastos_totales'] if result_gastos else 0
-            beneficio_neto = ingresos - gastos_totales
+            beneficio_neto = ingresos - abs(gastos_totales)
 
             result = result_ingresos.copy()
             result.update({
@@ -698,7 +698,7 @@ class BasicQueries:
         for row in results_ingresos:
             ingresos = row['ingresos_gestor'] or 0
             gastos = gastos_dict.get(row['GESTOR_ID'], 0)
-            beneficio = ingresos - gastos
+            beneficio = ingresos - abs(gastos)
 
             row.update({
                 'gastos_gestor': gastos,
@@ -763,7 +763,7 @@ class BasicQueries:
         if result_ingresos:
             ingresos = result_ingresos['ingresos_total'] or 0
             gastos = result_gastos['gastos_total'] if result_gastos else 0
-            beneficio = ingresos - gastos
+            beneficio = ingresos - abs(gastos)
 
             result = result_ingresos.copy()
             result.update({
@@ -838,7 +838,7 @@ class BasicQueries:
         if result_ingresos:
             ingresos = result_ingresos['ingresos_total'] or 0
             gastos = result_gastos['gastos_total'] if result_gastos else 0
-            beneficio = ingresos - gastos
+            beneficio = ingresos - abs(gastos)
 
             result = result_ingresos.copy()
             result.update({
@@ -909,7 +909,7 @@ class BasicQueries:
         for row in results_ingresos:
             ingresos = row['ingresos_cliente'] or 0
             gastos = gastos_dict.get(row['CLIENTE_ID'], 0)
-            beneficio = ingresos - gastos
+            beneficio = ingresos - abs(gastos)
 
             row.update({
                 'gastos_cliente': gastos,
@@ -974,7 +974,7 @@ class BasicQueries:
         if result_ingresos and result_ingresos.get('CLIENTE_ID'):
             ingresos = result_ingresos['ingresos_total'] or 0
             gastos = result_gastos['gastos_total'] if result_gastos else 0
-            beneficio = ingresos - gastos
+            beneficio = ingresos - abs(gastos)
 
             result = result_ingresos.copy()
             result.update({
@@ -1074,7 +1074,7 @@ class BasicQueries:
         for row in results_ingresos:
             ingresos = row['ingresos_contrato'] or 0
             gastos = gastos_dict.get(row['CONTRATO_ID'], 0)
-            beneficio = ingresos - gastos
+            beneficio = ingresos - abs(gastos)
 
             row.update({
                 'gastos_contrato': gastos,
@@ -1138,7 +1138,7 @@ class BasicQueries:
         if result_ingresos:
             ingresos = result_ingresos['ingresos_total'] or 0
             gastos = result_gastos['gastos_total'] if result_gastos else 0
-            beneficio = ingresos - gastos
+            beneficio = ingresos - abs(gastos)
 
             result = result_ingresos.copy()
             result.update({

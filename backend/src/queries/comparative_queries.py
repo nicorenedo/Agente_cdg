@@ -806,12 +806,12 @@ class ComparativeQueries:
                 num_contratos,
                 ROUND(ingresos, 2) as ingresos,
                 ROUND(gastos, 2) as gastos,
-                ROUND(ingresos - gastos, 2) as beneficio_neto,
+                ROUND(ingresos - ABS(gastos), 2) as beneficio_neto,
                 ROUND(ratio_eficiencia_raw, 2) AS ratio_eficiencia,
                 ROUND(CASE WHEN num_contratos = 0 THEN 0
                            ELSE gastos * 1.0 / num_contratos END, 2) as gasto_por_contrato,
                 ROUND(CASE WHEN ingresos = 0 THEN 0
-                           ELSE ((ingresos - gastos) * 100.0 / ingresos) END, 2) as margen_neto_pct
+                           ELSE ((ingresos - ABS(gastos)) * 100.0 / ingresos) END, 2) as margen_neto_pct
             FROM centro_eficiencia
             ORDER BY (ratio_eficiencia_raw IS NULL), ratio_eficiencia_raw DESC
         """
