@@ -2,8 +2,8 @@
 /* eslint-disable no-console */
 
 /**
- * ChatService v11.0 — Perfect Integration (Chat Agent v10.0 + CDG Agent v6.0)
- * --------------------------------------------------------------------------
+ * ChatService v11.0 — Perfect Integration + Chart Pivoting (Chat Agent v10.0 + CDG Agent v6.0)
+ * -------------------------------------------------------------------------------------------
  * - Integración completa con Chat Agent v10.0: clasificación inteligente + 6 catálogos
  * - Soporte para CDG Agent v6.0: análisis complejos especializados  
  * - Cliente WebSocket optimizado con heartbeat compatible
@@ -11,17 +11,218 @@
  * - API de eventos completa: 'open'|'ready'|'message'|'error'|'close'|'reconnect'|'typing'
  * - Atajos directos a Integration endpoints para perfect workflow
  * - Soporte completo para capabilities y specializations de ambos agentes
+ * - ✅ NUEVO: Funciones específicas para pivoteo conversacional de gráficos
+ * - ✅ NUEVO: Parser local de intenciones de pivoteo
+ * - ✅ NUEVO: Separación clara entre chat general y pivoteo de gráficos
  */
 
 import api, { 
   chat as chatApi, 
   agent as agentApi, 
-  integration as integrationApi, 
+  integration as integrationApi,
+  charts as chartsApi,
   ApiClientError 
 } from "./api";
 
 /* =========================================
- * Utilidades actualizadas
+ * ✅ NUEVA CONFIGURACIÓN PARA PIVOTEO DE GRÁFICOS
+ * ========================================= */
+
+/**
+ * ✅ Configuración centralizada para pivoteo de gráficos
+ */
+const PIVOT_CONFIG = {
+  // Métricas disponibles para pivoteo
+  metrics: {
+    'CONTRATOS': { 
+      label: 'Contratos',
+      aliases: ['contratos', 'contrato'],
+      apiEndpoint: 'charts.gestoresRanking',
+      defaultParams: { metric: 'CONTRATOS' }
+    },
+    'CLIENTES': { 
+      label: 'Clientes',
+      aliases: ['clientes', 'cliente'],
+      apiEndpoint: 'basic.clientesByGestor', 
+      defaultParams: { metric: 'CLIENTES' }
+    },
+    'ROE': { 
+      label: 'ROE (%)',
+      aliases: ['roe', 'rentabilidad', 'rendimiento'],
+      apiEndpoint: 'kpis.gestorROE',
+      defaultParams: {}
+    },
+    'MARGEN_NETO': { 
+      label: 'Margen Neto (%)',
+      aliases: ['margen', 'margen neto', 'margenes'],
+      apiEndpoint: 'comparatives.gestoresMargen',
+      defaultParams: {}
+    },
+    'INGRESOS': { 
+      label: 'Ingresos (€)',
+      aliases: ['ingresos', 'ingresos totales', 'facturación'],
+      apiEndpoint: 'analytics.gestorMetricasCompletas',
+      defaultParams: {}
+    },
+    'INCENTIVOS': {
+      label: 'Incentivos (€)',
+      aliases: ['incentivos', 'bonus', 'bonificaciones'],
+      apiEndpoint: 'incentives.bonusPool',
+      defaultParams: {}
+    }
+  },
+
+  // Dimensiones disponibles para pivoteo
+  dimensions: {
+    'gestor': { 
+      label: 'Gestores',
+      aliases: ['gestor', 'gestores', 'comercial', 'comerciales'],
+      defaultChartType: 'horizontal_bar'
+    },
+    'centro': { 
+      label: 'Centros',
+      aliases: ['centro', 'centros', 'oficina', 'oficinas'],
+      defaultChartType: 'donut'
+    },
+    'producto': { 
+      label: 'Productos',
+      aliases: ['producto', 'productos', 'servicio', 'servicios'],
+      defaultChartType: 'horizontal_bar'
+    },
+    'cliente': { 
+      label: 'Clientes',
+      aliases: ['cliente', 'clientes'],
+      defaultChartType: 'bar'
+    },
+    'segmento': { 
+      label: 'Segmentos',
+      aliases: ['segmento', 'segmentos'],
+      defaultChartType: 'pie'
+    }
+  },
+
+  // Tipos de gráfico disponibles
+  chartTypes: {
+    'bar': { 
+      label: 'Barras',
+      aliases: ['barras', 'barra', 'columnas']
+    },
+    'horizontal_bar': { 
+      label: 'Barras Horizontales',
+      aliases: ['horizontal', 'horizontales', 'barras horizontales']
+    },
+    'pie': { 
+      label: 'Circular',
+      aliases: ['circular', 'pie', 'tarta', 'quesito']
+    },
+    'donut': { 
+      label: 'Donut',
+      aliases: ['donut', 'anillo', 'rosquilla']
+    },
+    'line': { 
+      label: 'Líneas',
+      aliases: ['líneas', 'linea', 'temporal', 'evolución']
+    },
+    'area': { 
+      label: 'Área',
+      aliases: ['área', 'area', 'relleno']
+    }
+  }
+};
+
+/**
+ * ✅ Parser local de intenciones de pivoteo
+ */
+function parsePivotIntent(message, currentConfig = {}) {
+  const msg = message.toLowerCase().trim();
+  
+  console.log(`[ChatService] 🔍 Parsing pivot intent: "${msg}"`);
+  console.log(`[ChatService] Current config:`, currentConfig);
+
+  let newMetric = currentConfig.metric;
+  let newDimension = currentConfig.dimension;
+  let newChartType = currentConfig.chartType || currentConfig.chart_type;
+
+  // Detectar cambios de métrica
+  for (const [metricKey, metricConfig] of Object.entries(PIVOT_CONFIG.metrics)) {
+    if (metricConfig.aliases.some(alias => msg.includes(alias))) {
+      newMetric = metricKey;
+      console.log(`[ChatService] ✅ Detected metric change: ${metricKey}`);
+      break;
+    }
+  }
+
+  // Detectar cambios de dimensión
+  for (const [dimensionKey, dimensionConfig] of Object.entries(PIVOT_CONFIG.dimensions)) {
+    if (dimensionConfig.aliases.some(alias => msg.includes(alias))) {
+      newDimension = dimensionKey;
+      console.log(`[ChatService] ✅ Detected dimension change: ${dimensionKey}`);
+      break;
+    }
+  }
+
+  // Detectar cambios de tipo de gráfico
+  for (const [chartKey, chartConfig] of Object.entries(PIVOT_CONFIG.chartTypes)) {
+    if (chartConfig.aliases.some(alias => msg.includes(alias))) {
+      newChartType = chartKey;
+      console.log(`[ChatService] ✅ Detected chart type change: ${chartKey}`);
+      break;
+    }
+  }
+
+  // Detectar palabras de comando de cambio
+  const isChangeCommand = [
+    'cambia', 'cambiar', 'muestra', 'mostrar', 'pon', 'poner', 
+    'ver', 'visualiza', 'convierte', 'transforma'
+  ].some(cmd => msg.includes(cmd));
+
+  const hasChanges = (
+    newMetric !== currentConfig.metric ||
+    newDimension !== currentConfig.dimension ||
+    newChartType !== (currentConfig.chartType || currentConfig.chart_type)
+  );
+
+  console.log(`[ChatService] Parse result:`, {
+    isChangeCommand,
+    hasChanges,
+    newMetric,
+    newDimension, 
+    newChartType
+  });
+
+  if (isChangeCommand && hasChanges) {
+    return {
+      metric: newMetric,
+      dimension: newDimension,
+      chartType: newChartType,
+      intent: 'pivot',
+      confidence: 0.8
+    };
+  }
+
+  return null;
+}
+
+/**
+ * ✅ Valida si una combinación métrica/dimensión es soportada
+ */
+function validatePivotCombination(metric, dimension, chartType) {
+  const metricConfig = PIVOT_CONFIG.metrics[metric];
+  const dimensionConfig = PIVOT_CONFIG.dimensions[dimension];
+  const chartTypeConfig = PIVOT_CONFIG.chartTypes[chartType];
+
+  if (!metricConfig || !dimensionConfig || !chartTypeConfig) {
+    return {
+      valid: false,
+      reason: `Combinación no soportada: ${metric} por ${dimension} como ${chartType}`
+    };
+  }
+
+  return { valid: true };
+}
+
+/* =========================================
+ * Utilidades actualizadas (MANTENIDAS)
  * ========================================= */
 
 // Generador id pseudo-único mejorado
@@ -93,7 +294,7 @@ const normalizeChatData = (raw = {}) => {
 };
 
 /* =========================================
- * Cliente HTTP actualizado para v10.0 + v6.0
+ * Cliente HTTP actualizado para v10.0 + v6.0 + PIVOTEO
  * ========================================= */
 
 const httpChat = {
@@ -186,26 +387,158 @@ const httpChat = {
   agentCoordination(cfg) {
     return integrationApi.agentCoordination(cfg);
   },
+
+  /* ===== ✅ NUEVAS FUNCIONES PARA PIVOTEO DE GRÁFICOS ===== */
+
+  /**
+   * ✅ NUEVO: Pivoteo de gráfico mediante conversación
+   */
+  async pivotChart(userId, message, currentChartConfig = {}, options = {}) {
+    console.log(`[ChatService] 🔄 Pivoting chart via conversation`);
+    console.log(`[ChatService] Message: "${message}"`);
+    console.log(`[ChatService] Current config:`, currentChartConfig);
+
+    try {
+      // 1. Intentar usar el backend para pivoteo
+      const result = await chartsApi.pivot({
+        userId,
+        message,
+        currentChartConfig,
+        chartInteractionType: 'pivot'
+      });
+
+      console.log(`[ChatService] ✅ Backend pivot successful`);
+      return {
+        success: true,
+        data: result,
+        source: 'backend',
+        newConfig: result.new_config || result.newConfig,
+        changesMade: result.changes_made || result.changesMade
+      };
+
+    } catch (backendError) {
+      console.warn(`[ChatService] ⚠️ Backend pivot failed, trying local parsing:`, backendError.message);
+
+      // 2. Fallback: usar parser local
+      const parsedIntent = parsePivotIntent(message, currentChartConfig);
+
+      if (!parsedIntent) {
+        throw new Error(`No se pudo interpretar la intención de pivoteo: "${message}"`);
+      }
+
+      // 3. Validar la combinación
+      const validation = validatePivotCombination(
+        parsedIntent.metric, 
+        parsedIntent.dimension, 
+        parsedIntent.chartType
+      );
+
+      if (!validation.valid) {
+        throw new Error(validation.reason);
+      }
+
+      console.log(`[ChatService] ✅ Local parsing successful:`, parsedIntent);
+
+      return {
+        success: true,
+        data: parsedIntent,
+        source: 'local_parser',
+        newConfig: {
+          metric: parsedIntent.metric,
+          dimension: parsedIntent.dimension,
+          chartType: parsedIntent.chartType
+        },
+        changesMade: [`Pivoteo local: ${parsedIntent.metric} por ${parsedIntent.dimension} como ${parsedIntent.chartType}`]
+      };
+    }
+  },
+
+  /**
+   * ✅ NUEVO: Obtener configuración de pivoteo disponible
+   */
+  getPivotConfig() {
+    return {
+      metrics: Object.keys(PIVOT_CONFIG.metrics),
+      dimensions: Object.keys(PIVOT_CONFIG.dimensions),
+      chartTypes: Object.keys(PIVOT_CONFIG.chartTypes),
+      combinations: this.getValidCombinations()
+    };
+  },
+
+  /**
+   * ✅ NUEVO: Obtener combinaciones válidas
+   */
+  getValidCombinations() {
+    const combinations = [];
+    
+    for (const metric of Object.keys(PIVOT_CONFIG.metrics)) {
+      for (const dimension of Object.keys(PIVOT_CONFIG.dimensions)) {
+        for (const chartType of Object.keys(PIVOT_CONFIG.chartTypes)) {
+          const validation = validatePivotCombination(metric, dimension, chartType);
+          if (validation.valid) {
+            combinations.push({
+              metric,
+              dimension,
+              chartType,
+              label: `${PIVOT_CONFIG.metrics[metric].label} por ${PIVOT_CONFIG.dimensions[dimension].label} (${PIVOT_CONFIG.chartTypes[chartType].label})`
+            });
+          }
+        }
+      }
+    }
+    
+    return combinations;
+  },
+
+  /**
+   * ✅ NUEVO: Sugerencias de pivoteo basadas en configuración actual
+   */
+  getPivotSuggestions(currentConfig = {}) {
+    const suggestions = [];
+    
+    // Sugerir cambios de métrica
+    if (currentConfig.metric) {
+      const otherMetrics = Object.keys(PIVOT_CONFIG.metrics).filter(m => m !== currentConfig.metric);
+      otherMetrics.slice(0, 2).forEach(metric => {
+        suggestions.push(`Cambia a ${PIVOT_CONFIG.metrics[metric].label.toLowerCase()}`);
+      });
+    }
+    
+    // Sugerir cambios de dimensión
+    if (currentConfig.dimension) {
+      const otherDimensions = Object.keys(PIVOT_CONFIG.dimensions).filter(d => d !== currentConfig.dimension);
+      otherDimensions.slice(0, 2).forEach(dimension => {
+        suggestions.push(`Muestra por ${PIVOT_CONFIG.dimensions[dimension].label.toLowerCase()}`);
+      });
+    }
+    
+    // Sugerir cambios de tipo de gráfico
+    if (currentConfig.chartType) {
+      const otherChartTypes = Object.keys(PIVOT_CONFIG.chartTypes).filter(c => c !== currentConfig.chartType);
+      otherChartTypes.slice(0, 2).forEach(chartType => {
+        suggestions.push(`Ponlo en ${PIVOT_CONFIG.chartTypes[chartType].label.toLowerCase()}`);
+      });
+    }
+    
+    return suggestions;
+  }
 };
 
 /* =========================================
- * Cliente WebSocket optimizado para v10.0
+ * Cliente WebSocket optimizado para v10.0 (MANTENIDO)
  * ========================================= */
 
 /**
  * ✅ Opciones optimizadas para Chat Agent v10.0 + CDG Agent v6.0
  */
 const DEFAULT_WS_OPTS = {
-  // Reconexión optimizada para Perfect Integration
   reconnect: true,
-  maxRetries: 8, // ✅ Más reintentos para análisis largos
-  backoffBaseMs: 800, // ✅ Más conservador
-  heartbeatIntervalMs: 25000, // ✅ Compatible con servidor
-  typingTimeoutMs: 2000, // ✅ Más tiempo para análisis complejos
-  
-  // ✅ NUEVO: Configuración específica para CDG Agent v6.0
-  complexAnalysisTimeout: 45000, // 45s para análisis complejos
-  enableIntegrationFlow: true,    // Habilitar flujo de integración
+  maxRetries: 3,               // ✅ REDUCIDO: 5 (was 8)
+  backoffBaseMs: 2000,         // ✅ AUMENTADO: 1s (was 800ms)
+  heartbeatIntervalMs: 60000,  // ✅ SINCRONIZADO: 18s (was 25s)
+  typingTimeoutMs: 5000,
+  complexAnalysisTimeout: 120000,
+  enableIntegrationFlow: true,
 };
 
 /**
@@ -215,6 +548,7 @@ const DEFAULT_WS_OPTS = {
  *   - 'integration-ready' : Perfect Integration establecida
  *   - 'complex-analysis'  : Análisis complejo iniciado/completado  
  *   - 'classification'    : Resultado de clasificación inteligente
+ *   - 'chart-pivot'       : ✅ NUEVO: Resultado de pivoteo de gráfico
  */
 class ChatSocketClient {
   constructor(userId, opts = {}) {
@@ -227,7 +561,7 @@ class ChatSocketClient {
     this.listeners = new Map();
     [
       "open", "ready", "message", "error", "close", "reconnect", "typing",
-      "integration-ready", "complex-analysis", "classification" // ✅ NUEVOS
+      "integration-ready", "complex-analysis", "classification", "chart-pivot" // ✅ NUEVO
     ].forEach((e) => this.listeners.set(e, new Set()));
 
     // Estado WS
@@ -250,6 +584,7 @@ class ChatSocketClient {
     // ✅ NUEVOS callbacks
     if (opts.onIntegrationReady) this.on("integration-ready", opts.onIntegrationReady);
     if (opts.onComplexAnalysis) this.on("complex-analysis", opts.onComplexAnalysis);
+    if (opts.onChartPivot) this.on("chart-pivot", opts.onChartPivot); // ✅ NUEVO
   }
 
   /* ====== Pub/Sub mejorado ====== */
@@ -328,6 +663,17 @@ class ChatSocketClient {
             status: msg.status,
             analysisType: msg.analysis_type,
             progress: msg.progress
+          });
+          return;
+        }
+
+        // ✅ NUEVO: Manejo de pivoteo de gráficos
+        if (msg?.type === "chart-pivot") {
+          this.emit("chart-pivot", {
+            success: msg.success,
+            newConfig: msg.new_config,
+            changesMade: msg.changes_made,
+            data: msg.data
           });
           return;
         }
@@ -455,6 +801,27 @@ class ChatSocketClient {
     }
   }
 
+  /**
+   * ✅ NUEVO: Envío de pivoteo de gráfico via WebSocket
+   */
+  sendChartPivot(message, currentConfig = {}) {
+    const packet = {
+      type: "chart-pivot",
+      message,
+      current_config: currentConfig,
+      context: { timestamp: Date.now() }
+    };
+
+    console.log('[ChatService] 🔄 Solicitando pivoteo via WebSocket:', message);
+    
+    if (this.connected && this.socket?.readyState === 1) {
+      this._sendJson(packet);
+    } else {
+      this.outbox.push(packet);
+      this.connect();
+    }
+  }
+
   _flushOutbox() {
     if (!this.outbox.length || !this.connected || this.socket?.readyState !== 1) return;
 
@@ -464,7 +831,7 @@ class ChatSocketClient {
     queued.forEach((pkt) => this._sendJson(pkt));
   }
 
-  /* ====== Reconexión exponencial mejorada ====== */
+  /* ====== Reconexión exponencial mejorada (MANTENIDA) ====== */
 
   _scheduleReconnect() {
     if (!this.opts.reconnect || this.retries >= this.opts.maxRetries) {
@@ -489,7 +856,7 @@ class ChatSocketClient {
     }, delay);
   }
 
-  /* ====== Heartbeat optimizado ====== */
+  /* ====== Heartbeat optimizado (MANTENIDO) ====== */
 
   _startHeartbeat() {
     this._stopHeartbeat();
@@ -509,7 +876,7 @@ class ChatSocketClient {
     }
   }
 
-  /* ====== Typing UX mejorado ====== */
+  /* ====== Typing UX mejorado (MANTENIDO) ====== */
 
   _toggleTyping(active) {
     this.emit("typing", { active, integration: this.integrationReady });
@@ -529,16 +896,43 @@ class ChatSocketClient {
 }
 
 /* =========================================
- * API de alto nivel mejorada para v10.0 + v6.0
+ * API de alto nivel mejorada para v10.0 + v6.0 + PIVOTEO
  * ========================================= */
 
 /**
- * ✅ Crea sesión de chat con Perfect Integration
+ * ✅ Crea sesión de chat con Perfect Integration + Pivoteo
  */
+/**
+ * ✅ Crea sesión de chat con Perfect Integration + Pivoteo
+ * NUEVO: Gestión de conexiones únicas para evitar conflictos
+ */
+
+// ✅ NUEVO: Map para gestionar sesiones activas
+const activeSessions = new Map();
+
 function createChatSession(userId = uid(), options = {}) {
+  if (!userId) {
+    throw new Error('userId es requerido para crear sesión de chat');
+  }
+
+  // ✅ NUEVA: Cerrar sesión existente para evitar conflictos
+  if (activeSessions.has(userId)) {
+    console.log(`[ChatService] 🔄 Cerrando sesión existente para: ${userId}`);
+    const existingSession = activeSessions.get(userId);
+    try {
+      if (existingSession.close) {
+        existingSession.close();
+      }
+    } catch (e) {
+      console.warn('[ChatService] Error cerrando sesión existente:', e);
+    }
+    activeSessions.delete(userId);
+  }
+
+  console.log(`[ChatService] 🚀 Creando nueva sesión para: ${userId}`);
   const wsClient = new ChatSocketClient(userId, options);
 
-  return {
+  const session = {
     userId,
 
     // ✅ HTTP Chat Agent v10.0
@@ -566,12 +960,23 @@ function createChatSession(userId = uid(), options = {}) {
     queryCatalogs: (cfg) => httpChat.queryCatalogs(cfg),
     agentCoordination: (cfg) => httpChat.agentCoordination(cfg),
 
+    // ✅ NUEVAS funciones de pivoteo de gráficos
+    pivotChart: (message, currentConfig = {}, options = {}) =>
+      httpChat.pivotChart(userId, message, currentConfig, options),
+    getPivotConfig: () => httpChat.getPivotConfig(),
+    getValidCombinations: () => httpChat.getValidCombinations(),
+    getPivotSuggestions: (currentConfig) => httpChat.getPivotSuggestions(currentConfig),
+
     // ✅ WebSocket mejorado
     ws: wsClient,
     connect: () => wsClient.connect(),
     send: (messageOrObj) => wsClient.send(messageOrObj),
     sendComplexAnalysis: (type, params) => wsClient.sendComplexAnalysis(type, params), // ✅ NUEVO
-    close: () => wsClient.close(),
+    sendChartPivot: (message, config) => wsClient.sendChartPivot(message, config), // ✅ NUEVO
+    close: () => {
+      wsClient.close();
+      activeSessions.delete(userId); // ✅ NUEVA: Limpiar del map
+    },
 
     // Pub/Sub extendido
     on: (event, fn) => wsClient.on(event, fn),
@@ -581,10 +986,26 @@ function createChatSession(userId = uid(), options = {}) {
     get connected() { return wsClient.connected; },
     get integrationReady() { return wsClient.integrationReady; }, // ✅ NUEVO
   };
+
+  // ✅ NUEVO: Registrar sesión en el map
+  activeSessions.set(userId, session);
+  return session;
 }
 
+/**
+ * ✅ NUEVA: Función para obtener conexiones activas
+ */
+function getActiveConnections() {
+  return Array.from(activeSessions.entries()).map(([userId, session]) => ({
+    userId,
+    connected: session.connected,
+    integrationReady: session.integrationReady
+  }));
+}
+
+
 /* =========================================
- * Exports actualizados
+ * Exports actualizados con PIVOTEO
  * ========================================= */
 
 const chatService = {
@@ -597,6 +1018,11 @@ const chatService = {
   // ✅ NUEVAS utilidades
   DEFAULT_WS_OPTS,
   uid,
+  
+  // ✅ NUEVAS funciones de pivoteo
+  PIVOT_CONFIG,
+  parsePivotIntent,
+  validatePivotCombination,
 };
 
 export default chatService;
@@ -610,4 +1036,12 @@ export {
   buildChatPayload,
   DEFAULT_WS_OPTS,
   uid,
+  
+  // ✅ NUEVAS exportaciones para pivoteo
+  PIVOT_CONFIG,
+  parsePivotIntent,
+  validatePivotCombination,
+
+ // ✅ NUEVA exportación para gestión de conexiones
+  getActiveConnections,
 };

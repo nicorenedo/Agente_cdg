@@ -1,13 +1,14 @@
 """
-CDG Agent - Agente Principal de Control de Gestión v6.0
+CDG Agent - Agente Principal de Control de Gestión v6.1
 ======================================================
 
-Agente integrado que funciona PERFECTAMENTE con chat_agent v10.0.
+Agente integrado que funciona PERFECTAMENTE con chat_agent v11.0.
 Especializado en análisis complejos y delegación inteligente.
+🔐 NUEVO: Soporte para sistema de confidencialidad bancaria
 
-Versión: 6.0 - Perfect Integration with Chat Agent v10.0
+Versión: 6.1 - Perfect Integration with Chat Agent v11.0 + Confidentiality
 Autor: CDG Development Team
-Fecha: 2025-09-11
+Fecha: 2025-09-19
 """
 
 import json
@@ -45,11 +46,12 @@ if str(backend_dir) not in sys.path:
 try:
     # 🎯 IMPORTAR QUERIES PREDEFINIDAS - INTEGRACIÓN CON CATÁLOGOS
     from queries.basic_queries import basic_queries
-    from queries.period_queries import PeriodQueries
-    from queries.gestor_queries import GestorQueries
-    from queries.comparative_queries import ComparativeQueries
-    from queries.deviation_queries import DeviationQueries
-    from queries.incentive_queries import IncentiveQueries
+    from queries.period_queries import period_queries
+    from queries.gestor_queries import gestor_queries
+    from queries.comparative_queries import comparative_queries
+    from queries.deviation_queries import deviation_queries
+    from queries.incentive_queries import incentive_queries
+
     
     # ✅ Import dinámico de kpi_calculator
     logger.info("🔧 Cargando kpi_calculator...")
@@ -177,11 +179,11 @@ except Exception as e:
             return mock_method
     
     basic_queries = MockQueries()
-    PeriodQueries = MockQueries()
-    GestorQueries = MockQueries()
-    ComparativeQueries = MockQueries()
-    DeviationQueries = MockQueries()
-    IncentiveQueries = MockQueries()
+    period_queries = MockQueries()
+    gestor_queries = MockQueries()
+    comparative_queries = MockQueries()
+    deviation_queries = MockQueries()
+    incentive_queries = MockQueries()
     
     class FinancialKPICalculator:
         def calculate_kpis_from_data(self, data):
@@ -263,7 +265,7 @@ class AnalysisType(Enum):
 
 @dataclass
 class CDGRequest:
-    """Request para el CDG Agent - Compatible con chat_agent v10.0"""
+    """Request para el CDG Agent - Compatible con chat_agent v11.0"""
     user_message: str
     user_id: Optional[str] = None
     gestor_id: Optional[str] = None
@@ -274,6 +276,7 @@ class CDGRequest:
     current_chart_config: Optional[Dict[str, Any]] = None
     chart_interaction_type: Optional[str] = None
     analysis_depth: str = "standard"  # standard, deep, executive
+    user_role: Optional[str] = None  # 🔐 NUEVO: Para validar permisos
     
 @dataclass
 class CDGResponse:
@@ -325,11 +328,11 @@ class CDGAgentV6:
         # 🎯 ENGINES DE QUERIES - ACCESO DIRECTO
         self.query_engines = {
             'basic': basic_queries,
-            'period': PeriodQueries,
-            'gestor': GestorQueries,
-            'comparative': ComparativeQueries,
-            'deviation': DeviationQueries,
-            'incentive': IncentiveQueries
+            'period': period_queries,
+            'gestor': gestor_queries,
+            'comparative': comparative_queries,
+            'deviation': deviation_queries,
+            'incentive': incentive_queries
         }
         
         # Configuración y estado
@@ -462,16 +465,23 @@ class CDGAgentV6:
         return await handler(request)
     
     async def _deep_gestor_analysis(self, request: CDGRequest) -> Dict[str, Any]:
-        """🎯 ANÁLISIS PROFUNDO DE GESTOR - Múltiples dimensiones"""
+        """🎯 ANÁLISIS PROFUNDO DE GESTOR - Múltiples dimensiones CON VALIDACIÓN"""
         try:
             gestor_id = request.gestor_id or self._extract_gestor_id(request.user_message)
             periodo = request.periodo or '2025-10'
+            # 🔐 NUEVO: Validación de permisos
+            if (request.user_role == 'gestor' and 
+                request.context.get('gestor_id') and 
+                str(gestor_id) != str(request.context.get('gestor_id'))):
 
-            if not gestor_id:
                 return {
-                    'error': 'Gestor ID requerido para análisis profundo',
-                    'confidence_score': 0.0
+                    'error': 'Acceso denegado: No puede analizar datos de otros gestores',
+                    'confidence_score': 0.0,
+                    'access_denied': True
                 }
+        
+        # ... resto del código existente
+
 
             # 🎯 MÚLTIPLES QUERIES COORDINADAS
             results = {}
@@ -491,7 +501,6 @@ class CDGAgentV6:
             # Comparativa con pares - CORREGIDO
             try:
                 # ✅ USAR INSTANCIA, NO CLASE
-                from queries.comparative_queries import comparative_queries
                 ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
                 if ranking and hasattr(ranking, 'data'):
                     results['peer_comparison'] = self._find_peer_analysis(gestor_id, ranking.data)
@@ -502,7 +511,6 @@ class CDGAgentV6:
             # Análisis de desviaciones - CORREGIDO
             try:
                 # ✅ USAR INSTANCIA, NO CLASE
-                from queries.deviation_queries import deviation_queries
                 deviations = deviation_queries.detect_precio_desviaciones_criticas_enhanced(periodo, 15.0)
                 if deviations and hasattr(deviations, 'data'):
                     results['deviations'] = deviations.data
@@ -562,9 +570,10 @@ class CDGAgentV6:
             
             # Ranking por múltiples métricas
             try:
-                margen_ranking = ComparativeQueries.ranking_gestores_por_margen_enhanced(periodo)
-                roe_ranking = ComparativeQueries.compare_roe_gestores_enhanced(periodo)
-                eficiencia_ranking = ComparativeQueries.compare_eficiencia_centros_enhanced(periodo)
+                margen_ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
+                roe_ranking = comparative_queries.compare_roe_gestores_enhanced(periodo)
+                eficiencia_ranking = comparative_queries.compare_eficiencia_centro_enhanced(periodo)
+
                 
                 results['rankings'] = {
                     'margen': margen_ranking.data if margen_ranking and hasattr(margen_ranking, 'data') else [],
@@ -789,7 +798,7 @@ class CDGAgentV6:
             
             # Margen promedio
             try:
-                ranking = ComparativeQueries.ranking_gestores_por_margen_enhanced(periodo)
+                ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
                 if ranking and hasattr(ranking, 'data') and ranking.data:
                     margenes = [g.get('margen_neto_pct', 0) for g in ranking.data if g.get('margen_neto_pct')]
                     metrics['margen_promedio'] = round(sum(margenes) / len(margenes), 2) if margenes else 0
@@ -814,7 +823,7 @@ class CDGAgentV6:
             
             # Alert de margen bajo
             try:
-                ranking = ComparativeQueries.ranking_gestores_por_margen_enhanced(periodo)
+                ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
                 if ranking and hasattr(ranking, 'data') and ranking.data:
                     low_margin_gestores = [g for g in ranking.data if g.get('margen_neto_pct', 0) < 5]
                     if low_margin_gestores:

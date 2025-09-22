@@ -1,1449 +1,1759 @@
 """
-Chat Agent Refactorizado - Módulo de Servicio Conversacional CDG v7.0
-=====================================================================
+Chat Agent Universal v10.0 - Agente Conversacional CDG Completo
+===============================================================
 
-Módulo de servicio conversacional para Control de Gestión bancario.
-- Integración completa con CDG Agent, Chart Generator y Basic Queries
-- Personalización inteligente y gestión de sesiones
-- System Prompts profesionales especializados
-- Sin FastAPI - Listo para integración en main.py
+Agente completamente mejorado que maneja CUALQUIER consulta sobre control de gestión mediante:
+- Sistema de clasificación inteligente con prompts catalogados  
+- Búsqueda automática en queries predefinidas (6 catálogos)
+- Generación SQL dinámica con contexto bancario completo
+- Respuestas contextuales sin SQL para preguntas generales
+- Integración completa con CDG Agent para análisis complejos
+- Soporte completo para gráficos y visualizaciones
 
-Versión: 7.0 - Refactorizado como módulo
-Autor: Agente CDG Development Team
-Fecha: 2025-09-01
+Versión: 10.0 - Integración Completa con Catálogos de Queries
+Autor: CDG Development Team  
+Fecha: 2025-09-11
 """
 
 import json
 import logging
-import uuid
-import os
-import re
+import sqlite3
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
-from fastapi import WebSocket
-from pydantic import BaseModel
-from dotenv import load_dotenv
+from pathlib import Path
+import asyncio
 
-load_dotenv()
-MODEL_NAME = os.getenv('AZURE_OPENAI_DEPLOYMENT_ID', 'gpt-4')
+# Configuración
+try:
+    from config import settings
+except ImportError:
+    class MockSettings:
+        DATABASE_PATH = "database/BM_CONTABILIDAD_CDG.db"
+        AZURE_OPENAI_DEPLOYMENT_ID = "gpt-4"
+        DATABASE_TIMEOUT = 30
+    settings = MockSettings()
 
-# ============================================================================
-# IMPORTACIONES INTEGRADAS
-# ============================================================================
-
+# Importaciones con fallbacks
 try:
     from utils.initial_agent import iniciar_agente_llm
-    from agents.cdg_agent import CDGAgent, CDGRequest, CDGResponse, create_cdg_agent, process_cdg_request
-
-    
+    from agents.cdg_agent import create_cdg_agent, CDGRequest
+    from tools.sql_guard import is_query_safe
+    from tools.chart_generator import (
+        QueryIntegratedChartGenerator,
+        handle_chart_change_request
+    )
+    from database.db_connection import query_executor
     from prompts.system_prompts import (
         CHAT_CONVERSATIONAL_SYSTEM_PROMPT,
-        CHAT_FEEDBACK_SYSTEM_PROMPT,
         CHAT_INTENT_CLASSIFICATION_PROMPT,
-        CHAT_PERSONALIZATION_SYSTEM_PROMPT
+        CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT,
+        CHAT_FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
+        CHAT_SQL_GENERATION_SYSTEM_PROMPT,
+        # 🎯 NUEVOS CATÁLOGOS DE QUERIES INTEGRADOS
+        BASIC_QUERIES_CATALOG_PROMPT,
+        COMPARATIVE_QUERIES_CATALOG_PROMPT,
+        DEVIATION_QUERIES_CATALOG_PROMPT,
+        GESTOR_QUERIES_CATALOG_PROMPT,
+        INCENTIVE_QUERIES_CATALOG_PROMPT,
+        PERIOD_QUERIES_CATALOG_PROMPT
     )
-    
     from prompts.user_prompts import (
-        build_feedback_processing_prompt,
-        build_conversation_context_prompt,
-        build_personalization_learning_prompt,
-        build_intent_clarification_prompt,
-        build_dynamic_dashboard_prompt
+        build_intent_classification_prompt,
+        build_natural_response_prompt,
+        build_sql_generation_prompt,
+        build_financial_explanation_prompt
     )
-    
-    from tools.chart_generator import (
-        create_chart_from_query_data,
-        pivot_chart_with_query_integration,
-        QueryIntegratedChartGenerator
-    )
-    
+    # 🎯 IMPORTACIÓN DE TODAS LAS QUERIES PREDEFINIDAS
     from queries.basic_queries import basic_queries
-    from queries.gestor_queries import GestorQueries
-    from queries.comparative_queries import ComparativeQueries
-    from queries.deviation_queries import DeviationQueries
-    from queries.incentive_queries import IncentiveQueries
-    from queries.period_queries import PeriodQueries, get_available_periods_enhanced
+    from queries.comparative_queries import comparative_queries
+    from queries.deviation_queries import deviation_queries
+    from queries.gestor_queries import gestor_queries
+    from queries.incentive_queries import incentive_queries
+    from queries.period_queries import period_queries
     
     IMPORTS_SUCCESSFUL = True
-    CHART_GENERATOR_AVAILABLE = True
-    BASIC_QUERIES_AVAILABLE = True
     logger = logging.getLogger(__name__)
-    logger.info("🚀 CDG Chat Agent v7.0 módulo inicializado exitosamente")
+    mode = "PRODUCTION" if IMPORTS_SUCCESSFUL else "FALLBACK"
+    print(f"\n{'='*60}")
+    print(f"🚀 CHAT AGENT v10.0 INICIALIZADO")
+    print(f"   Modo: {mode}")
+    print(f"   Imports: {'✅ Exitosos' if IMPORTS_SUCCESSFUL else '⚠️ Fallback'}")
+    print(f"   Catálogos: {'✅ 6 catálogos cargados' if IMPORTS_SUCCESSFUL else '⚠️ Mock'}")
+    print(f"   Query Engines: {'✅ Disponibles' if IMPORTS_SUCCESSFUL else '⚠️ Mock'}")
+    print(f"{'='*60}\n")
+    logger.info(f"🚀 Chat Agent v10.0 inicializado - Modo: {mode}")
+
     
 except ImportError as e:
-    logger = logging.getLogger(__name__)
-    logger.error(f"⚠️ Error de importación: {e}")
+    logging.warning(f"Modo fallback activado: {e}")
+    IMPORTS_SUCCESSFUL = False
     
-    # Fallbacks para testing
+    # Fallbacks básicos necesarios...
     def iniciar_agente_llm():
-        class MockClient:
+        class MockLLM:
             class Chat:
                 class Completions:
                     def create(self, **kwargs):
-                        class Response:
-                            choices = [type('Choice', (), {'message': type('Message', (), {'content': 'Mock response'})()})]
-                        return Response()
+                        return type('Response', (), {
+                            'choices': [type('Choice', (), {
+                                'message': type('Message', (), {
+                                    'content': '{"intent": "general_query", "requires_sql": true, "confidence": 0.8}'
+                                })()
+                            })()]
+                        })()
                 completions = Completions()
             chat = Chat()
-        return MockClient()
+        return MockLLM()
     
-    class MockCDGAgent:
-        async def process_request(self, request):
-            return type('MockResponse', (), {
-                'content': {'response': 'Mock CDG response'},
-                'charts': [],
-                'recommendations': ['Mock recommendation'],
-                'metadata': {'analysis_type': 'mock'},
-                'confidence_score': 0.5,
-                'response_type': type('ResponseType', (), {'value': 'mock'})(),
-                'chart_configs': [],
-                'pivot_suggestions': []
-            })()
+    def create_cdg_agent():
+        class MockCDGAgent:
+            async def process_request(self, req):
+                return type('Response', (), {
+                    'content': 'Mock CDG response',
+                    'charts': [],
+                    'recommendations': []
+                })()
+        return MockCDGAgent()
     
-    CDGAgent = MockCDGAgent
-    GestorQueries = ComparativeQueries = DeviationQueries = IncentiveQueries = PeriodQueries = type('MockQueries', (), {})
+    class MockQueryExecutor:
+        def execute_query(self, query, params=None, fetch_type="all"):
+            return [{"mock": "data"}]
+        def get_table_info(self, table_name):
+            return [{'name': 'ID', 'type': 'INTEGER'}]
+        def get_table_count(self, table_name):
+            return 100
     
-    def create_chart_from_query_data(data, config):
-        return {'id': 'mock_chart', 'type': config.get('chart_type', 'bar'), 'title': 'Mock Chart'}
+    query_executor = MockQueryExecutor()
     
-    def pivot_chart_with_query_integration(user_message, current_config):
-        return {'status': 'success', 'new_config': current_config, 'message': 'Pivoteo mock'}
+    # Mock prompts y catálogos básicos
+    CHAT_CONVERSATIONAL_SYSTEM_PROMPT = "Eres un asistente financiero especializado en Control de Gestión bancario."
+    CHAT_INTENT_CLASSIFICATION_PROMPT = "Clasifica la intención del usuario en formato JSON."
+    CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT = "Genera respuestas naturales y profesionales."
+    CHAT_SQL_GENERATION_SYSTEM_PROMPT = "Genera consultas SQL seguras para base de datos financiera."
     
-    class QueryIntegratedChartGenerator:
-        def __init__(self): pass
-        def generate_chart_from_data(self, *args, **kwargs): 
-            return {'id': 'mock_chart', 'title': 'Gráfico Mock'}
+    # Mock catálogos
+    BASIC_QUERIES_CATALOG_PROMPT = "Catálogo básico de queries"
+    COMPARATIVE_QUERIES_CATALOG_PROMPT = "Catálogo comparativo de queries"
+    DEVIATION_QUERIES_CATALOG_PROMPT = "Catálogo de desviaciones"
+    GESTOR_QUERIES_CATALOG_PROMPT = "Catálogo de gestores"
+    INCENTIVE_QUERIES_CATALOG_PROMPT = "Catálogo de incentivos"
+    PERIOD_QUERIES_CATALOG_PROMPT = "Catálogo de períodos"
     
-    class basic_queries:
-        @staticmethod
-        def get_resumen_general():
-            return {'total_gestores': 30, 'total_clientes': 85, 'total_contratos': 216}
+    # Mock functions
+    def build_intent_classification_prompt(message, context):
+        return f"Clasifica: {message}"
+    
+    def build_natural_response_prompt(data, query, context):
+        return f"Respuesta para: {query} con datos: {data}"
+    
+    def build_sql_generation_prompt(message, context):
+        return f"SQL para: {message}"
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# 🎯 CLASIFICADOR INTELIGENTE CON CATÁLOGOS INTEGRADOS
+# ============================================================================
+
+class IntelligentQueryClassifier:
+    """
+    🎯 CLASIFICADOR MEJORADO que decide el flujo óptimo:
+    1. ¿Necesita SQL? 
+    2. ¿Existe query predefinida?
+    3. ¿Requiere análisis CDG?
+    4. ¿Es respuesta contextual?
+    """
+    
+    def __init__(self):
+        self.llm_client = iniciar_agente_llm()
+        # 🎯 CATÁLOGOS DE QUERIES INTEGRADOS
+        self.query_catalogs = {
+            'basic': BASIC_QUERIES_CATALOG_PROMPT,
+            'comparative': COMPARATIVE_QUERIES_CATALOG_PROMPT,
+            'deviation': DEVIATION_QUERIES_CATALOG_PROMPT,
+            'gestor': GESTOR_QUERIES_CATALOG_PROMPT,
+            'incentive': INCENTIVE_QUERIES_CATALOG_PROMPT,
+            'period': PERIOD_QUERIES_CATALOG_PROMPT
+        }
         
-        @staticmethod
-        def count_contratos_by_gestor():
-            return [{'DESC_GESTOR': 'Mock Gestor 1', 'num_contratos': 10}]
+        # 🎯 INSTANCIAS DE QUERIES PREDEFINIDAS
+        self.query_engines = {
+            'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
+            'comparative': comparative_queries if IMPORTS_SUCCESSFUL else None,
+            'deviation': deviation_queries if IMPORTS_SUCCESSFUL else None,
+            'gestor': gestor_queries if IMPORTS_SUCCESSFUL else None,
+            'incentive': incentive_queries if IMPORTS_SUCCESSFUL else None,
+            'period': period_queries if IMPORTS_SUCCESSFUL else None
+        }
+
     
-    CHAT_CONVERSATIONAL_SYSTEM_PROMPT = "Eres un asistente financiero especializado."
-    CHAT_FEEDBACK_SYSTEM_PROMPT = "Analiza feedback para mejorar respuestas."
-    CHAT_INTENT_CLASSIFICATION_PROMPT = "Clasifica la intención del usuario."
-    CHAT_PERSONALIZATION_SYSTEM_PROMPT = "Personaliza respuestas según el usuario."
+    async def classify_and_route(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE
+        """
+        try:
+            # 1️⃣ CLASIFICACIÓN INICIAL: ¿Qué tipo de consulta es?
+            initial_classification = await self._classify_query_type(user_message, context)
+            
+            if initial_classification['requires_sql']:
+                # 2️⃣ BÚSQUEDA EN QUERIES PREDEFINIDAS
+                predefined_match = await self._find_predefined_query(user_message, context)
+                
+                if predefined_match['found']:
+                    return {
+                        'flow_type': 'PREDEFINED_QUERY',
+                        'classification': initial_classification,
+                        'predefined_match': predefined_match,
+                        'confidence': predefined_match['confidence']
+                    }
+                else:
+                    return {
+                        'flow_type': 'DYNAMIC_SQL',
+                        'classification': initial_classification,
+                        'confidence': initial_classification['confidence']
+                    }
+            
+            elif initial_classification['requires_cdg_agent']:
+                return {
+                    'flow_type': 'CDG_AGENT',
+                    'classification': initial_classification,
+                    'confidence': initial_classification['confidence']
+                }
+            
+            else:
+                return {
+                    'flow_type': 'CONTEXTUAL_RESPONSE',
+                    'classification': initial_classification,
+                    'confidence': initial_classification['confidence']
+                }
+                
+        except Exception as e:
+            logger.error(f"Error en clasificación: {e}")
+            return {
+                'flow_type': 'DYNAMIC_SQL',
+                'classification': {'intent': 'fallback', 'requires_sql': True},
+                'confidence': 0.3
+            }
     
-    def build_feedback_processing_prompt(*args, **kwargs): return "Mock feedback prompt"
-    def build_conversation_context_prompt(*args, **kwargs): return "Mock context prompt"
-    def build_personalization_learning_prompt(*args, **kwargs): return "Mock personalization prompt"
-    def build_intent_clarification_prompt(*args, **kwargs): return "Mock clarification prompt"
-    def build_dynamic_dashboard_prompt(*args, **kwargs): return "Mock dashboard prompt"
+    async def _classify_query_type(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 CLASIFICACIÓN CONTEXTUAL INTELIGENTE
+        """
+        try:
+            # ✅ NUEVO: Analizar contexto del usuario
+            user_context = ""
+            if context:
+                gestor_id = context.get('gestor_id')
+                periodo = context.get('periodo', '2025-10')
+
+                if gestor_id:
+                    user_context = f"\nCONTEXTO USUARIO: Gestor ID {gestor_id}, período {periodo}"
+
+            classification_prompt = f"""
+            Analiza esta consulta de control de gestión bancario considerando el contexto específico del usuario:
+
+            CONSULTA: "{user_message}"{user_context}
+
+            🧠 ANÁLISIS SEMÁNTICO REQUERIDO:
+            - Si pregunta incluye "me comparo", "mi posición", "cómo estoy" → ES PERSONAL, usar gestor_id del contexto
+            - Si pregunta es genérica "ranking gestores" → ES GENERAL, no usar gestor_id específico
+            - Si menciona "oportunidades", "mejora" → INCLUIR análisis de recomendaciones
+
+            🧠 ANÁLISIS DE INTENCIÓN ESPECÍFICO:
+            - "mis/mi" + "mejores/top" + "clientes" → GESTOR personal query 
+            - "ranking/listado" SIN "mi/mis" → COMPARATIVE general query
+            - "problemas/alertas/desviaciones" → DEVIATION analysis
+            - "incentivos/bonus/comisiones" → INCENTIVE calculation
+            - "evolución/histórico/trimestre" → PERIOD analysis  
+            - Consultas básicas generales → BASIC queries
+            
+            🎯 CONTEXTO BANCARIO:
+            - Usuario con gestor_id específico = consultas personalizadas
+            - Consultas sin contexto personal = análisis generales
+            - Palabras como "comparo", "posición" = enfoque individual
+
+
+
+            Responde en JSON con esta estructura:
+            {{
+                "intent": "tipo_de_consulta",
+                "requires_sql": true/false,
+                "requires_cdg_agent": true/false,
+                "is_personal_query": true/false,
+                "context_sensitivity": "high/medium/low",
+                "recommended_focus": "individual/comparative/general",
+                "complexity": "simple/medium/complex",
+                "confidence": 0.0-1.0,
+                "reasoning": "explicación detallada"
+            }}
+
+            CRITERIOS MEJORADOS:
+            - is_personal_query: true si la pregunta es sobre "mi" performance
+            - context_sensitivity: qué tan importante es el contexto del usuario
+            - recommended_focus: cómo enfocar la respuesta
+
+            EJEMPLOS CONTEXTUALES:
+            - "¿Cómo me comparo?" + gestor_id=27 → is_personal_query: true, focus: individual
+            - "Ranking de gestores" + gestor_id=27 → is_personal_query: false, focus: general  
+            - "Mis oportunidades de mejora" + gestor_id=27 → is_personal_query: true, focus: individual
+            """
+
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_INTENT_CLASSIFICATION_PROMPT},
+                        {"role": "user", "content": classification_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=400  # ✅ Aumentado para análisis detallado
+                )
+
+                result_text = response.choices[0].message.content.strip()
+                return self._parse_classification_response(result_text)
+            else:
+                return self._fallback_classification(user_message)
+
+        except Exception as e:
+            logger.error(f"Error en clasificación contextual: {e}")
+            return self._fallback_classification(user_message)
+
     
-    IMPORTS_SUCCESSFUL = False
-    CHART_GENERATOR_AVAILABLE = False
-    BASIC_QUERIES_AVAILABLE = False
+    async def _find_predefined_query(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 BÚSQUEDA SECUENCIAL ESTRICTA - UN CATÁLOGO A LA VEZ
+        Previene mezcla de catálogos y asegura selección correcta
+        """
+        try:
+            # 🔥 ORDEN INTELIGENTE: Empezar por el más probable
+            catalog_priority = self._determine_catalog_priority(user_message, context)
+
+            logger.info(f"🔍 Búsqueda secuencial en orden: {catalog_priority}")
+
+            # 🔥 BUSCAR UNO POR UNO - NUNCA MEZCLAR
+            for catalog_name in catalog_priority:
+                catalog_content = self.query_catalogs.get(catalog_name)
+                if not catalog_content:
+                    continue
+
+                logger.info(f"🔎 Buscando SOLO en: {catalog_name}")
+
+                # 🎯 BÚSQUEDA EXCLUSIVA EN UN SOLO CATÁLOGO
+                match_result = await self._search_exclusive_catalog(
+                    user_message, 
+                    catalog_name, 
+                    catalog_content,
+                    context
+                )
+
+                if match_result['found'] and match_result['confidence'] > 0.75:
+                    logger.info(f"✅ MATCH exclusivo en {catalog_name}: {match_result['function_name']}")
+                    return {
+                        'found': True,
+                        'catalog': catalog_name,  # 🔥 GARANTIZADO CORRECTO
+                        'function_name': match_result['function_name'],
+                        'parameters': match_result.get('parameters', {}),
+                        'confidence': match_result['confidence'],
+                        'reasoning': f"Función exclusiva de {catalog_name}: {match_result['reasoning']}"
+                    }
+
+            # No se encontró en ningún catálogo
+            logger.info("❌ No se encontró función específica en ningún catálogo")
+            return {'found': False, 'confidence': 0.0}
+
+        except Exception as e:
+            logger.error(f"Error en búsqueda secuencial: {e}")
+            return {'found': False, 'confidence': 0.0}
+
+    def _determine_catalog_priority(self, user_message: str, context: Dict = None) -> List[str]:
+        """🎯 DETERMINA ORDEN DE BÚSQUEDA INTELIGENTE"""
+        message_lower = user_message.lower()
+
+        # 🔥 ESPECIAL: Si menciona "mejores clientes", BASIC tiene prioridad ABSOLUTA
+        if any(phrase in message_lower for phrase in ['mejores clientes', 'clientes mejores', 'clientes por margen', 'ranking clientes']):
+            return ['basic', 'gestor']  # 🎯 BASIC primero para clientes
+
+        # 🔥 ESPECIAL: Si menciona "clientes", BASIC tiene prioridad alta
+        if 'clientes' in message_lower:
+            return ['basic', 'gestor', 'comparative']
+
+        # 🔥 ANÁLISIS PERSONAL vs GENERAL
+        if any(word in message_lower for word in ['mi', 'me', 'mis', 'cómo estoy', 'me comparo']):
+            return ['gestor', 'basic', 'comparative']
+
+        # 🔥 ANÁLISIS POR PALABRAS CLAVE
+        if any(word in message_lower for word in ['desviación', 'problema', 'alerta']):
+            return ['deviation', 'basic', 'gestor']
+
+        if any(word in message_lower for word in ['ranking', 'comparar', 'mejor', 'top']):
+            return ['comparative', 'basic', 'gestor']
+
+        if any(word in message_lower for word in ['incentivo', 'bonus', 'comisión']):
+            return ['incentive', 'basic', 'gestor']
+
+        if any(word in message_lower for word in ['histórico', 'evolución', 'trimestre']):
+            return ['period', 'basic', 'gestor']
+
+        # 🔥 DEFAULT: BASIC primero para consultas generales
+        return ['basic', 'gestor', 'comparative', 'deviation', 'incentive', 'period']
+
+
+    async def _search_exclusive_catalog(self, user_message: str, catalog_name: str, 
+                                       catalog_content: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 BÚSQUEDA EXCLUSIVA EN UN SOLO CATÁLOGO - NO PUEDE CONFUNDIRSE
+        """
+        search_prompt = f"""
+        Busca EXCLUSIVAMENTE en este catálogo específico una función para esta consulta:
+
+        CONSULTA: "{user_message}"
+
+        CATÁLOGO EXCLUSIVO: {catalog_name.upper()}
+        {catalog_content}
+
+        🚨 REGLAS ABSOLUTAS:
+        1. SOLO buscar funciones que existan en {catalog_name.upper()}
+        2. NO mencionar otros catálogos  
+        3. function_name EXACTAMENTE como aparece aquí
+        4. Si NO hay función apropiada en {catalog_name.upper()}, devolver found: false
+
+        RESPONDE EN JSON:
+        {{
+            "found": true/false,
+            "function_name": "nombre_exacto_del_catalogo_{catalog_name}",
+            "parameters": {{}},
+            "confidence": 0.0-1.0,
+            "reasoning": "Por qué esta función de {catalog_name} es apropiada O por qué no se encontró en {catalog_name}"
+        }}
+
+        ⚠️ CRÍTICO: found=true SOLO si hay función PERFECTA en {catalog_name.upper()}
+        """
+
+        if IMPORTS_SUCCESSFUL:
+            response = self.llm_client.chat.completions.create(
+                model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                messages=[
+                    {"role": "system", "content": f"Eres un buscador EXCLUSIVO del catálogo {catalog_name}. NO puedes usar otros catálogos."},
+                    {"role": "user", "content": search_prompt}
+                ],
+                temperature=0.05,  # 🔥 MUY BAJO para precisión absoluta
+                max_tokens=200
+            )
+
+            result_text = response.choices[0].message.content.strip()
+            return self._parse_exclusive_response(result_text, catalog_name)
+        else:
+            return {'found': False, 'confidence': 0.0}
+
+    def _parse_exclusive_response(self, response_text: str, expected_catalog: str) -> Dict[str, Any]:
+        """Parsea respuesta exclusiva con validación de catálogo"""
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+
+                return {
+                    'found': result.get('found', False),
+                    'function_name': result.get('function_name', ''),
+                    'parameters': result.get('parameters', {}),
+                    'confidence': float(result.get('confidence', 0.0)),
+                    'reasoning': result.get('reasoning', '')
+                }
+        except:
+            pass
+        
+        return {'found': False, 'confidence': 0.0}
+
+
+    
+    def _fallback_classification(self, user_message: str) -> Dict[str, Any]:
+        """Clasificación fallback básica por palabras clave"""
+        message_lower = user_message.lower() if user_message else ""
+        
+        if any(word in message_lower for word in ['gráfico', 'chart', 'cambia', 'modifica']):
+            return {
+                'intent': 'chart_modification',
+                'requires_sql': False,
+                'requires_cdg_agent': False,
+                'complexity': 'simple',
+                'confidence': 0.8,
+                'reasoning': 'Modificación de gráfico detectada'
+            }
+        
+        elif any(word in message_lower for word in ['análisis', 'explica', 'por qué', 'compara']):
+            return {
+                'intent': 'analysis_request',
+                'requires_sql': True,
+                'requires_cdg_agent': True,
+                'complexity': 'complex',
+                'confidence': 0.7,
+                'reasoning': 'Análisis complejo detectado'
+            }
+        
+        elif any(word in message_lower for word in ['qué es', 'define', 'concepto', 'significa']):
+            return {
+                'intent': 'conceptual_query',
+                'requires_sql': False,
+                'requires_cdg_agent': False,
+                'complexity': 'simple',
+                'confidence': 0.8,
+                'reasoning': 'Pregunta conceptual detectada'
+            }
+        
+        else:
+            return {
+                'intent': 'data_query',
+                'requires_sql': True,
+                'requires_cdg_agent': False,
+                'complexity': 'medium',
+                'confidence': 0.6,
+                'reasoning': 'Consulta de datos general'
+            }
+
+    def _parse_classification_response(self, response_text: str) -> Dict[str, Any]:
+        """Parsea respuesta de clasificación del LLM"""
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                return {
+                    'intent': result.get('intent', 'general_query'),
+                    'requires_sql': result.get('requires_sql', True),
+                    'requires_cdg_agent': result.get('requires_cdg_agent', False),
+                    'is_personal_query': result.get('is_personal_query', False),
+                    'context_sensitivity': result.get('context_sensitivity', 'medium'),
+                    'recommended_focus': result.get('recommended_focus', 'general'),
+                    'complexity': result.get('complexity', 'medium'),
+                    'confidence': float(result.get('confidence', 0.7)),
+                    'reasoning': result.get('reasoning', 'Análisis automático')
+                }
+        except Exception as e:
+            logger.error(f"Error parseando clasificación: {e}")
+
+        return self._fallback_classification(response_text)
+
 
 # ============================================================================
-# MODELOS DE DATOS
+# 🎯 EJECUTOR DE QUERIES PREDEFINIDAS
 # ============================================================================
 
-class ChatMessage(BaseModel):
+class PredefinedQueryExecutor:
+    """
+    🎯 EJECUTOR que puede llamar a CUALQUIER función de los 6 catálogos de queries
+    """
+    
+    def __init__(self):
+        self.query_engines = {
+            'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
+            'comparative': comparative_queries if IMPORTS_SUCCESSFUL else None,
+            'deviation': deviation_queries if IMPORTS_SUCCESSFUL else None,
+            'gestor': gestor_queries if IMPORTS_SUCCESSFUL else None,
+            'incentive': incentive_queries if IMPORTS_SUCCESSFUL else None,
+            'period': period_queries if IMPORTS_SUCCESSFUL else None
+        }
+    
+    async def execute_predefined_query(self, match_info: Dict[str, Any], user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 EJECUTA query predefinida con VALIDACIÓN ESTRICTA del catálogo
+        """
+        try:
+            catalog = match_info.get('catalog', '').lower().strip()
+            function_name = match_info.get('function_name', '').strip()
+
+            # 🔥 VALIDACIÓN ESTRICTA
+            if not catalog or not function_name:
+                logger.error("❌ Catálogo o función vacía")
+                return {'success': False, 'error': 'Información de función incompleta'}
+
+            logger.info(f"🎯 Ejecutando query predefinida: {catalog}.{function_name}")
+
+            # Obtener engine con validación
+            engine = self.query_engines.get(catalog)
+            if not engine:
+                logger.error(f"❌ Engine no encontrado: {catalog}")
+                available_catalogs = list(self.query_engines.keys())
+                return {
+                    'success': False, 
+                    'error': f'Catálogo {catalog} no disponible. Disponibles: {available_catalogs}'
+                }
+
+            # Validar función existe
+            if not hasattr(engine, function_name):
+                logger.error(f"❌ Función no encontrada: {function_name} en {catalog}")
+                available_functions = [attr for attr in dir(engine) if not attr.startswith('_')]
+                return {
+                    'success': False,
+                    'error': f'Función {function_name} no existe en {catalog}. Disponibles: {available_functions[:10]}'
+                }
+
+            # 🎯 EJECUTAR con parámetros enriquecidos
+            query_function = getattr(engine, function_name)
+            enhanced_params = self._enhance_parameters(match_info.get('parameters', {}), context, user_message)
+
+            # 🔥 NUEVO: VALIDAR PARÁMETROS COMPATIBLES
+            import inspect
+            function_signature = inspect.signature(query_function)
+            valid_params = {}
+
+            for param_name, param_value in enhanced_params.items():
+                if param_name in function_signature.parameters:
+                    valid_params[param_name] = param_value
+                else:
+                    logger.warning(f"⚠️ Parámetro {param_name} no válido para {function_name}, ignorado")
+
+            logger.info(f"🔧 Ejecutando {catalog}.{function_name} con parámetros válidos: {valid_params}")
+
+            if callable(query_function):
+                if valid_params:  # 🔥 Usar parámetros validados
+                    result = query_function(**valid_params)
+                else:
+                    result = query_function()
+
+
+                return {
+                    'success': True,
+                    'data': result.data if hasattr(result, 'data') else result,
+                    'metadata': {
+                        'catalog': catalog,
+                        'function': function_name,
+                        'parameters_used': enhanced_params,
+                        'execution_time': getattr(result, 'execution_time', 0),
+                        'row_count': len(result.data) if hasattr(result, 'data') and isinstance(result.data, list) else 0
+                    }
+                }
+            else:
+                return {'success': False, 'error': f'{function_name} no es ejecutable'}
+
+        except Exception as e:
+            logger.error(f"❌ Error ejecutando query predefinida: {e}")
+            return {'success': False, 'error': f'Error de ejecución: {str(e)}'}
+
+    
+    def _enhance_parameters(self, base_params: Dict, context: Dict, user_message: str) -> Dict[str, Any]:
+        """
+        🎯 ENRIQUECE PARÁMETROS CON CONTEXTO INTELIGENTE
+        """
+        enhanced = base_params.copy()
+
+        # 🔥 DEBUG: Ver qué llega
+        logger.info(f"🔍 Parámetros base: {base_params}")
+        logger.info(f"🔍 Contexto recibido: {context}")
+        logger.info(f"🔍 Mensaje: {user_message}")
+
+        # 🔥 GESTOR ID - PRIORIDAD MÁXIMA
+        if 'gestor_id' not in enhanced and context:
+            gestor_id = context.get('gestor_id')
+            if gestor_id:
+                enhanced['gestor_id'] = str(gestor_id)  # Asegurar string
+                logger.info(f"🎯 Contexto gestor detectado: {gestor_id}")
+            else:
+                logger.warning("🚨 gestor_id NO encontrado en contexto")
+
+        # 📅 PERÍODO INTELIGENTE  
+        if 'periodo' not in enhanced and context:
+            periodo = context.get('periodo') or self._extract_period_from_message(user_message)
+            if periodo:
+                enhanced['periodo'] = periodo
+                logger.info(f"📅 Período aplicado: {periodo}")
+
+        # 🎯 ANÁLISIS SEMÁNTICO DE LA PREGUNTA
+        message_lower = user_message.lower()
+
+        # 🔥 NUEVO: DETECCIÓN INTELIGENTE DE CONSULTAS PERSONALES
+        if any(word in message_lower for word in ['me comparo', 'mi posición', 'cómo estoy', 'mi ranking']):
+            if context and context.get('gestor_id') and 'gestor_id' not in enhanced:
+                enhanced['gestor_id'] = str(context.get('gestor_id'))
+                enhanced['focus_mode'] = 'individual'  # ✅ NUEVO: Modo enfocado
+                enhanced['is_personal_query'] = True   # ✅ NUEVO: Flag para formatter
+                logger.info(f"🎯 Análisis personal detectado para gestor {enhanced['gestor_id']}")
+
+        # 🔥 NUEVO: CONTEXTO ADICIONAL PARA FORMATTER
+        if context and context.get('gestor_id'):
+            enhanced['gestor_id'] = str(context.get('gestor_id'))
+
+
+        # Para análisis de desviaciones
+        if any(word in message_lower for word in ['desviación', 'problema', 'alerta']):
+            enhanced['umbral'] = enhanced.get('umbral', 15.0)
+            enhanced['only_critical'] = True  # ✅ NUEVO: Solo críticos
+
+        # Para oportunidades de mejora
+        if any(word in message_lower for word in ['oportunidad', 'mejora', 'optimizar']):
+            enhanced['include_recommendations'] = True  # ✅ NUEVO: Incluir recomendaciones
+            enhanced['analysis_depth'] = 'detailed'
+
+        # Limpiar parámetros None
+        cleaned = {k: v for k, v in enhanced.items() if v is not None}
+
+        logger.info(f"🔧 Parámetros enriquecidos: {cleaned}")
+        return cleaned
+
+    
+    def _extract_period_from_message(self, user_message: str) -> Optional[str]:
+        """Extrae período del mensaje del usuario"""
+        import re
+        
+        # Buscar patrones YYYY-MM
+        period_pattern = r'20\d{2}-\d{2}'
+        match = re.search(period_pattern, user_message)
+        if match:
+            return match.group(0)
+        
+        # Palabras clave para períodos
+        if 'octubre' in user_message.lower():
+            return '2025-10'
+        elif 'septiembre' in user_message.lower():
+            return '2025-09'
+        
+        return '2025-10'  # Default actual
+
+# ============================================================================
+# INSPECTOR DINÁMICO DE ESQUEMA DE BASE DE DATOS (HEREDADO DEL V9.0)
+# ============================================================================
+
+class DatabaseSchemaInspector:
+    """Inspector dinámico de esquema - heredado del v9.0"""
+    
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or settings.DATABASE_PATH
+        self.schema_cache = {}
+        self.cache_timestamp = None
+        self.cache_duration = 300  # 5 minutos
+    
+    def get_database_schema(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """Obtiene el esquema completo de la base de datos dinámicamente"""
+        try:
+            current_time = datetime.now()
+            if (not force_refresh and 
+                self.schema_cache and 
+                self.cache_timestamp and 
+                (current_time - self.cache_timestamp).seconds < self.cache_duration):
+                return self.schema_cache
+            
+            logger.info("🔍 Inspeccionando esquema de base de datos...")
+            
+            schema = {
+                'tables': {},
+                'metadata': {
+                    'last_updated': current_time.isoformat(),
+                    'total_tables': 0,
+                    'total_records': 0
+                }
+            }
+            
+            # Obtener todas las tablas
+            tables_query = """
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                tables = query_executor.execute_query(tables_query)
+            else:
+                tables = [
+                    {'name': 'MAESTRO_GESTORES'},
+                    {'name': 'MAESTRO_CONTRATOS'},
+                    {'name': 'PRECIO_POR_PRODUCTO_REAL'},
+                    {'name': 'PRECIO_POR_PRODUCTO_STD'}
+                ]
+            
+            total_records = 0
+            
+            for table_info in tables:
+                table_name = table_info['name']
+                table_schema = self._get_table_schema(table_name)
+                record_count = self._get_table_count(table_name)
+                total_records += record_count
+                
+                schema['tables'][table_name] = {
+                    'columns': table_schema,
+                    'record_count': record_count,
+                    'description': self._get_table_description(table_name)
+                }
+            
+            schema['metadata']['total_tables'] = len(tables)
+            schema['metadata']['total_records'] = total_records
+            
+            self.schema_cache = schema
+            self.cache_timestamp = current_time
+            
+            logger.info(f"✅ Esquema cargado: {len(tables)} tablas, {total_records} registros totales")
+            return schema
+            
+        except Exception as e:
+            logger.error(f"❌ Error inspeccionando esquema: {e}")
+            return self._get_fallback_schema()
+    
+    def _get_table_schema(self, table_name: str) -> List[Dict[str, Any]]:
+        try:
+            if IMPORTS_SUCCESSFUL:
+                return query_executor.get_table_info(table_name)
+            else:
+                return [{'name': 'ID', 'type': 'INTEGER'}, {'name': 'DESC', 'type': 'TEXT'}]
+        except Exception as e:
+            logger.warning(f"Error obteniendo esquema de {table_name}: {e}")
+            return []
+    
+    def _get_table_count(self, table_name: str) -> int:
+        try:
+            if IMPORTS_SUCCESSFUL:
+                return query_executor.get_table_count(table_name)
+            else:
+                return 100
+        except Exception as e:
+            logger.warning(f"Error contando registros en {table_name}: {e}")
+            return 0
+    
+    def _get_table_description(self, table_name: str) -> str:
+        descriptions = {
+            'MAESTRO_GESTORES': 'Catálogo del equipo comercial con especialización por segmento y ubicación',
+            'MAESTRO_CONTRATOS': 'Registro central de contratos activos - núcleo del sistema de costes',
+            'MAESTRO_CLIENTES': 'Base de datos de clientes activos con asignación comercial',
+            'MAESTRO_PRODUCTOS': 'Catálogo de productos financieros con modelo de negocio',
+            'MAESTRO_SEGMENTOS': 'Clasificación estratégica de cartera por tipología cliente',
+            'MAESTRO_CENTROS': 'Estructura organizativa de centros operativos y de soporte',
+            'PRECIO_POR_PRODUCTO_REAL': 'Precios reales mensuales calculados - núcleo control de gestión',
+            'PRECIO_POR_PRODUCTO_STD': 'Precios estándar presupuestarios - referencia objetivos',
+            'MOVIMIENTOS_CONTRATOS': 'Motor transaccional - registra operaciones financieras en tiempo real',
+            'GASTOS_CENTRO': 'Registro mensual gastos directos por centro - base cálculo precios reales',
+            'MAESTRO_CUENTAS': 'Plan contable específico para productos financieros',
+            'MAESTRO_LINEA_CDR': 'Estructura del Cuadro de Resultados para reporting ejecutivo'
+        }
+        return descriptions.get(table_name, f'Tabla del sistema de control de gestión: {table_name}')
+    
+    def _get_fallback_schema(self) -> Dict[str, Any]:
+        return {
+            'tables': {
+                'MAESTRO_GESTORES': {
+                    'columns': [{'name': 'GESTOR_ID'}, {'name': 'DESC_GESTOR'}],
+                    'record_count': 30,
+                    'description': 'Gestores comerciales'
+                }
+            },
+            'metadata': {
+                'last_updated': datetime.now().isoformat(),
+                'total_tables': 1,
+                'total_records': 30
+            }
+        }
+
+# ============================================================================
+# QUERY BUILDER DINÁMICO (HEREDADO DEL V9.0 CON MEJORAS)
+# ============================================================================
+
+class EnhancedQueryBuilder:
+    """Query Builder mejorado con contexto bancario completo"""
+    
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or settings.DATABASE_PATH
+        self.schema_inspector = DatabaseSchemaInspector(self.db_path)
+        self.llm_client = iniciar_agente_llm()
+    
+    async def build_sql_for_any_query(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+        """Construye SQL para CUALQUIER consulta con contexto bancario completo"""
+        try:
+            database_schema = self.schema_inspector.get_database_schema()
+            schema_context = self._build_banking_schema_context(database_schema)
+            
+            sql_generation_prompt = f"""
+            Eres un especialista en Control de Gestión de Banca March. Genera SQL considerando nuestra lógica de negocio:
+
+            PREGUNTA: "{user_message}"
+
+            {schema_context}
+
+            🏦 LÓGICA DE NEGOCIO BANCA MARCH:
+
+            📊 CÁLCULO DE GASTOS POR CENTRO:
+            - USA PRECIO_POR_PRODUCTO_REAL (ya incluye redistribución automática)
+            - Fórmula: GastoRedistribuido = GastoCentral × (Contratos_Centro_i / Total_Contratos_Finalistas)
+            - Solo centros finalistas (IND_CENTRO_FINALISTA = 1, centros 1-5)
+            - Centros soporte (6-8) se redistribuyen automáticamente
+
+            💰 PRECIOS POR PRODUCTO:
+            - PRECIO_POR_PRODUCTO_REAL: Costes reales mensuales (recalculados cada mes)
+            - PRECIO_POR_PRODUCTO_STD: Estándares presupuestarios (fijos todo el año)
+            - Desviación crítica: >15% entre real vs estándar
+            - Valores NEGATIVOS = costes para el banco
+
+            📈 MÁRGENES Y KPIs:
+            - Margen Neto = (Ingresos - Gastos) / Ingresos × 100
+            - ROE = Beneficio Neto / Patrimonio × 100
+            - Eficiencia = Ingresos / Gastos
+
+            🎯 ESTRUCTURA ORGANIZATIVA:
+            - 5 centros finalistas (1-5) con contratos directos
+            - 3 centros soporte (6-8) sin contratos, gastos se redistribuyen
+            - 30 gestores especializados por segmento único
+            - 5 segmentos: N10101(Minorista), N10102(Privada), N10103(Empresas), N10104(Personal), N20301(Fondos)
+
+            📅 PERÍODOS:
+            - Actual: 2025-10-01 (FECHA_CALCULO para precios reales)
+            - Formato estándar: YYYY-MM
+
+            ⚠️ CONSULTAS TÍPICAS:
+            - "Gastos por centro" → Usar PRECIO_POR_PRODUCTO_REAL con JOINs correctos
+            - "Centros con problemas" → Analizar DESVIACIONES, no valores absolutos
+            - "Ranking gestores" → Incluir cálculo de margen real basado en ingresos-gastos
+
+            RESPONDE EN JSON:
+            {{
+                "sql": "SELECT...",
+                "explanation": "explicación de la lógica aplicada",
+                "tables_used": ["TABLA1", "TABLA2"],
+                "intent": "data_query",
+                "confidence": 0.8
+            }}
+
+            
+            IMPORTANTE:
+            - SQL válido y ejecutable
+            - Usa JOIN apropiados entre tablas relacionadas
+            - LIMIT 20 por defecto para consultas exploratorias
+            - Maneja casos NULL con COALESCE
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_SQL_GENERATION_SYSTEM_PROMPT},
+                        {"role": "user", "content": sql_generation_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=600
+                )
+                
+                result_text = response.choices[0].message.content.strip()
+                result = self._parse_llm_sql_response(result_text)
+            else:
+                result = self._generate_fallback_sql(user_message, database_schema)
+            
+            # Validar seguridad
+            sql = result.get('sql', '')
+            is_safe = is_query_safe(sql) if IMPORTS_SUCCESSFUL else True
+            
+            result.update({
+                'is_safe': is_safe,
+                'generated_at': datetime.now().isoformat(),
+                'schema_version': database_schema['metadata']['last_updated']
+            })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error construyendo SQL: {e}")
+            return {
+                'sql': 'SELECT "Error en construcción de query" as message',
+                'explanation': f'Error: {str(e)}',
+                'tables_used': [],
+                'intent': 'error',
+                'confidence': 0.0,
+                'is_safe': True
+            }
+    
+    def _build_banking_schema_context(self, schema: Dict[str, Any]) -> str:
+        """Construye contexto completo del esquema con enfoque bancario"""
+        context_lines = []
+        context_lines.append("BASE DE DATOS BM_CONTABILIDAD_CDG - ESQUEMA BANCARIO:")
+        context_lines.append(f"Total tablas: {schema['metadata']['total_tables']}")
+        context_lines.append(f"Total registros: {schema['metadata']['total_records']}")
+        context_lines.append("")
+        
+        for table_name, table_info in schema['tables'].items():
+            columns = table_info.get('columns', [])
+            record_count = table_info.get('record_count', 0)
+            description = table_info.get('description', '')
+            
+            context_lines.append(f"TABLA: {table_name}")
+            context_lines.append(f"Propósito: {description}")
+            context_lines.append(f"Registros: {record_count:,}")
+            
+            col_info = [f"{col.get('name', 'unknown')} ({col.get('type', 'unknown')})" 
+                       for col in columns[:8]]  # Limitar columnas mostradas
+            context_lines.append(f"Columnas: {', '.join(col_info)}")
+            context_lines.append("")
+        
+        return '\n'.join(context_lines)
+    
+    def _parse_llm_sql_response(self, llm_response: str) -> Dict[str, Any]:
+        """Parsea respuesta del LLM extrayendo SQL válido"""
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                sql = result.get('sql', '').strip()
+                
+                if self._is_complete_sql(sql):
+                    return {
+                        'sql': sql,
+                        'explanation': result.get('explanation', ''),
+                        'tables_used': result.get('tables_used', []),
+                        'intent': result.get('intent', 'data_query'),
+                        'confidence': float(result.get('confidence', 0.8))
+                    }
+        except:
+            pass
+        
+        return self._generate_fallback_sql("consulta general", {})
+    
+    def _is_complete_sql(self, sql: str) -> bool:
+        """Valida que el SQL sea completo y ejecutable"""
+        if not sql or len(sql.strip()) < 10:
+            return False
+        
+        sql_upper = sql.upper().strip()
+        if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
+            return False
+        
+        if sql_upper.startswith('SELECT') and 'FROM' not in sql_upper:
+            return False
+        
+        return True
+    
+    def _generate_fallback_sql(self, user_message: str, schema: Dict) -> Dict[str, Any]:
+        """SQL fallback inteligente"""
+        message_lower = user_message.lower()
+        
+        if any(word in message_lower for word in ['gestor', 'comercial']):
+            return {
+                'sql': 'SELECT GESTOR_ID, DESC_GESTOR, CENTRO FROM MAESTRO_GESTORES LIMIT 10',
+                'explanation': 'Consulta básica de gestores',
+                'tables_used': ['MAESTRO_GESTORES'],
+                'intent': 'data_query',
+                'confidence': 0.6
+            }
+        
+        return {
+            'sql': 'SELECT "Consulta no procesable" as mensaje',
+            'explanation': 'No se pudo generar SQL válido',
+            'tables_used': [],
+            'intent': 'error',
+            'confidence': 0.2
+        }
+
+# ============================================================================
+# FORMATEADOR DE RESPUESTAS NATURALES
+# ============================================================================
+
+class BankingResponseFormatter:
+    """Formateador especializado en contexto bancario"""
+    
+    def __init__(self):
+        self.llm_client = iniciar_agente_llm()
+    
+    async def format_response(self, data: Any, query: str, context: Dict = None) -> str:
+        """
+        Convierte datos en respuesta natural CON CONTEXTO PERSONAL
+        """
+        try:
+            if not data:
+                return "No se encontraron datos para su consulta. ¿Podría proporcionar más detalles específicos?"
+
+            # ✅ NUEVO: Detectar si es análisis personal
+            is_personal = context and context.get('is_personal_query', False)
+            gestor_id = context and context.get('gestor_id')
+            focus_mode = context and context.get('focus_mode')
+
+            # Preparar contexto de forma segura
+            safe_data = data if data is not None else []
+            safe_query = str(query) if query else "consulta"
+
+            # ✅ PROMPT CONTEXTUAL MEJORADO
+            banking_prompt = f"""
+            Genera una respuesta profesional PERSONALIZADA para esta consulta de Control de Gestión:
+
+            CONSULTA: "{safe_query}"
+            DATOS: {safe_data}
+
+            CONTEXTO ESPECÍFICO:
+            - Análisis personal: {is_personal}
+            - Gestor ID: {gestor_id}
+            - Modo de enfoque: {focus_mode}
+
+            🎯 INSTRUCCIONES ESPECÍFICAS:
+
+            SI ES ANÁLISIS PERSONAL (is_personal=true):
+            - Usar "Su posición es..." en lugar de "Pablo Moreno García es..."
+            - Enfocar en comparativa personal: "Usted está en posición X de Y gestores"  
+            - Incluir insights específicos para este gestor
+            - Dar recomendaciones personalizadas
+
+            SI ES ANÁLISIS GENERAL (is_personal=false):
+            - Mostrar ranking completo o información general
+            - No personalizar el enfoque
+
+            FORMATO REQUERIDO:
+            - Respuesta directa al inicio dirigida al usuario correcto
+            - Datos estructurados con bullets
+            - Insights o recomendaciones personalizadas al final
+            - Números con formato bancario (€, %, separadores de miles)
+
+            EJEMPLOS DE RESPUESTAS PERSONALIZADAS:
+            "📊 **Su Posición en el Ranking - Octubre 2025**
+
+            **Su Performance (Gestor {gestor_id}):**
+            - **Posición:** 15 de 30 gestores
+            - **Margen Neto:** 12.5%
+            - **Por encima de:** 50% de sus colegas
+
+            💡 **Oportunidades de Mejora:** Enfoque en productos de alto margen como Fondos de Inversión."
+            """
+
+            if IMPORTS_SUCCESSFUL:
+                response = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT},
+                        {"role": "user", "content": banking_prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=900  # ✅ Aumentado para respuestas personalizadas
+                )
+                return response.choices[0].message.content.strip()
+            else:
+                return self._format_personal_fallback(data, query, gestor_id, is_personal)
+
+        except Exception as e:
+            logger.error(f"Error formateando respuesta personalizada: {e}")
+            return f"Se procesaron los datos para '{query}', pero hubo un error en el formateo personalizado."
+
+    def _format_personal_fallback(self, data: Any, query: str, gestor_id: str, is_personal: bool) -> str:
+        """Formateo fallback con contexto personal"""
+        if is_personal and gestor_id:
+            return f"📊 **Su Análisis Personal (Gestor {gestor_id})**\n\nHe procesado su consulta '{query}' con enfoque en su performance individual.\n\n**Datos encontrados:** {len(data) if isinstance(data, list) else 'Información disponible'}"
+        else:
+            return f"📊 **Análisis General**\n\nResultados para: {query}\n\n**Registros:** {len(data) if isinstance(data, list) else 'Datos procesados'}"
+
+    
+    def _format_fallback(self, data: Any, query: str) -> str:
+        """Formateo fallback con contexto bancario"""
+        if isinstance(data, list) and len(data) > 0:
+            return f"📊 **Resultados para:** {query}\n\nSe encontraron **{len(data)} registros** en el sistema de Control de Gestión."
+        elif isinstance(data, dict):
+            formatted_items = []
+            for key, value in data.items():
+                if isinstance(value, (int, float)):
+                    if 'pct' in key.lower() or 'percent' in key.lower():
+                        formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value:.2f}%")
+                    elif 'eur' in key.lower() or 'euro' in key.lower():
+                        formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value:,.2f} €")
+                    else:
+                        formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value:,.2f}")
+                else:
+                    formatted_items.append(f"• **{key.replace('_', ' ').title()}:** {value}")
+            return f"📊 **Control de Gestión - {query.title()}**\n\n" + "\n".join(formatted_items)
+        else:
+            return f"📊 **Resultado:** {str(data)}"
+
+# ============================================================================
+# DATACLASSES PARA MENSAJES Y RESPUESTAS
+# ============================================================================
+
+@dataclass
+class ChatMessage:
     user_id: str
     message: str
     gestor_id: Optional[str] = None
     periodo: Optional[str] = None
-    include_charts: bool = True
-    include_recommendations: bool = True
-    context: Dict[str, Any] = {}
-    user_feedback: Optional[Dict[str, Any]] = None
+    context: Dict[str, Any] = field(default_factory=dict)
     current_chart_config: Optional[Dict[str, Any]] = None
-    chart_interaction_type: Optional[str] = None
-    use_basic_queries: bool = True
-    quick_mode: bool = False
+    include_charts: Optional[bool] = True
+    include_recommendations: Optional[bool] = True
 
-class ChatResponse(BaseModel):
+@dataclass
+class ChatResponse:
     response: str
     response_type: str
-    charts: List[Dict[str, Any]] = []
-    recommendations: List[str] = []
-    metadata: Dict[str, Any] = {}
-    execution_time: float
-    confidence_score: float
-    timestamp: str
-    session_id: str
-    chart_configs: List[Dict[str, Any]] = []
-    pivot_suggestions: List[str] = []
-    basic_queries_used: bool = False
-    data_sources: List[str] = []
-
-# ============================================================================
-# GESTIÓN DE SESIONES
-# ============================================================================
+    data: Optional[Any] = None
+    charts: List[Dict[str, Any]] = field(default_factory=list)
+    recommendations: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    execution_time: float = 0.0
+    confidence_score: float = 0.0
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    session_id: str = ""
 
 @dataclass
 class ChatSession:
     user_id: str
-    session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    conversation_history: List[Dict] = field(default_factory=list)
-    user_preferences: Dict[str, str] = field(default_factory=lambda: {
-        'communication_style': 'professional',
-        'technical_level': 'intermediate',
-        'preferred_format': 'combined',
-        'response_length': 'medium'
-    })
-    personalization_data: Dict[str, Any] = field(default_factory=lambda: {
-        'frequent_queries': [],
-        'successful_interactions': 0,
-        'feedback_history': [],
-        'usage_patterns': {},
-        'basic_queries_usage': 0,
-        'quick_queries_count': 0
-    })
-    current_chart_configs: List[Dict] = field(default_factory=list)
-    chart_interaction_history: List[Dict] = field(default_factory=list)
-    chart_preferences: Dict[str, Any] = field(default_factory=lambda: {
-        'preferred_chart_type': 'bar',
-        'chart_complexity': 'medium',
-        'interactive_mode': True
-    })
-    created_at: datetime = field(default_factory=datetime.now)
-    last_active: datetime = field(default_factory=datetime.now)
-    
-    def add_interaction(self, user_msg: str, agent_resp: Dict, intent: str, satisfaction_rating: Optional[int] = None):
-        interaction = {
-            'timestamp': datetime.now().isoformat(),
-            'user_message': user_msg,
-            'agent_response': agent_resp,
-            'intent': intent,
-            'session_id': self.session_id,
-            'satisfaction_rating': satisfaction_rating,
-            'charts_generated': len(agent_resp.get('charts', [])),
-            'chart_interaction': 'current_chart_config' in user_msg,
-            'basic_queries_used': agent_resp.get('basic_queries_used', False),
-            'data_sources': agent_resp.get('data_sources', [])
-        }
-        
-        self.conversation_history.append(interaction)
-        self.last_active = datetime.now()
-        self._update_personalization_data(user_msg, intent, satisfaction_rating, agent_resp)
-        
-        if len(self.conversation_history) > 50:
-            self.conversation_history = self.conversation_history[-50:]
-    
-    def _update_personalization_data(self, user_msg: str, intent: str, rating: Optional[int], agent_resp: Dict):
-        if intent not in self.personalization_data['frequent_queries']:
-            self.personalization_data['frequent_queries'].append(intent)
-        
-        if rating and rating >= 4:
-            self.personalization_data['successful_interactions'] += 1
-        
-        msg_length = len(user_msg.split())
-        if msg_length < 5:
-            self.user_preferences['response_length'] = 'short'
-        elif msg_length > 15:
-            self.user_preferences['response_length'] = 'detailed'
-        
-        charts = agent_resp.get('charts', [])
-        if charts:
-            chart_types = [chart.get('type', 'bar') for chart in charts]
-            if chart_types:
-                from collections import Counter
-                most_common = Counter(chart_types).most_common(1)
-                if most_common:
-                    self.chart_preferences['preferred_chart_type'] = most_common[0][0]
-        
-        if 'cambia' in user_msg.lower() or 'gráfico' in user_msg.lower():
-            self.chart_interaction_history.append({
-                'timestamp': datetime.now().isoformat(),
-                'interaction_type': 'pivot',
-                'message': user_msg,
-                'rating': rating
-            })
-        
-        if agent_resp.get('basic_queries_used'):
-            self.personalization_data['basic_queries_usage'] += 1
-        
-        quick_keywords = ['resumen', 'cuántos', 'total', 'lista', 'rápido']
-        if any(keyword in user_msg.lower() for keyword in quick_keywords):
-            self.personalization_data['quick_queries_count'] += 1
-    
-    def add_chart_config(self, config: Dict[str, Any]):
-        self.current_chart_configs.append({
-            'config': config,
-            'timestamp': datetime.now().isoformat(),
-            'session_id': self.session_id
-        })
-        
-        if len(self.current_chart_configs) > 10:
-            self.current_chart_configs = self.current_chart_configs[-10:]
-    
-    def get_recent_context(self, max_interactions: int = 5) -> List[Dict]:
-        return self.conversation_history[-max_interactions:]
-    
-    def get_personalization_context(self) -> Dict[str, Any]:
-        return {
-            'user_preferences': self.user_preferences,
-            'chart_preferences': self.chart_preferences,
-            'personalization_data': self.personalization_data,
-            'total_interactions': len(self.conversation_history),
-            'chart_interactions': len(self.chart_interaction_history),
-            'basic_queries_usage': self.personalization_data.get('basic_queries_usage', 0),
-            'quick_queries_count': self.personalization_data.get('quick_queries_count', 0),
-            'last_activity': self.last_active.isoformat()
-        }
+    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    chart_configs: List[Dict[str, Any]] = field(default_factory=list)
+    preferences: Dict[str, Any] = field(default_factory=dict)
 
-class ChatSessionManager:
-    def __init__(self):
-        self.sessions: Dict[str, ChatSession] = {}
-        self.active_websockets: Dict[str, WebSocket] = {}  # ← AÑADIR ESTA LÍNEA
+# ============================================================================
+# 🚀 AGENTE DE CHAT PRINCIPAL - VERSION 10.0 COMPLETA
+# ============================================================================
+
+class UniversalChatAgentV10:
+    """
+    🚀 Chat Agent Universal v10.0 - VERSIÓN COMPLETA DEFINITIVA
     
-    def get_or_create_session(self, user_id: str) -> ChatSession:
+    Flujo perfecto implementado:
+    consulta_usuario → ¿Necesita SQL?
+        ├── SÍ → ¿Existe query predefinida?
+        │    ├── SÍ → Usar query predefinida  
+        │    └── NO → Generar SQL dinámicamente
+        └── NO → Respuesta LLM con contexto bancario
+    """
+    
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or settings.DATABASE_PATH
+        self.sessions: Dict[str, ChatSession] = {}
+        
+        # 🎯 COMPONENTES PRINCIPALES V10.0
+        self.classifier = IntelligentQueryClassifier()
+        self.predefined_executor = PredefinedQueryExecutor()
+        self.query_builder = EnhancedQueryBuilder(self.db_path)
+        self.formatter = BankingResponseFormatter()
+        self.llm_client = iniciar_agente_llm()
+        # Integraciones externas
+        self.cdg_agent = create_cdg_agent() if IMPORTS_SUCCESSFUL else None
+        self.chart_generator = None
+        if IMPORTS_SUCCESSFUL:
+            try:
+                self.chart_generator = QueryIntegratedChartGenerator()
+            except:
+                logger.warning("Chart generator no disponible")
+        
+        mode = "PRODUCTION" if IMPORTS_SUCCESSFUL else "FALLBACK"
+        print(f"\n{'='*60}")
+        print(f"🚀 UNIVERSAL CHAT AGENT v10.0 COMPLETO")
+        print(f"   Estado: ✅ LISTO")
+        print(f"   Modo: {mode}")
+        print(f"   Componentes: {'✅ Todos activos' if IMPORTS_SUCCESSFUL else '⚠️ Modo fallback'}")
+        print(f"   CDG Integration: {'✅ Conectado' if self.cdg_agent else '❌ No disponible'}")
+        print(f"{'='*60}\n")
+        logger.info("🚀 Universal Chat Agent v10.0 COMPLETO inicializado exitosamente")
+
+    
+    def get_session(self, user_id: str) -> ChatSession:
+        """Obtiene o crea sesión de usuario"""
         if user_id not in self.sessions:
-            self.sessions[user_id] = ChatSession(user_id=user_id)
-            logger.info(f"🆕 Nueva sesión creada para usuario {user_id}")
-        self.sessions[user_id].last_active = datetime.now()
+            self.sessions[user_id] = ChatSession(
+                user_id=user_id,
+                preferences={
+                    "response_style": "professional",
+                    "detail_level": "medium",
+                    "include_banking_context": True
+                }
+            )
         return self.sessions[user_id]
     
-    # ← AÑADIR ESTOS MÉTODOS:
-    def add_websocket_connection(self, user_id: str, websocket):
-        """Añade conexión WebSocket para un usuario"""
-        self.active_websockets[user_id] = websocket
-        logger.info(f"🔌 WebSocket conectado para usuario {user_id}")
-    
-    def remove_websocket_connection(self, user_id: str):
-        """Remueve conexión WebSocket para un usuario"""
-        if user_id in self.active_websockets:
-            del self.active_websockets[user_id]
-            logger.info(f"🔌 WebSocket desconectado para usuario {user_id}")
-    
-    def get_websocket_connection(self, user_id: str):
-        """Obtiene conexión WebSocket activa para un usuario"""
-        return self.active_websockets.get(user_id)
-    
-    def reset_session(self, user_id: str):
-        if user_id in self.sessions:
-            self.sessions[user_id].conversation_history.clear()
-            self.sessions[user_id].chart_interaction_history.clear()
-            self.sessions[user_id].current_chart_configs.clear()
-    
-    def cleanup_inactive_sessions(self):
-        """Limpia sesiones inactivas (opcional)"""
-        # Puedes implementar lógica de limpieza aquí si es necesario
-        pass
+    async def process_chat_message(self, message: ChatMessage) -> ChatResponse:
 
-# ============================================================================
-# AGENTE DE CHAT PRINCIPAL
-# ============================================================================
+        # ✅ LOGGING DE VERIFICACIÓN
+        logger.info(f"📨 Procesando mensaje de usuario: {message.user_id}")
+        logger.info(f"🎯 Gestor ID en mensaje: {message.gestor_id}")
+        logger.info(f"📋 Contexto completo: {message.context}")
 
-class CDGChatAgent:
-    """
-    Agente de Chat CDG v7.0 - Módulo de Servicio
-    
-    Funcionalidades principales:
-    - Integración completa con CDG Agent
-    - System Prompts profesionales especializados
-    - Personalización inteligente adaptativa
-    - Gestión conversacional avanzada
-    - Pivoteo conversacional de gráficos
-    - Consultas rápidas con basic_queries
-    """
-    
-    def __init__(self):
-        self.session_manager = ChatSessionManager()
-        self.llm_client = iniciar_agente_llm()
-        self.start_time = datetime.now()
-        self.imports_successful = IMPORTS_SUCCESSFUL
-        self.chart_generator_available = CHART_GENERATOR_AVAILABLE
-        self.basic_queries_available = BASIC_QUERIES_AVAILABLE
-        
-        # Inicializar CDG Agent
-        try:
-            self.cdg_agent = create_cdg_agent()  # ← Usar la función factory
-            logger.info("🎯 CDG Agent integrado exitosamente")
-        except Exception as e:
-            logger.error(f"❌ Error inicializando CDG Agent: {e}")
-            try:
-                self.cdg_agent = CDGAgent()  # ← Fallback directo
-                logger.info("🎯 CDG Agent inicializado con método directo")
-            except Exception as e2:
-                logger.error(f"❌ Error en fallback CDG Agent: {e2}")
-                self.cdg_agent = MockCDGAgent() if not IMPORTS_SUCCESSFUL else None
-
-        
-        # Inicializar Chart Generator
-        try:
-            if CHART_GENERATOR_AVAILABLE:
-                self.query_chart_generator = QueryIntegratedChartGenerator()
-                logger.info("📊 QueryIntegratedChartGenerator inicializado")
-            else:
-                self.query_chart_generator = None
-        except Exception as e:
-            logger.warning(f"⚠️ Error inicializando QueryIntegratedChartGenerator: {e}")
-            self.query_chart_generator = None
-        
-        # Inicializar Basic Queries
-        try:
-            if BASIC_QUERIES_AVAILABLE:
-                self.basic_queries = basic_queries
-                logger.info("📈 Basic Queries inicializado")
-            else:
-                self.basic_queries = None
-        except Exception as e:
-            logger.warning(f"⚠️ Error inicializando Basic Queries: {e}")
-            self.basic_queries = None
-        
-        # Sistemas de queries
-        try:
-            self.gestor_queries = GestorQueries()
-            self.comparative_queries = ComparativeQueries()
-            self.deviation_queries = DeviationQueries()
-            self.incentive_queries = IncentiveQueries()
-            self.period_queries = PeriodQueries()
-        except Exception as e:
-            logger.warning(f"Error inicializando sistemas de queries: {e}")
-            self.gestor_queries = self.comparative_queries = self.deviation_queries = self.incentive_queries = self.period_queries = type('MockQueries', (), {})()
-        
-        logger.info(f"🚀 CDG Chat Agent v7.0 módulo inicializado - Modo: {'PRODUCTION' if IMPORTS_SUCCESSFUL else 'MOCK'}")
-        
-        # 🆕 MEJORAR: Validar integración con CDG Agent
-        try:
-            if hasattr(self.cdg_agent, 'validate_basic_queries_integration'):
-                validation_result = self.cdg_agent.validate_basic_queries_integration()
-                if validation_result.get('overall_status') == 'OK':
-                    logger.info("✅ Validación de basic_queries en CDG Agent exitosa")
-                else:
-                    logger.warning(f"⚠️ Validación basic_queries: {validation_result.get('overall_status', 'UNKNOWN')}")
-        except Exception as e:
-            logger.warning(f"No se pudo validar integración CDG Agent: {e}")
-
-    
-    # ========================================================================
-    # MÉTODOS PRINCIPALES DE PROCESAMIENTO
-    # ========================================================================
-    
-    async def process_chat_message(self, chat_message: ChatMessage) -> ChatResponse:
-        """Procesamiento principal de mensajes de chat"""
+        """
+        🎯 MÉTODO PRINCIPAL: Implementa el flujo perfecto de clasificación y enrutamiento
+        """
         start_time = datetime.now()
-        session = self.session_manager.get_or_create_session(chat_message.user_id)
+        session = self.get_session(message.user_id)
         
         try:
-            # Sanitizar mensaje
-            message = self._sanitize_message(chat_message.message)
-            if not message:
-                return self._create_error_response("Mensaje vacío", session.session_id, start_time)
-            
-            # Detectar interacciones con gráficos
-            if self._is_chart_interaction(message, chat_message.current_chart_config):
-                logger.info("📊 Detectada interacción con gráfico")
-                return await self._handle_chart_interaction(chat_message, session, start_time)
-            
-            # Detectar consultas básicas
-            if chat_message.quick_mode or (chat_message.use_basic_queries and self._is_basic_query_request(message)):
-                logger.info("📈 Detectada consulta básica")
-                return await self._handle_basic_query(chat_message, session, start_time)
-            
-            # Clasificar intención
-            intent_analysis = await self._classify_user_intent(message, session)
-            intent = intent_analysis['intent']
-            confidence = intent_analysis['confidence']
-            
-            # Verificar si necesita aclaración
-            if self._should_request_clarification(intent_analysis):
-                logger.info(f"🔍 Solicitando aclaración - Intent: {intent}, Confianza: {confidence:.2f}")
-                return await self._request_clarification(chat_message, intent_analysis, session)
-            
-            # Extraer parámetros
-            gestor_id = self._extract_gestor_id(chat_message, session)
-            periodo_final = chat_message.periodo or self._extract_periodo_from_message(message)
-            
-            # Decisión: CDG Agent o simple
-            if intent_analysis['requires_cdg_agent']:
-                logger.info("🎯 DELEGANDO A CDG AGENT")
-                return await self._process_with_cdg_agent_professional(
-                    chat_message, message, gestor_id, periodo_final, session, start_time, intent_analysis
-                )
-            else:
-                logger.info("💬 PROCESANDO CON CHAT PROFESIONAL")
-                return await self._process_simple_chat_professional(
-                    chat_message, message, gestor_id, periodo_final, session, start_time, intent_analysis
+            if not message.message.strip():
+                return ChatResponse(
+                    response="Por favor, ingrese su consulta sobre control de gestión bancario.",
+                    response_type="validation_error",
+                    session_id=message.user_id,
+                    execution_time=0.0
                 )
             
-        except Exception as e:
-            logger.error(f"❌ Error procesando chat: {e}")
-            return self._create_error_response(str(e), session.session_id, start_time)
-    
-    # ========================================================================
-    # MÉTODOS DE DETECCIÓN Y CLASIFICACIÓN
-    # ========================================================================
-    
-    def _is_basic_query_request(self, message: str) -> bool:
-        """Detecta si es una consulta básica"""
-        basic_keywords = [
-            'resumen', 'summary', 'general', 'overview',
-            'cuántos', 'total', 'cantidad', 'count',
-            'ranking', 'top', 'mejor', 'peor',
-            'centros', 'oficinas', 'gestores',
-            'productos', 'contratos', 'clientes',
-            'rápido', 'quick', 'fast',
-            'lista', 'listar', 'mostrar'
-        ]
-        
-        message_lower = message.lower()
-        return any(keyword in message_lower for keyword in basic_keywords)
-    
-    def _is_chart_interaction(self, message: str, current_chart_config: Optional[Dict] = None) -> bool:
-        """Detecta si el mensaje es una interacción con gráfico"""
-        chart_keywords = [
-            'cambia', 'cambiar', 'modifica', 'modificar', 'convierte', 'convertir',
-            'gráfico', 'chart', 'barras', 'línea', 'circular', 'pie', 'líneas',
-            'mostrar', 'visualizar', 'ver en', 'como', 'tipo', 'formato'
-        ]
-        
-        message_lower = message.lower()
-        has_chart_keywords = any(k in message_lower for k in chart_keywords)
-        return has_chart_keywords and (current_chart_config is not None)
-
-    
-    
-    async def _classify_user_intent(self, message: str, session: ChatSession) -> Dict[str, Any]:
-        """Clasificación de intención con prompts profesionales"""
-        try:
-            # Detectar interacciones específicas primero
-            if self._is_chart_interaction(message):
-                return {
-                    'intent': 'chart_pivot',
-                    'confidence': 0.95,
-                    'requires_cdg_agent': False,
-                    'recommended_approach': 'chart_interaction'
+            # 🎯 PASO 1: CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE
+            routing_result = await self.classifier.classify_and_route(
+                message.message, 
+                {
+                    'history': session.conversation_history[-3:],
+                    'charts': session.chart_configs,
+                    'preferences': session.preferences,
+                    'gestor_id': message.gestor_id,
+                    'periodo': message.periodo
                 }
-            
-            if self._is_basic_query_request(message):
-                return {
-                    'intent': 'basic_query',
-                    'confidence': 0.88,
-                    'requires_cdg_agent': False,
-                    'recommended_approach': 'basic_queries'
-                }
-            
-            # Clasificación con LLM
-            client = self.llm_client
-            
-            classification_context = {
-                'message': message,
-                'recent_history': [h.get('intent', 'general') for h in session.get_recent_context(3)],
-                'user_preferences': session.user_preferences,
-                'chart_preferences': session.chart_preferences,
-                'basic_queries_usage': session.personalization_data.get('basic_queries_usage', 0),
-                'session_length': len(session.conversation_history)
-            }
-            
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": CHAT_INTENT_CLASSIFICATION_PROMPT
-                    },
-                    {
-                        "role": "user", 
-                        "content": f"Clasifica la siguiente consulta:\n\nMensaje: {message}\n\nContexto: {json.dumps(classification_context, ensure_ascii=False, indent=2)}"
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=200
             )
             
-            result_text = response.choices[0].message.content.strip()
+            flow_type = routing_result['flow_type']
+            logger.info(f"🎯 Flujo determinado: {flow_type} (confianza: {routing_result['confidence']})")
             
-            try:
-                result = json.loads(result_text)
-                intent = result.get('intent', 'general_inquiry')
-                confidence = result.get('confidence', 0.5)
-            except json.JSONDecodeError:
-                intent = 'general_inquiry'
-                confidence = 0.3
-            
-            logger.info(f"🎯 Intención clasificada: {intent} (confianza: {confidence:.2f})")
-            
-            return {
-                'intent': intent,
-                'confidence': confidence,
-                'requires_cdg_agent': self._intent_requires_cdg_agent(intent, message),
-                'recommended_approach': self._get_approach_for_intent(intent)
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error en clasificación de intención: {e}")
-            return {
-                'intent': 'general_inquiry',
-                'confidence': 0.3,
-                'requires_cdg_agent': self._requires_cdg_agent(message),
-                'recommended_approach': 'simple'
-            }
-    
-    # ========================================================================
-    # MÉTODOS DE PROCESAMIENTO ESPECÍFICO
-    # ========================================================================
-    
-    async def _handle_basic_query(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
-        """Maneja consultas básicas usando basic_queries"""
-        logger.info("📈 Procesando consulta básica")
-        
-        try:
-            if not self.basic_queries_available:
-                return await self._create_basic_query_fallback_response(chat_message, session, start_time)
-            
-            message_lower = chat_message.message.lower()
-            
-            # Detectar tipo de consulta básica
-            if any(word in message_lower for word in ['resumen', 'summary', 'general', 'overview']):
-                data = self.basic_queries.get_resumen_general()
-                response_type = "quick_summary"
-                response_text = self._format_basic_summary(data, session)
+            # 🎯 PASO 2: EJECUTAR FLUJO CORRESPONDIENTE
+            if flow_type == 'PREDEFINED_QUERY':
+                return await self._execute_predefined_flow(message, session, routing_result, start_time)
                 
-            elif any(word in message_lower for word in ['ranking', 'top', 'mejor', 'gestores']):
-                metric = 'contratos'
-                if any(word in message_lower for word in ['clientes', 'clients']):
-                    metric = 'clientes'
+            elif flow_type == 'DYNAMIC_SQL':
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
                 
-                data = (self.basic_queries.count_contratos_by_gestor() if metric == 'contratos' 
-                       else self.basic_queries.count_clientes_by_gestor())
-                response_type = "gestores_ranking"
-                response_text = self._format_gestores_ranking(data, metric, session)
+            elif flow_type == 'CDG_AGENT':
+                return await self._execute_cdg_agent_flow(message, session, routing_result, start_time)
+                
+            elif flow_type == 'CONTEXTUAL_RESPONSE':
+                return await self._execute_contextual_flow(message, session, routing_result, start_time)
                 
             else:
-                # Consulta genérica
-                data = self.basic_queries.get_resumen_general()
-                response_type = "quick_summary"
-                response_text = self._format_basic_summary(data, session)
-            
+                # Fallback a SQL dinámico
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+        
+        except Exception as e:
+            logger.error(f"❌ Error procesando mensaje: {e}")
             execution_time = (datetime.now() - start_time).total_seconds()
             
             return ChatResponse(
-                response=response_text,
-                response_type=response_type,
-                charts=[],
-                recommendations=self._get_basic_query_recommendations(response_type),
-                metadata={
-                    'source': 'basic_queries',
-                    'basic_queries_available': True,
-                    'query_type': response_type,
-                    'data_count': len(data) if isinstance(data, list) else len(data.keys()) if isinstance(data, dict) else 1
-                },
+                response=f"Disculpe, hubo un error procesando su consulta: {str(e)}. Por favor, intente reformularla.",
+                response_type="error",
+                metadata={"error": str(e)},
                 execution_time=execution_time,
-                confidence_score=0.9,
-                timestamp=datetime.now().isoformat(),
-                session_id=session.session_id,
-                chart_configs=[],
-                pivot_suggestions=[],
-                basic_queries_used=True,
-                data_sources=['basic_queries']
+                session_id=message.user_id
+            )
+    
+    async def _execute_predefined_flow(self, message: ChatMessage, session: ChatSession, 
+                                     routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Query predefinida encontrada - ejecutarla directamente"""
+        try:
+            logger.info("🎯 Ejecutando FLUJO PREDEFINIDO")
+            
+            predefined_match = routing_result['predefined_match']
+            
+            # Ejecutar query predefinida
+            execution_result = await self.predefined_executor.execute_predefined_query(
+                predefined_match, 
+                message.message,
+                {
+                    'gestor_id': message.gestor_id,
+                    'periodo': message.periodo,
+                    'context': message.context
+                }
             )
             
-        except Exception as e:
-            logger.error(f"Error manejando consulta básica: {e}")
-            return self._create_error_response(f"Error procesando consulta básica: {str(e)}", session.session_id, start_time)
-    
-    async def _handle_chart_interaction(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
-        """Maneja interacciones específicas con gráficos"""
-        logger.info("📊 Procesando interacción con gráfico")
-        
-        try:
-            if not CHART_GENERATOR_AVAILABLE:
-                return self._create_chart_fallback_response(chat_message, session, start_time)
+            if not execution_result['success']:
+                logger.warning(f"Query predefinida falló: {execution_result['error']}")
+                # Fallback a SQL dinámico
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
             
-            # Obtener configuración actual del gráfico
-            current_config = chat_message.current_chart_config or {}
-            if not current_config and session.current_chart_configs:
-                current_config = session.current_chart_configs[-1]['config']
-            
-            # Usar función de pivoteo conversacional CON NUEVAS CAPACIDADES
-            pivot_result = pivot_chart_with_query_integration(
-                chat_message.message,
-                current_config
+            # 🔥 FORMATEAR CON CONTEXTO PERSONAL MEJORADO
+            formatted_response = await self.formatter.format_response(
+                execution_result['data'],
+                message.message,
+                {
+                    'predefined_query': True,
+                    'metadata': execution_result['metadata'],
+                    'preferences': session.preferences,
+                    'is_personal_query': execution_result['metadata'].get('parameters_used', {}).get('is_personal_query', False),
+                    'gestor_id': message.gestor_id,
+                    'focus_mode': execution_result['metadata'].get('parameters_used', {}).get('focus_mode')
+                }
             )
             
-            # 🆕 NUEVO: Intentar usar el nuevo handler si está disponible
-            try:
-                # Verificar si el CDG Agent tiene la nueva función
-                if hasattr(self.cdg_agent, 'handle_chart_change_with_prompt'):
-                    enhanced_result = await self.cdg_agent.handle_chart_change_with_prompt(
-                        chat_message.message,
-                        current_config,
-                        {'agente': 'CDG_Chat', 'usuario_id': chat_message.user_id}
-                    )
-                    if enhanced_result.get('status') == 'success':
-                        pivot_result = enhanced_result
-            except Exception as e:
-                logger.warning(f"No se pudo usar enhanced chart handler: {e}")
-
-            
-            # Actualizar configuración en la sesión
-            if pivot_result.get('status') == 'success':
-                new_config = pivot_result.get('new_config', {})
-                session.add_chart_config(new_config)
-            
-            execution_time = (datetime.now() - start_time).total_seconds()
-            
-            # Generar respuesta profesional
-            response_text = await self._generate_chart_pivot_response(
-                pivot_result, chat_message.message, session
-            )
-            
-            return ChatResponse(
-                response=response_text,
-                response_type="chart_pivot",
-                charts=[pivot_result] if pivot_result.get('status') == 'success' else [],
-                recommendations=[pivot_result.get('message', 'Gráfico actualizado')],
-                metadata={
-                    'source': 'chart_interaction',
-                    'pivot_result': pivot_result,
-                    'original_config': current_config,
-                    'chart_generator_available': CHART_GENERATOR_AVAILABLE
-                },
-                execution_time=execution_time,
-                confidence_score=0.9,
-                timestamp=datetime.now().isoformat(),
-                session_id=session.session_id,
-                chart_configs=[pivot_result.get('new_config', {})] if pivot_result.get('status') == 'success' else [],
-                pivot_suggestions=self._generate_pivot_suggestions_for_chart(pivot_result),
-                basic_queries_used=False,
-                data_sources=['chart_generator']
-            )
-            
-        except Exception as e:
-            logger.error(f"Error en interacción con gráfico: {e}")
-            return self._create_error_response(f"Error en pivoteo de gráfico: {str(e)}", session.session_id, start_time)
-    
-    async def _process_with_cdg_agent_professional(self, chat_message: ChatMessage, message: str, gestor_id: str, periodo: str, session: ChatSession, start_time: datetime, intent_analysis: Dict) -> ChatResponse:
-        """Procesamiento profesional con CDG Agent"""
-        try:
-            # Crear CDGRequest
-            cdg_request = CDGRequest(
-                user_message=message,
-                user_id=chat_message.user_id,
-                gestor_id=gestor_id,
-                periodo=periodo,
-                context=chat_message.context,
-                include_charts=chat_message.include_charts,
-                include_recommendations=chat_message.include_recommendations,
-                current_chart_config=chat_message.current_chart_config,
-                chart_interaction_type=chat_message.chart_interaction_type,
-                use_basic_queries=chat_message.use_basic_queries,
-                quick_mode=chat_message.quick_mode
-            )
-            
-            # Procesar con CDG Agent - con fallback mejorado
-            try:
-                cdg_response = await self.cdg_agent.process_request(cdg_request)
-            except Exception as e:
-                logger.error(f"Error en CDG Agent process_request: {e}")
-                # Fallback usando la función global
-                try:
-                    result_dict = await process_cdg_request(
-                        cdg_request.user_message,
-                        gestor_id=cdg_request.gestor_id,
-                        periodo=cdg_request.periodo,
-                        user_id=cdg_request.user_id,
-                        include_charts=cdg_request.include_charts,
-                        include_recommendations=cdg_request.include_recommendations,
-                        use_basic_queries=cdg_request.use_basic_queries
-                    )
-                    # Convertir dict a objeto mock para compatibilidad
-                    cdg_response = type('MockCDGResponse', (), {
-                        'content': result_dict.get('content', {}),
-                        'charts': result_dict.get('charts', []),
-                        'recommendations': result_dict.get('recommendations', []),
-                        'confidence_score': result_dict.get('confidence_score', 0.7),
-                        'chart_configs': result_dict.get('chart_configs', []),
-                        'pivot_suggestions': result_dict.get('pivot_suggestions', []),
-                        'basic_queries_used': result_dict.get('basic_queries_used', False),
-                        'data_sources': result_dict.get('data_sources', [])
-                    })()
-                except Exception as e2:
-                    logger.error(f"Error en fallback CDG: {e2}")
-                    raise e  # Re-raise el error original
-
-            
-            # Procesar configuraciones de gráficos
-            chart_configs = getattr(cdg_response, 'chart_configs', [])
-            pivot_suggestions = getattr(cdg_response, 'pivot_suggestions', [])
-            basic_queries_used = getattr(cdg_response, 'basic_queries_used', False)
-            data_sources = getattr(cdg_response, 'data_sources', [])
-            
-            # Actualizar sesión
-            for config in chart_configs:
-                session.add_chart_config(config)
-            
-            # Generar respuesta profesional
-            response_text = await self._generate_professional_response(
-                cdg_response.content, message, cdg_response, session, intent_analysis
-            )
-            
-            # Construir respuesta completa
-            chat_response = ChatResponse(
-                response=response_text,
-                response_type=intent_analysis['intent'],
-                charts=cdg_response.charts,
-                recommendations=cdg_response.recommendations,
-                metadata={
-                    'source': 'cdg_agent_professional',
-                    'analysis_type': intent_analysis['intent'],
-                    'confidence': intent_analysis['confidence'],
-                    'gestor_id': gestor_id,
-                    'periodo': periodo,
-                    'imports_successful': self.imports_successful,
-                    'chart_generator_available': self.chart_generator_available,
-                    'basic_queries_available': self.basic_queries_available,
-                    'model_used': MODEL_NAME,
-                    'cdg_agent_integration': True,
-                    'professional_prompts': True,
-                    'intent_classification': intent_analysis,
-                    'personalization_applied': True
-                },
-                execution_time=(datetime.now() - start_time).total_seconds(),
-                confidence_score=cdg_response.confidence_score * intent_analysis['confidence'],
-                timestamp=datetime.now().isoformat(),
-                session_id=session.session_id,
-                chart_configs=chart_configs,
-                pivot_suggestions=pivot_suggestions,
-                basic_queries_used=basic_queries_used,
-                data_sources=data_sources
-            )
-            
-            # Añadir a historial
-            session.add_interaction(
-                message, 
-                chat_response.model_dump(), 
-                intent_analysis['intent'],
-                satisfaction_rating=None
-            )
-            
-            # Procesar feedback si existe
-            if chat_message.user_feedback:
-                await self._process_user_feedback_professional(chat_message.user_id, chat_message.user_feedback, session)
-            
-            return chat_response
-            
-        except Exception as e:
-            logger.error(f"❌ Error en procesamiento profesional CDG Agent: {e}")
-            return self._create_error_response(str(e), session.session_id, start_time)
-    
-    # ========================================================================
-    # MÉTODOS DE UTILIDAD Y HELPERS
-    # ========================================================================
-    
-    def _sanitize_message(self, message: str) -> str:
-        """Sanitiza mensaje de entrada"""
-        if not message or not isinstance(message, str):
-            return ""
-        
-        sanitized = message.strip()
-        if len(sanitized) > 2000:
-            sanitized = sanitized[:2000] + "..."
-            logger.warning("Mensaje truncado por exceder longitud máxima")
-        
-        return sanitized
-    
-    def _extract_periodo_from_message(self, message: str) -> Optional[str]:
-        """Extracción inteligente de período"""
-        periodo_patterns = [
-            r'(\d{4}-\d{2})',
-            r'(\d{4}/\d{2})',
-            r'(\d{2}/\d{4})',
-            r'(\d{2}-\d{4})',
-            r'periodo\s+(\d{4}-\d{2})',
-            r'mes\s+(\d{4}-\d{2})',
-            r'en\s+(\d{4}-\d{2})',
-            r'del\s+(\d{4}-\d{2})',
-        ]
-        
-        message_lower = message.lower()
-        
-        for pattern in periodo_patterns:
-            match = re.search(pattern, message_lower)
-            if match:
-                periodo_found = match.group(1)
-                logger.info(f"🗓️ Período detectado: '{periodo_found}'")
-                
-                # Normalizar formato
-                if re.match(r'\d{4}-\d{2}', periodo_found):
-                    return periodo_found
-                elif re.match(r'\d{4}/\d{2}', periodo_found):
-                    return periodo_found.replace('/', '-')
-                elif re.match(r'\d{2}/\d{4}', periodo_found):
-                    parts = periodo_found.split('/')
-                    return f"{parts[1]}-{parts[0]}"
-                elif re.match(r'\d{2}-\d{4}', periodo_found):
-                    parts = periodo_found.split('-')
-                    return f"{parts[1]}-{parts[0]}"
-        
-        # Fallback dinámico
-        current_period = datetime.now().strftime('%Y-%m')
-        logger.info(f"🗓️ No se detectó período, usando actual: {current_period}")
-        return current_period
-    
-    def _extract_gestor_id(self, chat_message: ChatMessage, session: ChatSession) -> Optional[str]:
-        """Extracción inteligente de gestor_id"""
-        
-        if chat_message.gestor_id:
-            return chat_message.gestor_id
-        
-        if 'gestor_id' in chat_message.context:
-            return chat_message.context['gestor_id']
-        
-        for interaction in reversed(session.get_recent_context(3)):
-            if 'gestor_id' in interaction.get('agent_response', {}).get('metadata', {}):
-                return interaction['agent_response']['metadata']['gestor_id']
-        
-        gestor_patterns = [
-            r'gestor\s+(\d+)',
-            r'id\s+(\d+)', 
-            r'#(\d+)',
-            r'número\s+(\d+)',
-            r'num\s+(\d+)'
-        ]
-        
-        message_lower = chat_message.message.lower()
-        
-        for pattern in gestor_patterns:
-            match = re.search(pattern, message_lower)
-            if match:
-                potential_id = match.group(1)
-                if potential_id.isdigit() and 1 <= int(potential_id) <= 100:
-                    logger.info(f"🎯 Gestor ID extraído: {potential_id}")
-                    return potential_id
-        
-        return "1"
-    
-    def _create_error_response(self, error_message: str, session_id: str, start_time: datetime) -> ChatResponse:
-        """Respuesta de error profesional"""
-        return ChatResponse(
-            response=f"❌ Lo siento, ha ocurrido un error procesando tu consulta: {error_message}\n\n💡 Por favor, intenta reformular tu pregunta o contacta con el equipo de Control de Gestión.",
-            response_type="error",
-            charts=[],
-            recommendations=[
-                "Intenta reformular tu pregunta de forma más específica",
-                "Verifica que los parámetros sean correctos",
-                "Contacta con el equipo si persiste el problema"
-            ],
-            metadata={
-                "error": True,
-                "error_message": error_message,
-                "imports_successful": self.imports_successful,
-                "chart_generator_available": self.chart_generator_available,
-                "basic_queries_available": self.basic_queries_available,
-                "model_used": MODEL_NAME
-            },
-            execution_time=(datetime.now() - start_time).total_seconds(),
-            confidence_score=0.0,
-            timestamp=datetime.now().isoformat(),
-            session_id=session_id,
-            chart_configs=[],
-            pivot_suggestions=[],
-            basic_queries_used=False,
-            data_sources=[]
-        )
-    
-    # ========================================================================
-    # MÉTODOS DE ESTADO Y GESTIÓN
-    # ========================================================================
-    
-    def get_agent_status(self) -> Dict[str, Any]:
-        """Estado del agente"""
-        return {
-            'status': 'active',
-            'version': '7.0',
-            'mode': 'PRODUCTION' if self.imports_successful else 'MOCK',
-            'uptime_seconds': (datetime.now() - self.start_time).total_seconds(),
-            'active_sessions': len(self.session_manager.sessions),
-            'model_configured': MODEL_NAME,
-            'integrations': {
-                'cdg_agent': 'active' if self.cdg_agent else 'inactive',
-                'chart_generator': 'active' if self.chart_generator_available else 'inactive',
-                'basic_queries': 'active' if self.basic_queries_available else 'inactive',
-                'professional_prompts': 'active',
-                'personalization': 'active',
-                'intent_classification': 'active',
-                'feedback_processing': 'active'
-            },
-            'features': {
-                'intelligent_period_extraction': True,
-                'intelligent_gestor_extraction': True,
-                'cdg_agent_delegation': True,
-                'professional_system_prompts': True,
-                'intent_classification': True,
-                'personalization_engine': True,
-                'feedback_learning': True,
-                'conversation_memory': True,
-                'dynamic_formatting': True,
-                'chart_generation': self.chart_generator_available,
-                'chart_pivot_conversational': self.chart_generator_available,
-                'chart_interaction_detection': True,
-                'visualization_preferences': True,
-                'basic_queries_integration': self.basic_queries_available,
-                'quick_response_mode': self.basic_queries_available,
-                'system_summary_generation': self.basic_queries_available
-            },
-            'architecture': 'professional_v7.0_module'
-        }
-    
-    def get_session_history(self, user_id: str):
-        """Historial de sesión con personalización"""
-        if user_id in self.session_manager.sessions:
-            session = self.session_manager.sessions[user_id]
-            return {
-                'conversation_history': session.conversation_history,
-                'user_preferences': session.user_preferences,
-                'chart_preferences': session.chart_preferences,
-                'personalization_data': session.personalization_data,
-                'chart_interaction_history': session.chart_interaction_history,
-                'current_chart_configs': session.current_chart_configs,
-                'basic_queries_usage': session.personalization_data.get('basic_queries_usage', 0),
-                'quick_queries_count': session.personalization_data.get('quick_queries_count', 0)
-            }
-        return {
-            'conversation_history': [], 
-            'user_preferences': {}, 
-            'chart_preferences': {},
-            'personalization_data': {},
-            'chart_interaction_history': [],
-            'current_chart_configs': [],
-            'basic_queries_usage': 0,
-            'quick_queries_count': 0
-        }
-    
-    def get_dynamic_suggestions(self, user_id: str) -> List[str]:
-        """Sugerencias inteligentes personalizadas"""
-        current_period = datetime.now().strftime('%Y-%m')
-        
-        # Obtener preferencias del usuario si existe
-        user_prefs = {}
-        chart_prefs = {}
-        basic_queries_usage = 0
-        if user_id in self.session_manager.sessions:
-            session = self.session_manager.sessions[user_id]
-            user_prefs = session.user_preferences
-            chart_prefs = session.chart_preferences
-            frequent_queries = session.personalization_data.get('frequent_queries', [])
-            basic_queries_usage = session.personalization_data.get('basic_queries_usage', 0)
-        else:
-            frequent_queries = []
-        
-        # Sugerencias base
-        base_suggestions = [
-            f"¿Cómo está mi rendimiento en {current_period}?",
-            "Comparar gestores 18 y 21 en ROE",
-            "Comparar segmentos Empresas vs Minorista",
-            "Análisis del centro de Madrid vs Barcelona",
-            f"¿Qué gestores tienen alertas críticas en {current_period}?",
-            f"¿Quién merece incentivos en {current_period}?",
-            "Business Review del gestor 19",
-            "Executive Summary del período actual"
-        ]
-        
-        # Añadir sugerencias de gráficos si está disponible
-        if CHART_GENERATOR_AVAILABLE:
-            chart_suggestions = [
-                "Generar gráfico comparativo de gestores",
-                "Mostrar evolución temporal en gráfico de líneas",
-                "Crear dashboard interactivo"
-            ]
-            base_suggestions.extend(chart_suggestions)
-        
-        # Añadir sugerencias de basic queries si está disponible
-        if BASIC_QUERIES_AVAILABLE:
-            basic_suggestions = [
-                "Resumen general del sistema",
-                "Ranking de gestores por contratos",
-                "Información de centros operativos",
-                "Popularidad de productos"
-            ]
-            if basic_queries_usage > 0:
-                base_suggestions = basic_suggestions + base_suggestions
-        
-        return base_suggestions[:12]
-    
-    # ========================================================================
-    # MÉTODOS DE FORMATO Y HELPERS (SIMPLIFICADOS)
-    # ========================================================================
-    
-    def _format_basic_summary(self, data: Dict, session: ChatSession) -> str:
-        """Formatea resumen básico del sistema"""
-        try:
-            style = session.user_preferences.get('communication_style', 'professional')
-            
-            if style == 'concise':
-                return (f"📊 **Resumen del Sistema CDG:**\n"
-                       f"• **Gestores:** {data.get('total_gestores', 0)}\n"
-                       f"• **Clientes:** {data.get('total_clientes', 0)}\n"
-                       f"• **Contratos:** {data.get('total_contratos', 0)}")
-            
-            else:
-                return (f"📊 **Resumen General del Sistema de Control de Gestión**\n\n"
-                       f"✅ **Estado actual del sistema:**\n"
-                       f"• **Gestores activos:** {data.get('total_gestores', 0)} gestores comerciales\n"
-                       f"• **Base de clientes:** {data.get('total_clientes', 0)} clientes registrados\n"
-                       f"• **Contratos vigentes:** {data.get('total_contratos', 0)} contratos activos\n"
-                       f"• **Productos disponibles:** {data.get('total_productos', 0)} líneas de producto\n"
-                       f"• **Centros operativos:** {data.get('total_centros', 0)} centros finalistas")
-        
-        except Exception as e:
-            logger.warning(f"Error formateando resumen básico: {e}")
-            return "📊 Resumen del sistema disponible."
-    
-    def _format_gestores_ranking(self, data: List[Dict], metric: str, session: ChatSession) -> str:
-        """Formatea ranking de gestores"""
-        try:
-            if not data:
-                return f"❌ No se encontraron datos de {metric} para los gestores."
-            
-            metric_field = 'num_contratos' if metric == 'contratos' else 'num_clientes'
-            metric_label = 'Contratos' if metric == 'contratos' else 'Clientes'
-            
-            response_parts = [f"🏆 **Ranking de Gestores por {metric_label}**\n"]
-            
-            # Mostrar top 10
-            top_data = data[:10]
-            for i, gestor in enumerate(top_data, 1):
-                gestor_name = gestor.get('DESC_GESTOR', 'N/A')
-                count = gestor.get(metric_field, 0)
-                
-                emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-                response_parts.append(f"{emoji} **{gestor_name}:** {count:,} {metric}")
-            
-            if len(data) > 10:
-                response_parts.append(f"\n... y {len(data) - 10} gestores más")
-            
-            response_parts.append(f"\n📈 **Total analizado:** {len(data)} gestores")
-            
-            return "\n".join(response_parts)
-            
-        except Exception as e:
-            logger.warning(f"Error formateando ranking de gestores: {e}")
-            return f"📊 Ranking de gestores por {metric} procesado."
-    
-    def _get_basic_query_recommendations(self, query_type: str) -> List[str]:
-        """Genera recomendaciones para consultas básicas"""
-        recommendations_map = {
-            'quick_summary': [
-                "Solicita análisis específicos de gestores para mayor detalle",
-                "Explora comparativas entre centros o segmentos"
-            ],
-            'gestores_ranking': [
-                "Analiza el performance detallado de los top performers",
-                "Compara métricas específicas entre gestores"
-            ]
-        }
-        return recommendations_map.get(query_type, [
-            "Explora análisis más específicos con el CDG Agent",
-            "Solicita visualizaciones para mejor comprensión"
-        ])
-    
-    # ========================================================================
-    # MÉTODOS ADICIONALES SIMPLIFICADOS
-    # ========================================================================
-    
-    async def _create_basic_query_fallback_response(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
-        """Respuesta fallback cuando Basic Queries no está disponible"""
-        execution_time = (datetime.now() - start_time).total_seconds()
-        
-        return ChatResponse(
-            response=f"📊 He recibido tu consulta: '{chat_message.message}'\n\n⚠️ Las consultas rápidas no están disponibles temporalmente.",
-            response_type="basic_query_fallback",
-            charts=[],
-            recommendations=["Reformula la consulta para análisis completo"],
-            metadata={'source': 'basic_query_fallback', 'basic_queries_available': False},
-            execution_time=execution_time,
-            confidence_score=0.3,
-            timestamp=datetime.now().isoformat(),
-            session_id=session.session_id,
-            chart_configs=[],
-            pivot_suggestions=[],
-            basic_queries_used=False,
-            data_sources=[]
-        )
-    
-    def _create_chart_fallback_response(self, chat_message: ChatMessage, session: ChatSession, start_time: datetime) -> ChatResponse:
-        """Respuesta fallback cuando Chart Generator no está disponible"""
-        execution_time = (datetime.now() - start_time).total_seconds()
-        
-        return ChatResponse(
-            response=f"📊 He recibido tu solicitud de cambio de gráfico: '{chat_message.message}'\n\n⚠️ La funcionalidad de pivoteo de gráficos no está disponible temporalmente.",
-            response_type="chart_pivot_fallback",
-            charts=[],
-            recommendations=["Consulta con el equipo técnico para habilitar funciones de gráficos"],
-            metadata={'source': 'chart_fallback', 'chart_generator_available': False},
-            execution_time=execution_time,
-            confidence_score=0.3,
-            timestamp=datetime.now().isoformat(),
-            session_id=session.session_id,
-            chart_configs=[],
-            pivot_suggestions=[],
-            basic_queries_used=False,
-            data_sources=[]
-        )
-    
-    def _should_request_clarification(self, intent_analysis: Dict) -> bool:
-        """Determina si se debe pedir clarificación por baja confianza"""
-        confidence = intent_analysis['confidence']
-        intent = intent_analysis['intent']
-        
-        # No pedir clarificación para interacciones específicas
-        if intent in ['chart_pivot', 'basic_query']:
-            return False
-
-        thresholds = {
-            'performance_analysis': 0.6,
-            'comparative_analysis': 0.65,
-            'deviation_detection': 0.7,
-            'incentive_analysis': 0.65,
-            'business_review': 0.7,
-            'executive_summary': 0.7,
-            'general_inquiry': 0.4
-        }
-
-        return confidence < thresholds.get(intent, 0.6)
-    
-    async def _request_clarification(self, chat_message: ChatMessage, intent_analysis: Dict, session: ChatSession) -> ChatResponse:
-        """Solicita aclaración al usuario por baja confianza"""
-        start_time = datetime.now()
-        
-        intent = intent_analysis.get('intent', 'general_inquiry')
-        confidence = intent_analysis.get('confidence', 0)
-        
-        clarification_msg = f"💡 **Consulta detectada** (confianza: {confidence:.0%})\n\n" \
-                          "No estoy completamente seguro de haber entendido tu consulta. " \
-                          "¿Podrías proporcionar más detalles?"
-        
-        return ChatResponse(
-            response=clarification_msg,
-            response_type="clarification_request",
-            charts=[],
-            recommendations=["Especifica más detalles en tu consulta"],
-            metadata={
-                "source": "clarification_handler",
-                "original_intent": intent,
-                "original_confidence": confidence,
-                "requires_clarification": True
-            },
-            execution_time=(datetime.now() - start_time).total_seconds(),
-            confidence_score=confidence,
-            timestamp=datetime.now().isoformat(),
-            session_id=session.session_id,
-            chart_configs=[],
-            pivot_suggestions=[],
-            basic_queries_used=False,
-            data_sources=[]
-        )
-    
-    def _intent_requires_cdg_agent(self, intent: str, message: str) -> bool:
-        """Determina si la intención requiere CDG Agent"""
-        cdg_intents = {
-            'performance_analysis',
-            'comparative_analysis', 
-            'deviation_detection',
-            'incentive_analysis',
-            'business_review',
-            'executive_summary'
-        }
-        
-        if intent in ['chart_pivot', 'basic_query']:
-            return False
-        
-        return intent in cdg_intents or self._requires_cdg_agent(message)
-    
-    def _requires_cdg_agent(self, message: str) -> bool:
-        """Determina si requiere CDG Agent"""
-        message_lower = message.lower()
-        
-        complex_patterns = [
-            r'gestor\s+\d+',
-            r'cómo\s+está.*gestor',
-            r'performance.*gestor',
-            r'rendimiento.*gestor',
-            r'comparar.*gestores',
-            r'business\s+review',
-            r'executive\s+summary'
-        ]
-        
-        for pattern in complex_patterns:
-            if re.search(pattern, message_lower):
-                logger.info(f"🎯 Consulta compleja detectada: {pattern}")
-                return True
-        
-        return False
-    
-    def _get_approach_for_intent(self, intent: str) -> str:
-        """Obtiene enfoque recomendado según intención"""
-        approach_map = {
-            'performance_analysis': 'cdg_detailed',
-            'comparative_analysis': 'cdg_detailed',
-            'deviation_detection': 'cdg_alerts',
-            'incentive_analysis': 'cdg_calculations',
-            'business_review': 'cdg_executive',
-            'executive_summary': 'cdg_executive',
-            'chart_pivot': 'chart_interaction',
-            'basic_query': 'basic_queries',
-            'general_inquiry': 'simple_conversational'
-        }
-        return approach_map.get(intent, 'simple_conversational')
-    
-    async def _generate_chart_pivot_response(self, pivot_result: Dict, original_message: str, session: ChatSession) -> str:
-        """Genera respuesta profesional para pivoteo de gráficos"""
-        try:
-            if pivot_result.get('status') == 'success':
-                new_config = pivot_result.get('new_config', {})
-                chart_type = new_config.get('chart_type', 'gráfico')
-                
-                return f"📊 **Gráfico actualizado:** {original_message}\n\n✅ He cambiado la visualización a **{chart_type}** según tu solicitud."
-            else:
-                return f"❌ No pude procesar el cambio de gráfico: {pivot_result.get('message', 'Error desconocido')}"
-                
-        except Exception as e:
-            logger.error(f"Error generando respuesta de pivoteo: {e}")
-            return f"✅ He procesado tu solicitud de cambio de gráfico: {original_message}"
-    
-    def _generate_pivot_suggestions_for_chart(self, pivot_result: Dict) -> List[str]:
-        """Genera sugerencias de pivoteo específicas para el gráfico actual"""
-        try:
-            if pivot_result.get('status') != 'success':
-                return []
-            
-            current_type = pivot_result.get('new_config', {}).get('chart_type', 'bar')
-            
-            suggestions = []
-            
-            if current_type == 'bar':
-                suggestions.extend([
-                    "Cambiar a gráfico circular",
-                    "Mostrar como líneas de tendencia"
-                ])
-            elif current_type == 'line':
-                suggestions.extend([
-                    "Cambiar a barras verticales", 
-                    "Mostrar como área sombreada"
-                ])
-            elif current_type == 'pie':
-                suggestions.extend([
-                    "Cambiar a barras comparativas",
-                    "Mostrar como tabla de datos"
-                ])
-            
-            return suggestions[:3]
-            
-        except Exception as e:
-            logger.warning(f"Error generando sugerencias de pivoteo: {e}")
-            return []
-    
-    async def _generate_professional_response(self, content: Dict[str, Any], original_message: str, cdg_response, session: ChatSession, intent_analysis: Dict) -> str:
-        """Genera respuesta profesional combinando datos y explicación"""
-        try:
-            # Generar respuesta básica
-            response_parts = [
-                f"📊 **Análisis para:** {original_message}",
-                "",
-                "🧠 **Interpretación:**",
-                "Los datos han sido procesados exitosamente."
-            ]
-            
-            # Añadir información de gráficos si están disponibles
-            if hasattr(cdg_response, 'charts') and cdg_response.charts:
-                chart_count = len(cdg_response.charts)
-                response_parts.append(f"\n📊 **Visualizaciones:** {chart_count} gráfico{'s' if chart_count > 1 else ''} generado{'s' if chart_count > 1 else ''}.")
-            
-            return "\n".join(response_parts)
-            
-        except Exception as e:
-            logger.error(f"❌ Error generando respuesta profesional: {e}")
-            return f"He procesado tu consulta: {original_message}. Los resultados están disponibles."
-    
-    async def _process_simple_chat_professional(self, chat_message: ChatMessage, message: str, gestor_id: str, periodo: str, session: ChatSession, start_time: datetime, intent_analysis: Dict) -> ChatResponse:
-        """Procesamiento simple con enfoque profesional"""
-        try:
-            response_text = f"💬 He recibido tu consulta: {message}\n\nProcesando con enfoque conversacional profesional."
-            
-            chat_response = ChatResponse(
-                response=response_text,
-                response_type=intent_analysis['intent'],
-                charts=[],
-                recommendations=["Consulta información más específica para análisis detallado"],
-                metadata={
-                    'source': 'chat_simple_professional',
-                    'intent': intent_analysis['intent'],
-                    'confidence': intent_analysis['confidence'],
-                    'gestor_id': gestor_id,
-                    'periodo': periodo
-                },
-                execution_time=(datetime.now() - start_time).total_seconds(),
-                confidence_score=intent_analysis['confidence'],
-                timestamp=datetime.now().isoformat(),
-                session_id=session.session_id,
-                chart_configs=[],
-                pivot_suggestions=[],
-                basic_queries_used=False,
-                data_sources=['simple_queries']
-            )
-            
-            session.add_interaction(message, chat_response.model_dump(), intent_analysis['intent'])
-            
-            return chat_response
-            
-        except Exception as e:
-            logger.error(f"❌ Error en procesamiento simple profesional: {e}")
-            return self._create_error_response(str(e), session.session_id, start_time)
-    
-    async def _process_user_feedback_professional(self, user_id: str, feedback: Dict[str, Any], session: ChatSession):
-        """Procesamiento profesional de feedback"""
-        try:
-            if not feedback:
-                return
-            
-            rating = feedback.get('rating', 0)
-            
-            # Añadir a historial
-            session.personalization_data['feedback_history'].append({
-                'timestamp': datetime.now().isoformat(),
-                'rating': rating,
-                'feedback': feedback
+            # Actualizar historial
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': formatted_response,
+                'flow_type': 'PREDEFINED_QUERY',
+                'timestamp': datetime.now().isoformat()
             })
             
-            # Ajustar preferencias basado en rating
-            if rating >= 4:
-                session.personalization_data['successful_interactions'] += 1
-            elif rating <= 2:
-                comments = feedback.get('comment', '').lower()
-                if 'muy largo' in comments:
-                    session.user_preferences['response_length'] = 'short'
-                elif 'muy corto' in comments:
-                    session.user_preferences['response_length'] = 'detailed'
+            execution_time = (datetime.now() - start_time).total_seconds()
             
-            logger.info(f"📝 Feedback procesado para usuario {user_id}")
+            return ChatResponse(
+                response=formatted_response,
+                response_type="predefined_query",
+                data=execution_result['data'],
+                metadata={
+                    'flow_type': 'PREDEFINED_QUERY',
+                    'predefined_function': f"{predefined_match.get('catalog')}.{predefined_match.get('function_name')}",
+                    'execution_metadata': execution_result['metadata'],
+                    'routing_confidence': routing_result['confidence']
+                },
+                execution_time=execution_time,
+                confidence_score=routing_result['confidence'],
+                session_id=message.user_id
+            )
             
         except Exception as e:
-            logger.error(f"❌ Error procesando feedback: {e}")
+            logger.error(f"Error en flujo predefinido: {e}")
+            # Fallback a SQL dinámico
+            return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+    
+    async def _execute_dynamic_sql_flow(self, message: ChatMessage, session: ChatSession,
+                                      routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Generar SQL dinámicamente"""
+        try:
+            logger.info("🎯 Ejecutando FLUJO SQL DINÁMICO")
+            
+            # Construir SQL dinámicamente
+            sql_result = await self.query_builder.build_sql_for_any_query(
+                message.message,
+                {
+                    'classification': routing_result['classification'],
+                    'gestor_id': message.gestor_id,
+                    'periodo': message.periodo,
+                    'context': message.context
+                }
+            )
+            
+            if not sql_result['is_safe']:
+                logger.warning(f"❌ SQL bloqueado por seguridad: {sql_result.get('sql', '')}")
+                return ChatResponse(
+                    response="Por seguridad, no puedo ejecutar esa consulta. ¿Podría reformularla de manera más específica?",
+                    response_type="security_block",
+                    session_id=message.user_id,
+                    execution_time=(datetime.now() - start_time).total_seconds()
+                )
+            
+            # Ejecutar SQL
+            query_data = self._execute_query_safely(sql_result['sql'])
+            
+            # Formatear respuesta
+            formatted_response = await self.formatter.format_response(
+                query_data,
+                message.message,
+                {
+                    'sql_explanation': sql_result['explanation'],
+                    'tables_used': sql_result['tables_used'],
+                    'preferences': session.preferences
+                }
+            )
+            
+            # Actualizar historial
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': formatted_response,
+                'flow_type': 'DYNAMIC_SQL',
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=formatted_response,
+                response_type="dynamic_sql",
+                data=query_data,
+                metadata={
+                    'flow_type': 'DYNAMIC_SQL',
+                    'sql_executed': sql_result['sql'],
+                    'explanation': sql_result['explanation'],
+                    'tables_used': sql_result['tables_used'],
+                    'routing_confidence': routing_result['confidence']
+                },
+                execution_time=execution_time,
+                confidence_score=routing_result['confidence'],
+                session_id=message.user_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Error en flujo SQL dinámico: {e}")
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=f"Hubo un problema ejecutando su consulta SQL: {str(e)}",
+                response_type="sql_error",
+                execution_time=execution_time,
+                session_id=message.user_id
+            )
+    
+    async def _execute_cdg_agent_flow(self, message: ChatMessage, session: ChatSession,
+                                    routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Delegar al CDG Agent para análisis complejo"""
+        try:
+            logger.info("🎯 Ejecutando FLUJO CDG AGENT")
+            
+            if not self.cdg_agent:
+                # Fallback a SQL dinámico si CDG no disponible
+                return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+            
+            cdg_request = CDGRequest(
+                user_message=message.message,
+                user_id=message.user_id,
+                gestor_id=message.gestor_id,
+                periodo=message.periodo,
+                context=message.context,
+                include_charts=True,
+                include_recommendations=True
+            )
+            
+            cdg_response = await self.cdg_agent.process_request(cdg_request)
+            
+            # Formatear respuesta del CDG Agent
+            if hasattr(cdg_response, 'content') and cdg_response.content:
+                formatted_response = await self.formatter.format_response(
+                    cdg_response.content,
+                    message.message,
+                    {
+                        'cdg_analysis': True,
+                        'preferences': session.preferences
+                    }
+                )
+            else:
+                formatted_response = "El análisis avanzado ha sido procesado exitosamente por el sistema CDG."
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=formatted_response,
+                response_type="cdg_analysis",
+                data=getattr(cdg_response, 'content', None),
+                charts=getattr(cdg_response, 'charts', []),
+                recommendations=getattr(cdg_response, 'recommendations', []),
+                metadata={
+                    'flow_type': 'CDG_AGENT',
+                    'cdg_agent_used': True,
+                    'cdg_confidence': getattr(cdg_response, 'confidence_score', 0.8),
+                    'routing_confidence': routing_result['confidence']
+                },
+                execution_time=execution_time,
+                confidence_score=getattr(cdg_response, 'confidence_score', 0.8),
+                session_id=message.user_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Error en flujo CDG Agent: {e}")
+            # Fallback a SQL dinámico
+            return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+    
+    async def _execute_contextual_flow(self, message: ChatMessage, session: ChatSession,
+                                     routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🎯 FLUJO: Respuesta contextual sin SQL (preguntas generales/conceptuales)"""
+        try:
+            logger.info("🎯 Ejecutando FLUJO CONTEXTUAL")
+            
+            # Obtener información dinámica de la BD para contexto
+            schema_info = self.query_builder.schema_inspector.get_database_schema()
+            available_tables = list(schema_info['tables'].keys())
+            total_records = schema_info['metadata']['total_records']
+            
+            contextual_prompt = f"""
+            Responde esta pregunta sobre Control de Gestión bancario con contexto profesional:
+
+            PREGUNTA: "{message.message}"
+
+            CONTEXTO DISPONIBLE:
+            - Sistema: Banca March - Control de Gestión 
+            - Base de datos: {len(available_tables)} tablas, {total_records:,} registros
+            - Alcance: Análisis de rentabilidad, KPIs, gestores comerciales
+            - Productos: Fondos, Banca Privada, Empresas, Seguros
+            
+            TIPO DE RESPUESTA REQUERIDA:
+            - Profesional y clara
+            - Con ejemplos bancarios específicos
+            - Incluir sugerencias de consultas concretas si es apropiado
+            - Máximo 400 palabras
+            
+            Si es una pregunta conceptual (qué es X), explica con ejemplos de control de gestión.
+            Si es una pregunta general, orienta hacia consultas específicas disponibles.
+            """
+            
+            if IMPORTS_SUCCESSFUL:
+                response = self.formatter.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_CONVERSATIONAL_SYSTEM_PROMPT},
+                        {"role": "user", "content": contextual_prompt}
+                    ],
+                    temperature=0.4,
+                    max_tokens=600
+                )
+                contextual_response = response.choices[0].message.content.strip()
+            else:
+                contextual_response = self._generate_contextual_fallback(message.message, schema_info)
+            
+            # Generar sugerencias dinámicas
+            suggestions = self._generate_contextual_suggestions(message.message, schema_info)
+            
+            # Actualizar historial
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': contextual_response,
+                'flow_type': 'CONTEXTUAL_RESPONSE',
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=contextual_response,
+                response_type="contextual_response",
+                recommendations=suggestions,
+                metadata={
+                    'flow_type': 'CONTEXTUAL_RESPONSE',
+                    'database_info': {
+                        'tables_available': len(available_tables),
+                        'total_records': total_records,
+                        'last_updated': schema_info['metadata']['last_updated']
+                    },
+                    'routing_confidence': routing_result['confidence']
+                },
+                execution_time=execution_time,
+                confidence_score=routing_result['confidence'],
+                session_id=message.user_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Error en flujo contextual: {e}")
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            return ChatResponse(
+                response=f"Error generando respuesta contextual: {str(e)}",
+                response_type="contextual_error",
+                execution_time=execution_time,
+                session_id=message.user_id
+            )
+    
+    def _execute_query_safely(self, sql: str) -> Any:
+        """Ejecuta consulta SQL de forma segura"""
+        try:
+            if IMPORTS_SUCCESSFUL:
+                return query_executor.execute_query(sql)
+            else:
+                return [{"mock": "data", "message": "Modo fallback activo"}]
+                
+        except Exception as e:
+            logger.error(f"Error ejecutando SQL: {e}")
+            return {"error": f"Error en consulta SQL: {str(e)}"}
+    
+    def _generate_contextual_fallback(self, user_message: str, schema_info: Dict) -> str:
+        """Genera respuesta contextual fallback"""
+        message_lower = user_message.lower()
+        
+        if any(word in message_lower for word in ['qué es', 'define', 'concepto']):
+            return f"""
+            📚 **Control de Gestión Bancario - Conceptos Clave**
+            
+            Su consulta sobre "{user_message}" se refiere a conceptos fundamentales de nuestro sistema de control de gestión.
+            
+            En Banca March utilizamos métricas clave como:
+            • **Margen Neto:** Diferencia entre ingresos y gastos operativos
+            • **ROE:** Rentabilidad sobre patrimonio  
+            • **Eficiencia Operativa:** Ratio ingresos/gastos
+            
+            💡 **Consultas específicas que puedo responder:**
+            • "¿Cuál es el margen neto del gestor 15?"
+            • "Muestra la eficiencia operativa por centro"  
+            • "Compara ROE entre segmentos"
+            """
+        
+        return f"""
+        👋 **Bienvenido al Sistema de Control de Gestión**
+        
+        He recibido su consulta: "{user_message}"
+        
+        📊 **Sistema disponible:**
+        • {schema_info['metadata']['total_tables']} tablas especializadas
+        • {schema_info['metadata']['total_records']:,} registros actualizados
+        • Cobertura completa de gestores, productos y KPIs
+        
+        💡 **Para mejores resultados, puede consultar:**
+        • Performance específico de gestores
+        • Análisis comparativos entre períodos  
+        • KPIs financieros y operativos
+        • Desviaciones de precios y márgenes
+        
+        ¿En qué aspecto específico le gustaría que le ayude?
+        """
+    
+    def _generate_contextual_suggestions(self, user_message: str, schema_info: Dict) -> List[str]:
+        """Genera sugerencias contextuales dinámicas"""
+        base_suggestions = [
+            "¿Cuántos gestores tenemos activos?",
+            "Muestra el ranking de gestores por margen neto",
+            "¿Cuál es la distribución de contratos por producto?",
+            "Analiza las desviaciones de precio del último período"
+        ]
+        
+        # Añadir sugerencias específicas según tablas disponibles
+        if 'MAESTRO_GESTORES' in schema_info['tables']:
+            count = schema_info['tables']['MAESTRO_GESTORES']['record_count']
+            base_suggestions.append(f"Analizar los {count} gestores disponibles")
+        
+        if 'PRECIO_POR_PRODUCTO_REAL' in schema_info['tables']:
+            base_suggestions.append("Detectar desviaciones críticas de precios")
+        
+        return base_suggestions[:5]  # Limitar a 5 sugerencias
+    
+    def get_agent_status(self) -> Dict[str, Any]:
+        """Estado completo del agente v10.0"""
+        schema_info = self.query_builder.schema_inspector.get_database_schema()
+        
+        return {
+            'status': 'active',
+            'version': '10.0 - Integración Completa con Catálogos',
+            'capabilities': [
+                'Clasificación inteligente de consultas',
+                'Búsqueda automática en queries predefinidas (6 catálogos)',
+                'Generación SQL dinámica con contexto bancario',
+                'Respuestas contextuales sin SQL',
+                'Integración completa con CDG Agent',
+                'Flujo perfecto de enrutamiento'
+            ],
+            'query_catalogs': list(self.classifier.query_catalogs.keys()),
+            'database_info': {
+                'path': self.db_path,
+                'tables_available': len(schema_info['tables']),
+                'total_records': schema_info['metadata']['total_records'],
+                'last_schema_update': schema_info['metadata']['last_updated']
+            },
+            'sessions_active': len(self.sessions),
+            'imports_successful': IMPORTS_SUCCESSFUL
+        }
 
 # ============================================================================
-# FUNCIONES DE CONVENIENCIA
+# FUNCIONES DE CONVENIENCIA Y EXPORTS
 # ============================================================================
 
-def create_chat_agent() -> CDGChatAgent:
-    """Función de conveniencia para crear instancia del agente"""
-    return CDGChatAgent()
+def create_universal_chat_agent(db_path: str = None) -> UniversalChatAgentV10:
+    """Factory para crear agente v10.0 completo"""
+    return UniversalChatAgentV10(db_path)
 
-# Instancia global para uso directo
-chat_agent_instance = None
+# Instancia global
+_universal_agent = None
 
-def get_chat_agent() -> CDGChatAgent:
-    """Obtiene instancia global del agente de chat"""
-    global chat_agent_instance
-    if chat_agent_instance is None:
-        chat_agent_instance = CDGChatAgent()
-    return chat_agent_instance
+def get_universal_chat_agent() -> UniversalChatAgentV10:
+    """Obtiene instancia global del agente v10.0"""
+    global _universal_agent
+    if _universal_agent is None:
+        _universal_agent = create_universal_chat_agent()
+    return _universal_agent
 
-# Exports
+# Para compatibilidad con código existente
+CDGChatAgent = UniversalChatAgentV10
+
 __all__ = [
-    'CDGChatAgent',
-    'ChatMessage', 
+    'UniversalChatAgentV10',
+    'CDGChatAgent', 
+    'ChatMessage',
     'ChatResponse',
-    'ChatSession',
-    'ChatSessionManager',
-    'create_chat_agent',
-    'get_chat_agent'
+    'IntelligentQueryClassifier',
+    'PredefinedQueryExecutor',
+    'BankingResponseFormatter',
+    'create_universal_chat_agent',
+    'get_universal_chat_agent'
 ]
+
+if __name__ == "__main__":
+    # Demo del agente v10.0 completo
+    async def demo():
+        print("🚀 Iniciando Universal Chat Agent v10.0 - VERSIÓN COMPLETA...")
+        
+        agent = create_universal_chat_agent()
+        status = agent.get_agent_status()
+        
+        print(f"Status: {status}")
+        
+        # Test con consulta
+        test_message = ChatMessage(
+            user_id="demo_user",
+            message="¿Cuántos gestores tenemos en total?"
+        )
+        
+        response = await agent.process_chat_message(test_message)
+        print(f"\nRespuesta: {response.response}")
+        print(f"Tipo: {response.response_type}")
+        print(f"Flujo usado: {response.metadata.get('flow_type', 'unknown')}")
+        print(f"Confianza: {response.confidence_score}")
+        
+    import asyncio
+    asyncio.run(demo())

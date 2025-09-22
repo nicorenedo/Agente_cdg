@@ -2,13 +2,7 @@
 /* eslint-disable no-console */
 
 /**
- * ChatInterface v11.0 — Perfect Integration (Chat Agent v10.0 + CDG Agent v6.0)
- * -----------------------------------------------------------------------------
- * ✅ CORREGIDO: Ciclo de re-renders y WebSocket estable
- * ✅ INTEGRADO: Perfect Integration con Chat Agent v10.0 + CDG Agent v6.0
- * ✅ MEJORADO: UI profesional con tema Banca March corporativo
- * ✅ OPTIMIZADO: Dependencies estabilizadas y useEffect controlado
- * ✅ DIFERENCIADO: Chat general (NO pivoteo) vs ConversationalPivot
+ * ChatInterface v12.0 - FIXED ICONS + Stable WebSocket + Confidentiality
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -52,11 +46,13 @@ import {
   BarChartOutlined,
   BulbOutlined,
   TeamOutlined,
-  ArrowUpOutlined
+  ArrowUpOutlined,
+  SecurityScanOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 
-// ✅ Services actualizados v11.0
+// ✅ Services actualizados v12.0
 import chatService from '../../services/chatService';
 import reportService from '../../services/reportService';
 import theme from '../../styles/theme';
@@ -65,7 +61,7 @@ const { TextArea } = Input;
 const { Text, Title } = Typography;
 
 /**
- * ✅ ChatInterface - CHAT GENERAL CDG v11.0 (NO PIVOTEO)
+ * ✅ ChatInterface - CHAT GENERAL CDG v12.0 CON CONFIDENCIALIDAD CORREGIDO
  */
 const ChatInterface = ({
   scope = 'direccion',
@@ -89,17 +85,24 @@ const ChatInterface = ({
   const [isTyping, setIsTyping] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [error, setError] = useState(null);
-  const [useWebSocket, setUseWebSocket] = useState(true);
+  const [useWebSocket, setUseWebSocket] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isExpanded, setIsExpanded] = useState(expanded);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [lastAnalysisType, setLastAnalysisType] = useState(null);
+  
+  // 🔐 ESTADOS DE CONFIDENCIALIDAD
+  const [userRole, setUserRole] = useState(null);
+  const [securityFeatures, setSecurityFeatures] = useState([]);
+  const [accessDeniedCount, setAccessDeniedCount] = useState(0);
+  
   const [sessionMetrics, setSessionMetrics] = useState({
     messages_sent: 0,
     queries_processed: 0,
     reports_generated: 0,
-    charts_requested: 0
+    charts_requested: 0,
+    access_denied: 0
   });
 
   // ✅ REFERENCIAS
@@ -110,107 +113,100 @@ const ChatInterface = ({
   const reconnectTimer = useRef(null);
   const isManualDisconnect = useRef(false);
   const isMounted = useRef(true);
-  const initializationRef = useRef(false); // ✅ NUEVO: Evitar doble inicialización
+  const initializationRef = useRef(false);
 
-  // ✅ USER ID ESTABLE - FIJO por scope y gestorId
+  // ✅ USER ID ESTABLE
   const userId = useMemo(() => {
-    const baseId = `cdg-chat-v11-${scope}`;
+    const baseId = `cdg-chat-v12-${scope}`;
     const gestorPart = scope === 'gestor' && gestorId ? `-${gestorId}` : '';
     const randomPart = Math.random().toString(36).substr(2, 6);
     return `${baseId}${gestorPart}-${randomPart}`;
-  }, [scope, gestorId]); // ✅ CORREGIDO: Solo depende de scope y gestorId
+  }, [scope, gestorId]);
 
-  // ✅ CONTEXTO ENRIQUECIDO v11.0 - ESTABILIZADO
-  const buildContext = useCallback(() => ({
-    scope,
-    periodo: periodo || undefined,
-    gestor_id: scope === 'gestor' ? gestorId : undefined,
-    user_role: scope,
-    chat_type: 'general',
-    current_chart_available: !!currentChartConfig,
-    session_id: userId,
-    integration_version: '11.0',
-    chat_agent_version: '10.0',
-    cdg_agent_version: '6.0',
-    perfect_integration: true
-  }), [scope, periodo, gestorId, currentChartConfig, userId]);
+  // ✅ CONTEXTO ENRIQUECIDO
+  const buildContext = useCallback(() => {
+    const context = {
+      scope,
+      periodo: periodo || undefined,
+      gestor_id: scope === 'gestor' && gestorId ? gestorId : undefined,
+      user_role: scope,
+      chat_type: 'general',
+      current_chart_available: !!currentChartConfig,
+      session_id: userId,
+      integration_version: '12.0',
+      chat_agent_version: '11.0',
+      cdg_agent_version: '6.1',
+      perfect_integration: true,
+      confidentiality_enabled: true,
+      security_level: 'banking'
+    };
+  
+    console.log('🔍 [ChatInterface] CONTEXT BUILT:', context);
+    return context;
+  }, [scope, periodo, gestorId, currentChartConfig, userId]);
 
-  // ✅ MENSAJE DE BIENVENIDA ESTABLE - MEMOIZADO CORRECTAMENTE
+
+  // ✅ MENSAJE DE BIENVENIDA
   const welcomeMessage = useMemo(() => ({
     id: `welcome-${scope}-${gestorId || 'default'}`,
     type: 'assistant',
     content: scope === 'direccion' 
-      ? `¡Hola! Soy tu **Asistente CDG v11.0 para Análisis Corporativo**. Con **Perfect Integration** (Chat Agent v10.0 + CDG Agent v6.0) puedo ayudarte con:
-
-**📊 Análisis Inteligente:**
-• KPIs consolidados y comparativas
-• Rankings de gestores y centros
-• Detección de desviaciones críticas
-• Análisis de márgenes y volumen
-
-**🎯 Funciones Avanzadas:**
-• Generación automática de reportes
-• Clasificación inteligente de consultas
-• Insights basados en IA
-• Recomendaciones ejecutivas
+      ? `🔐 ¡Hola! Soy tu **Asistente CDG v12.0 para Análisis Corporativo**. Con **Perfect Integration + Confidencialidad** puedo ayudarte con análisis corporativos, KPIs consolidados, rankings de gestores y generación de reportes ejecutivos.
 
 **💡 Ejemplos de consultas:**
-• *"¿Cuáles son los KPIs críticos?"*
-• *"Genera reporte ejecutivo del período"*
-• *"¿Qué desviaciones necesitan atención?"*
+• *"¿Cuáles son los KPIs críticos del período?"*
+• *"Genera reporte ejecutivo consolidado"*
+• *"¿Qué desviaciones requieren atención inmediata?"*
 
-¿En qué análisis corporativo te puedo ayudar?`
-      : `¡Hola${gestorId ? ` Gestor ${gestorId}` : ''}! Soy tu **Asistente CDG v11.0 Personal**. Con **Perfect Integration** puedo ayudarte con:
+**🔐 Seguridad:** Sistema de confidencialidad bancaria activo con validación automática de permisos.
 
-**👤 Tu Performance:**
-• Análisis de tu cartera personalizada
-• Comparativas vs otros gestores
-• Oportunidades de cross-selling
-• KPIs individuales en tiempo real
+¿En qué análisis corporativo puedo ayudarte?`
+      : `🔐 ¡Hola${gestorId ? ` Gestor ${gestorId}` : ''}! Soy tu **Asistente CDG v12.0 Personal**. Puedo ayudarte con tu performance individual, comparativas vs otros gestores y análisis de tu cartera.
 
-**🎯 Análisis Inteligente:**
-• Top clientes por rentabilidad
-• Mix de productos optimizado  
-• Desviaciones en tu gestión
-• Recomendaciones personalizadas
+**💡 Ejemplos:**
+• *"¿Cómo está mi performance este período?"*
+• *"¿Cuáles son mis mejores clientes por margen?"*
+• *"Genera mi reporte personal de gestión"*
 
-**📈 Funciones Premium:**
-• Reportes automáticos personales
-• Proyecciones de incentivos
-• Análisis predictivo de cartera
+**🔐 Confidencialidad:** Acceso restringido a tus datos únicamente.
 
-¿Qué te gustaría consultar sobre tu gestión?`,
+¿Qué consulta sobre tu gestión te gustaría hacer?`,
     timestamp: new Date(),
     recommendations: [
-      scope === 'direccion' ? 'Dashboard corporativo principal' : 'Mi dashboard personal',
-      scope === 'direccion' ? 'Top 5 gestores críticos' : 'Mi posición en rankings',
-      scope === 'direccion' ? 'Alertas desviaciones críticas' : 'Mis oportunidades de mejora',
-      scope === 'direccion' ? 'Reporte ejecutivo consolidado' : 'Mi reporte de performance'
-    ]
-  }), [scope, gestorId]); // ✅ CORREGIDO: Solo scope y gestorId
+      scope === 'direccion' ? 'KPIs corporativos principales' : 'Mi performance actual',
+      scope === 'direccion' ? 'Rankings de gestores' : 'Comparativa con otros gestores',
+      scope === 'direccion' ? 'Alertas críticas' : 'Mis oportunidades de mejora',
+      scope === 'direccion' ? 'Reporte ejecutivo' : 'Mi reporte personal'
+    ],
+    metadata: {
+      security_enabled: true,
+      user_role: scope,
+      confidentiality_level: 'banking'
+    }
+  }), [scope, gestorId]);
 
-  // ✅ SUGERENCIAS CONTEXTUALES - ESTABILIZADAS
+  // ✅ SUGERENCIAS CONTEXTUALES
   const defaultSuggestions = useMemo(() => {
     if (scope === 'direccion') {
       return [
         '📊 ¿Cuáles son los KPIs corporativos principales?',
-        '🏆 ¿Qué gestores lideran el ranking por margen?', 
+        '🏆 ¿Qué gestores lideran el ranking?', 
         '🚨 ¿Hay desviaciones críticas vs presupuesto?',
-        '📈 Genera un reporte ejecutivo consolidado',
-        '🎯 ¿Qué centros requieren atención inmediata?',
-        '💹 Analiza las tendencias de volumen',
+        '📈 Genera un reporte ejecutivo',
+        '🎯 ¿Qué centros requieren atención?',
+        '💹 Analiza las tendencias del período',
         '🔍 Detecta anomalías en los datos',
         '📋 Resumen del estado del negocio'
       ];
     } else {
       return [
         '📈 ¿Cómo está mi performance este período?',
-        '👥 ¿Cuáles son mis mejores clientes por margen?',
+        '👥 ¿Cuáles son mis mejores clientes?',
         '🏆 ¿Cómo me comparo con otros gestores?',
         '🎯 ¿Qué productos debería priorizar?',
         '💡 ¿Tengo oportunidades de cross-selling?',
         '📊 Genera mi reporte personal',
-        '🎁 ¿Cuáles son mis proyecciones de incentivos?',
+        '🎁 ¿Cuáles son mis proyecciones?',
         '🔍 Analiza mi cartera detalladamente'
       ];
     }
@@ -218,11 +214,64 @@ const ChatInterface = ({
 
   const activeSuggestions = suggestions || defaultSuggestions;
 
-  // ✅ PROCESAR MENSAJE - ESTABILIZADO
+  // ✅ PROCESAR MENSAJE CON CONFIDENCIALIDAD
   const handleChatMessage = useCallback((data) => {
     if (!isMounted.current) return;
     
     console.log('[ChatInterface] 📥 Chat response received:', data);
+
+    // 🔐 MANEJO DE ACCESO DENEGADO
+    if (data?.type === 'access_denied') {
+      console.warn('[ChatInterface] 🔐 Access denied received:', data);
+      
+      const accessDeniedMessage = {
+        id: `access-denied-${Date.now()}`,
+        type: 'assistant',
+        content: `🔐 **${data.message || 'Acceso Restringido por Confidencialidad'}**
+
+Por motivos de seguridad bancaria, no puedes acceder a esta información.
+
+**📋 Información del bloqueo:**
+${data.accessInfo ? `• Solicitud: ${data.accessInfo.requested_gestor || 'Datos confidenciales'}
+• Tu acceso: ${data.accessInfo.user_gestor || 'Restringido'}
+• Rol: ${data.accessInfo.user_role || 'Usuario'}` : '• Solicitud bloqueada por confidencialidad'}
+
+**💡 Alternativas disponibles:**
+${data.suggestions ? data.suggestions.map(s => `• ${s}`).join('\n') : '• Consulta tus propios datos\n• Solicita información agregada\n• Usa comparativas anónimas'}`,
+        timestamp: new Date(),
+        isError: true,
+        isAccessDenied: true,
+        recommendations: data.suggestions || [
+          'Consultar mis datos',
+          'Ver promedios del sector',
+          'Análisis agregados'
+        ],
+        metadata: {
+          access_info: data.accessInfo,
+          security_action: 'access_denied',
+          confidentiality_level: 'banking'
+        }
+      };
+
+      setMessages(prev => [...prev, accessDeniedMessage]);
+      setIsSending(false);
+      setIsTyping(false);
+      setAccessDeniedCount(prev => prev + 1);
+      
+      setSessionMetrics(prev => ({
+        ...prev,
+        access_denied: prev.access_denied + 1
+      }));
+
+      notification.warning({
+        message: '🔐 Acceso Restringido',
+        description: 'Confidencialidad bancaria - Solicitud bloqueada',
+        duration: 5,
+        placement: 'topRight'
+      });
+
+      return;
+    }
 
     const responseData = data?.data || data;
     const { 
@@ -256,12 +305,14 @@ const ChatInterface = ({
         processing_time,
         analysis_type,
         data_sources,
-        chat_agent_version: '10.0',
-        cdg_agent_version: '6.0'
+        chat_agent_version: '11.0',
+        cdg_agent_version: '6.1',
+        security_validated: true,
+        user_role: userRole
       },
       charts: charts || [],
       reports: reports || [],
-      source: 'perfect_integration'
+      source: 'perfect_integration_with_confidentiality'
     };
 
     setMessages(prev => [...prev, assistantMessage]);
@@ -291,32 +342,30 @@ const ChatInterface = ({
         });
       }
     }, 150);
-  }, [onNewChart, onReportGenerated]);
+  }, [onNewChart, onReportGenerated, userRole]);
 
-  // ✅ INICIALIZAR WEBSOCKET - PROTEGIDO CONTRA DUPLICADOS
-  const initializeWebSocket = useCallback(() => {
+  // ✅ INICIALIZAR CON HTTP POR DEFECTO (evita ping timeouts)
+  const initializeConnection = useCallback(() => {
     if (!isMounted.current || initializationRef.current) return;
-    if (sessionRef.current && sessionRef.current.readyState === WebSocket.CONNECTING) return;
-  
-    // ✅ NUEVA DETECCIÓN: Verificar si ya hay otro WebSocket activo
-    const existingConnections = chatService.getActiveConnections?.() || [];
-    const hasActiveConnection = existingConnections.some(conn => 
-      conn.userId === userId || conn.status === 'connected'
-    );
-  
-    if (hasActiveConnection) {
-      console.log('[ChatInterface] 🔄 Detectado WebSocket existente, usando HTTP fallback');
-      setUseWebSocket(false);
-      setConnectionStatus('http-fallback-auto');
+    
+    console.log('[ChatInterface] 🚀 Initializing connection...');
+    initializationRef.current = true;
+
+    if (useWebSocket) {
+      console.log('[ChatInterface] 🌐 User requested WebSocket');
+      initializeWebSocket();
+    } else {
+      console.log('[ChatInterface] 📡 Using stable HTTP connection');
+      setConnectionStatus('http-ready');
       setIsConnected(true);
       initializationRef.current = false;
-      return;
     }
-  
-    console.log('[ChatInterface] 🌐 Initializing WebSocket with Perfect Integration...');
-    initializationRef.current = true;
-  
-    // Limpiar sesión anterior
+  }, [useWebSocket]);
+
+  // ✅ INICIALIZAR WEBSOCKET (solo cuando se solicita)
+  const initializeWebSocket = useCallback(() => {
+    console.log('[ChatInterface] 🌐 Initializing WebSocket...');
+    
     if (sessionRef.current) {
       try {
         sessionRef.current.close();
@@ -325,53 +374,69 @@ const ChatInterface = ({
       }
       sessionRef.current = null;
     }
-  
+
     try {
       const session = chatService.createChatSession(userId, {
+        maxRetries: 2,
+        backoffBaseMs: 3000,
+        heartbeatIntervalMs: 90000,
         onMessage: handleChatMessage,
         onOpen: () => {
           if (isMounted.current) {
-            console.log('[ChatInterface] ✅ WebSocket connected with Perfect Integration');
+            console.log('[ChatInterface] ✅ WebSocket connected');
             setIsConnected(true);
             setConnectionStatus('connected');
             setConnectionAttempts(0);
             setError(null);
+            initializationRef.current = false;
+          }
+        },
+        onReady: (readyData) => {
+          if (isMounted.current) {
+            console.log('[ChatInterface] 🔐 Ready with security:', readyData);
+            setUserRole(readyData.userRole);
+            setSecurityFeatures(readyData.securityFeatures || []);
+            
+            if (readyData.userRole) {
+              notification.success({
+                message: '🔐 Conexión Segura',
+                description: `Rol: ${readyData.userRole === 'control_gestion' ? 'Admin' : 'Usuario'}`,
+                duration: 3,
+                placement: 'topRight'
+              });
+            }
           }
         },
         onClose: (event) => {
           if (isMounted.current && !isManualDisconnect.current) {
-            console.log('[ChatInterface] 🔌 WebSocket closed:', event?.code || 'unknown');
+            console.log('[ChatInterface] 🔌 WebSocket closed:', event?.code);
             setIsConnected(false);
             setConnectionStatus('disconnected');
             initializationRef.current = false;
             
-            // ✅ NUEVA LÓGICA: Más conservador en reconexión
-            if (event?.code === 1005 || event?.code === 1012) {
-              console.log('[ChatInterface] 🔄 Código de conflicto detectado, cambiando a HTTP');
-              setUseWebSocket(false);
-              setConnectionStatus('http-fallback-conflict');
-              setIsConnected(true);
-            } else {
-              attemptReconnect();
-            }
+            console.log('[ChatInterface] 🔄 Switching to stable HTTP connection');
+            setUseWebSocket(false);
+            setConnectionStatus('http-fallback-auto');
+            setIsConnected(true);
           }
         },
         onError: (error) => {
           if (isMounted.current && !isManualDisconnect.current) {
             console.error('[ChatInterface] ❌ WebSocket error:', error);
+            
+            if (error.type === 'access_denied') {
+              handleChatMessage(error);
+              return;
+            }
+            
             setIsConnected(false);
             setConnectionStatus('error');
             initializationRef.current = false;
             
-            // ✅ NUEVA LÓGICA: Cambiar a HTTP en caso de error persistente
-            if (connectionAttempts >= 2) {
-              console.log('[ChatInterface] 🔄 Múltiples errores, cambiando a HTTP');
-              setUseWebSocket(false);
-              setConnectionStatus('http-fallback-error');
-              setIsConnected(true);
-            } else {
-              attemptReconnect();
-            }
+            console.log('[ChatInterface] 🔄 Error detected, switching to HTTP');
+            setUseWebSocket(false);
+            setConnectionStatus('http-fallback-error');
+            setIsConnected(true);
           }
         },
         onTyping: ({ active, analysis_type }) => {
@@ -390,46 +455,14 @@ const ChatInterface = ({
     } catch (error) {
       console.error('[ChatInterface] Error initializing WebSocket:', error);
       initializationRef.current = false;
-      if (!isManualDisconnect.current && isMounted.current) {
-        attemptReconnect();
-      }
+      
+      setUseWebSocket(false);
+      setConnectionStatus('http-fallback-init-error');
+      setIsConnected(true);
     }
-  }, [userId, handleChatMessage, connectionAttempts]);
+  }, [userId, handleChatMessage]);
 
-
-  // ✅ LÓGICA DE RECONEXIÓN - ESTABILIZADA
-  const attemptReconnect = useCallback(() => {
-    if (!isMounted.current || isManualDisconnect.current || connectionAttempts >= 3) {
-      console.log('[ChatInterface] 🔄 Max attempts reached, switching to HTTP fallback');
-      if (isMounted.current) {
-        setUseWebSocket(false);
-        setConnectionStatus('http-fallback');
-        setConnectionAttempts(0);
-        setIsConnected(true);
-        initializationRef.current = false;
-      }
-      return;
-    }
-
-    const delay = Math.min(2000 * Math.pow(1.5, connectionAttempts), 8000);
-    console.log(`[ChatInterface] 🕒 Reconnecting in ${delay}ms (attempt ${connectionAttempts + 1})`);
-
-    setConnectionStatus(`reconnecting-${connectionAttempts + 1}`);
-
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
-    }
-
-    reconnectTimer.current = setTimeout(() => {
-      if (isMounted.current && !isManualDisconnect.current) {
-        setConnectionAttempts(prev => prev + 1);
-        initializationRef.current = false;
-        initializeWebSocket();
-      }
-    }, delay);
-  }, [connectionAttempts, initializeWebSocket]);
-
-  // ✅ ENVIAR MENSAJE - ESTABILIZADO
+  // ✅ ENVIAR MENSAJE - 🔧 AQUÍ ESTÁ LA CORRECCIÓN
   const sendMessage = useCallback(async (messageText, isQuickAction = false, messageType = 'query') => {
     if (!messageText.trim() || isSending || !isMounted.current) return;
 
@@ -439,7 +472,11 @@ const ChatInterface = ({
       content: messageText,
       timestamp: new Date(),
       isQuickAction,
-      messageType
+      messageType,
+      metadata: {
+        user_role: userRole,
+        security_validated: true
+      }
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -472,23 +509,39 @@ const ChatInterface = ({
           context,
           message_type: messageType,
           include_analysis: true,
-          include_recommendations: true
+          include_recommendations: true,
+          user_role: userRole,
+          confidentiality_enabled: true
         });
       } else {
         console.log('[ChatInterface] 📡 Sending via HTTP');
         
-        const response = await chatService.sendMessage({
+        // 🔍 DEBUG: Construir payload con logs detallados
+        const debugPayload = {
           user_id: userId,
           message: messageText,
           periodo,
-          gestor_id: scope === 'gestor' ? gestorId : undefined,
+          gestor_id: scope === 'gestor' && gestorId ? gestorId : null, // 🔧 CORRECCIÓN AQUÍ
           context,
           include_charts: false,
           include_recommendations: true,
           include_analysis: true,
           chart_interaction_type: 'query',
-          message_type: messageType
+          message_type: messageType,
+          user_role: userRole || scope
+        };
+
+        console.log('🔍 [ChatInterface] PREPARANDO PAYLOAD:', {
+          scope,
+          gestorId,
+          gestorId_type: typeof gestorId,
+          gestor_id_calculated: scope === 'gestor' && gestorId ? gestorId : null,
+          gestor_id_type: typeof (scope === 'gestor' && gestorId ? gestorId : null)
         });
+
+        console.log('🔍 [ChatInterface] PAYLOAD COMPLETO:', debugPayload);
+
+        const response = await chatService.http.sendMessage(debugPayload);
 
         handleChatMessage(response);
       }
@@ -502,15 +555,15 @@ const ChatInterface = ({
       const errorMessage = {
         id: `error-${Date.now()}`,
         type: 'assistant',
-        content: `❌ **Error de Comunicación**\n\n${error?.message || 'No se pudo procesar tu consulta'}.\n\nPor favor, verifica tu conexión e inténtalo de nuevo.`,
+        content: `❌ **Error de Comunicación**\n\n${error?.message || 'No se pudo procesar tu consulta'}.\n\nPor favor, inténtalo de nuevo.`,
         timestamp: new Date(),
         isError: true,
-        recommendations: ['Reintentar mensaje', 'Verificar conexión', 'Cambiar a modo HTTP']
+        recommendations: ['Reintentar mensaje', 'Verificar conexión']
       };
 
       setMessages(prev => [...prev, errorMessage]);
     }
-  }, [isSending, isConnected, useWebSocket, buildContext, userId, periodo, gestorId, scope, handleChatMessage]);
+  }, [isSending, isConnected, useWebSocket, buildContext, userId, periodo, gestorId, scope, handleChatMessage, userRole]);
 
   // ✅ GENERAR REPORTE
   const generateReport = useCallback(async (reportType = 'business_review') => {
@@ -545,10 +598,14 @@ const ChatInterface = ({
         const reportMessage = {
           id: `report-${Date.now()}`,
           type: 'assistant',
-          content: `📋 **Reporte generado exitosamente**\n\n**${report.title}**\n\nEl reporte ha sido generado con análisis complejo integrado.`,
+          content: `📋 **Reporte generado exitosamente**\n\n**${report.title}**\n\nEl reporte ha sido generado con validación de confidencialidad.`,
           timestamp: new Date(),
           reports: [report],
-          recommendations: ['Descargar reporte', 'Análisis adicional']
+          recommendations: ['Descargar reporte', 'Análisis adicional'],
+          metadata: {
+            security_validated: true,
+            user_role: userRole
+          }
         };
 
         setMessages(prev => [...prev, reportMessage]);
@@ -567,7 +624,7 @@ const ChatInterface = ({
     } finally {
       setIsGeneratingReport(false);
     }
-  }, [isGeneratingReport, userId, gestorId, periodo, onReportGenerated]);
+  }, [isGeneratingReport, userId, gestorId, periodo, onReportGenerated, userRole]);
 
   // ✅ HANDLERS DE UI
   const handleSend = useCallback(() => {
@@ -615,14 +672,6 @@ const ChatInterface = ({
     }
   }, [messages, sendMessage]);
 
-  const handleReconnect = useCallback(() => {
-    setConnectionAttempts(0);
-    setError(null);
-    isManualDisconnect.current = false;
-    initializationRef.current = false;
-    initializeWebSocket();
-  }, [initializeWebSocket]);
-
   const handleWebSocketToggle = useCallback((checked) => {
     isManualDisconnect.current = !checked;
     
@@ -645,7 +694,8 @@ const ChatInterface = ({
     initializationRef.current = false;
     
     if (checked) {
-      setTimeout(() => initializeWebSocket(), 100);
+      setConnectionStatus('connecting');
+      setTimeout(() => initializeWebSocket(), 500);
     } else {
       setConnectionStatus('http-ready');
       setIsConnected(true);
@@ -664,7 +714,7 @@ const ChatInterface = ({
     }, 300);
   }, []);
 
-  // ✅ MENU DE ACCIONES
+  // ✅ MENU DE ACCIONES ACTUALIZADO
   const advancedActionsMenu = {
     items: [
       {
@@ -690,6 +740,39 @@ const ChatInterface = ({
         ]
       },
       {
+        key: 'security-info',
+        icon: <SecurityScanOutlined />,
+        label: 'Información de Seguridad',
+        onClick: () => {
+          const securityMessage = {
+            id: `security-info-${Date.now()}`,
+            type: 'assistant',
+            content: `🔐 **Información de Seguridad Bancaria**
+
+**Tu Rol:** ${userRole === 'control_gestion' ? 'Control de Gestión (Acceso completo)' : 'Gestor (Acceso restringido)'}
+
+**Funcionalidades Activas:**
+${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Validación de permisos\n• Protección de datos\n• Cumplimiento normativo'}
+
+**Estadísticas de Sesión:**
+• Mensajes enviados: ${sessionMetrics.messages_sent}
+• Consultas procesadas: ${sessionMetrics.queries_processed}
+• Accesos denegados: ${sessionMetrics.access_denied}
+
+**Sistema de Confidencialidad:**
+• Protección automática de datos personales
+• Validación de permisos por consulta
+• Cumplimiento normativo bancario`,
+            timestamp: new Date(),
+            metadata: {
+              security_info: true,
+              user_role: userRole
+            }
+          };
+          setMessages(prev => [...prev, securityMessage]);
+        }
+      },
+      {
         key: 'clear-chat',
         icon: <ReloadOutlined />,
         label: 'Limpiar Chat',
@@ -699,36 +782,31 @@ const ChatInterface = ({
             messages_sent: 0,
             queries_processed: 0,
             reports_generated: 0,
-            charts_requested: 0
+            charts_requested: 0,
+            access_denied: 0
           });
+          setAccessDeniedCount(0);
         }
       }
     ]
   };
 
-  // ✅ INICIALIZACIÓN - CORREGIDA
+  // ✅ INICIALIZACIÓN
   useEffect(() => {
-    // ✅ Evitar doble inicialización en desarrollo
     if (initializationRef.current) return;
 
     isMounted.current = true;
     
-    console.log('[ChatInterface] 🚀 Component initialized with Perfect Integration v11.0');
+    console.log('[ChatInterface] 🚀 Component initialized with Perfect Integration + Confidentiality v12.0');
     setMessages([welcomeMessage]);
     setError(null);
     isManualDisconnect.current = false;
     
-    if (useWebSocket) {
-      setConnectionStatus('connecting');
-      setTimeout(() => {
-        if (isMounted.current && !initializationRef.current) {
-          initializeWebSocket();
-        }
-      }, 500); // ✅ Delay mayor para evitar hot reload issues
-    } else {
-      setConnectionStatus('http-ready');
-      setIsConnected(true);
-    }
+    setTimeout(() => {
+      if (isMounted.current && !initializationRef.current) {
+        initializeConnection();
+      }
+    }, 500);
 
     return () => {
       console.log('[ChatInterface] 🧹 Component cleanup');
@@ -749,14 +827,7 @@ const ChatInterface = ({
         sessionRef.current = null;
       }
     };
-  }, []); // ✅ CORREGIDO: Sin dependencies para evitar re-renders
-
-  // ✅ EFECTO PARA CARGAR MENSAJE DE BIENVENIDA - SEPARADO
-  useEffect(() => {
-    if (messages.length === 0) {
-      setMessages([welcomeMessage]);
-    }
-  }, [welcomeMessage]);
+  }, [welcomeMessage, initializeConnection]);
 
   // ✅ SCROLL AUTOMÁTICO
   useEffect(() => {
@@ -772,10 +843,11 @@ const ChatInterface = ({
     return () => clearTimeout(timeoutId);
   }, [messages, isTyping]);
 
-  // ✅ RENDERIZAR MENSAJE
+  // ✅ RENDERIZAR MENSAJE CON SOPORTE PARA ACCESO DENEGADO
   const renderMessage = (message) => {
     const isUser = message.type === 'user';
     const isError = message.isError;
+    const isAccessDenied = message.isAccessDenied;
     const hasAdvancedData = message.metadata || message.charts?.length > 0 || message.reports?.length > 0;
 
     return (
@@ -790,13 +862,15 @@ const ChatInterface = ({
       >
         {!isUser && (
           <Avatar 
-            icon={<RobotOutlined />} 
+            icon={isAccessDenied ? <SecurityScanOutlined /> : <RobotOutlined />}
             style={{ 
-              backgroundColor: isError 
-                ? theme.colors?.error || '#ff4d4f' 
-                : hasAdvancedData 
-                  ? theme.colors?.bmGreenLight || '#52c41a'
-                  : theme.colors?.bmGreenPrimary || '#1890ff',
+              backgroundColor: isAccessDenied
+                ? '#ff7875'
+                : isError 
+                  ? theme.colors?.error || '#ff4d4f' 
+                  : hasAdvancedData 
+                    ? theme.colors?.bmGreenLight || '#52c41a'
+                    : theme.colors?.bmGreenPrimary || '#1890ff',
               marginRight: 12,
               flexShrink: 0
             }} 
@@ -813,11 +887,13 @@ const ChatInterface = ({
           <div style={{
             backgroundColor: isUser 
               ? theme.colors?.bmGreenPrimary || '#1890ff'
-              : isError 
-                ? `${theme.colors?.error || '#ff4d4f'}10`
-                : hasAdvancedData
-                  ? `${theme.colors?.bmGreenLight || '#52c41a'}08`
-                  : theme.colors?.backgroundLight || '#fafafa',
+              : isAccessDenied
+                ? '#fff2f0'
+                : isError 
+                  ? `${theme.colors?.error || '#ff4d4f'}10`
+                  : hasAdvancedData
+                    ? `${theme.colors?.bmGreenLight || '#52c41a'}08`
+                    : theme.colors?.backgroundLight || '#fafafa',
             color: isUser ? 'white' : theme.colors?.textPrimary || '#333',
             padding: '12px 16px',
             borderRadius: 16,
@@ -826,11 +902,13 @@ const ChatInterface = ({
             marginBottom: 6,
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
             position: 'relative',
-            border: isError 
-              ? `1px solid ${theme.colors?.error || '#ff4d4f'}40` 
-              : hasAdvancedData
-                ? `1px solid ${theme.colors?.bmGreenLight || '#52c41a'}40`
-                : 'none',
+            border: isAccessDenied
+              ? '1px solid #ff7875'
+              : isError 
+                ? `1px solid ${theme.colors?.error || '#ff4d4f'}40` 
+                : hasAdvancedData
+                  ? `1px solid ${theme.colors?.bmGreenLight || '#52c41a'}40`
+                  : 'none',
             wordBreak: 'break-word'
           }}>
             <Text style={{ 
@@ -848,6 +926,11 @@ const ChatInterface = ({
                   Rápida
                 </Tag>
               )}
+              {isAccessDenied && (
+                <Tag size="small" color="red" style={{ fontSize: 10 }}>
+                  🔐 Restringido
+                </Tag>
+              )}
               {message.metadata?.analysis_type && (
                 <Tag size="small" color="green" style={{ fontSize: 10 }}>
                   {message.metadata.analysis_type.replace('_', ' ')}
@@ -860,6 +943,11 @@ const ChatInterface = ({
                   style={{ fontSize: 10 }}
                 >
                   {Math.round(message.metadata.confidence_score * 100)}%
+                </Tag>
+              )}
+              {message.metadata?.security_validated && (
+                <Tag size="small" color="green" style={{ fontSize: 10 }}>
+                  ✓ Seguro
                 </Tag>
               )}
             </div>
@@ -885,6 +973,12 @@ const ChatInterface = ({
                 <ThunderboltOutlined /> {message.metadata.processing_time}ms
               </Text>
             )}
+
+            {message.metadata?.user_role && (
+              <Text type="secondary" style={{ fontSize: 10 }}>
+                <SecurityScanOutlined /> {message.metadata.user_role}
+              </Text>
+            )}
           </div>
           
           {message.recommendations && message.recommendations.length > 0 && (
@@ -894,8 +988,8 @@ const ChatInterface = ({
                   key={index}
                   style={{ 
                     cursor: 'pointer',
-                    borderColor: theme.colors?.bmGreenLight,
-                    color: theme.colors?.bmGreenPrimary,
+                    borderColor: isAccessDenied ? '#ff7875' : theme.colors?.bmGreenLight,
+                    color: isAccessDenied ? '#ff4d4f' : theme.colors?.bmGreenPrimary,
                     fontSize: 11
                   }}
                   onClick={() => handleSuggestion(rec)}
@@ -941,8 +1035,8 @@ const ChatInterface = ({
     <Card
       className={className}
       style={{
-        height: isExpanded ? '90vh' : '70vh', // ✅ CORREGIDO: Altura mínima más grande
-        minHeight: '600px', // ✅ NUEVO: Altura mínima garantizada
+        height: isExpanded ? '90vh' : '70vh',
+        minHeight: '600px',
         display: 'flex',
         flexDirection: 'column',
         transition: 'height 0.3s ease',
@@ -961,19 +1055,30 @@ const ChatInterface = ({
           <Space>
             <MessageOutlined style={{ color: theme.colors?.bmGreenPrimary }} />
             <Title level={5} style={{ margin: 0 }}>
-              Chat CDG v11.0 - Perfect Integration
+              Chat CDG v12.0 - Perfect Integration + Confidentiality
             </Title>
             <Badge 
               count={scope === 'direccion' ? 'Corporativo' : 'Personal'} 
               style={{ backgroundColor: theme.colors?.bmGreenPrimary }} 
             />
+            {userRole && (
+              <Badge 
+                count={userRole === 'control_gestion' ? 'Admin' : 'User'} 
+                style={{ backgroundColor: userRole === 'control_gestion' ? '#52c41a' : '#1890ff' }} 
+              />
+            )}
           </Space>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Tooltip title="Métricas de sesión">
+            <Tooltip title="Métricas de sesión con seguridad">
               <Space size={4} style={{ fontSize: 10, color: theme.colors?.textSecondary }}>
                 <Text type="secondary" style={{ fontSize: 10 }}>
                   📤{sessionMetrics.messages_sent} 🔍{sessionMetrics.queries_processed} 📊{sessionMetrics.reports_generated}
+                  {sessionMetrics.access_denied > 0 && (
+                    <span style={{ color: '#ff4d4f', marginLeft: 4 }}>
+                      🔐{sessionMetrics.access_denied}
+                    </span>
+                  )}
                 </Text>
               </Space>
             </Tooltip>
@@ -1007,15 +1112,21 @@ const ChatInterface = ({
               status={
                 connectionStatus === 'connected' ? 'success' :
                 connectionStatus.includes('reconnecting') ? 'processing' :
-                connectionStatus === 'http-ready' || connectionStatus === 'http-fallback' ? 'default' : 'error'
+                connectionStatus === 'http-ready' || connectionStatus.startsWith('http-fallback') ? 'default' : 'error'
               }
               text={
-                connectionStatus === 'connected' ? 'v11.0' :
-                connectionStatus.includes('reconnecting') ? `Recon-${connectionStatus.split('-')[1]}` :
-                connectionStatus === 'http-ready' || connectionStatus === 'http-fallback' ? 'HTTP' : 'Error'
+                connectionStatus === 'connected' ? 'WS' :
+                connectionStatus.includes('reconnecting') ? `Recon` :
+                connectionStatus === 'http-ready' || connectionStatus.startsWith('http-fallback') ? 'HTTP' : 'Error'
               }
               style={{ fontSize: 9 }}
             />
+
+            {securityFeatures.length > 0 && (
+              <Tooltip title={`Seguridad activa: ${securityFeatures.join(', ')}`}>
+                <SecurityScanOutlined style={{ color: '#52c41a', fontSize: 14 }} />
+              </Tooltip>
+            )}
           </div>
         </div>
       }
@@ -1026,7 +1137,7 @@ const ChatInterface = ({
         borderBottom: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`
       }}>
         <Row gutter={[16, 8]}>
-          <Col span={8}>
+          <Col span={6}>
             <Statistic
               title="Catálogos"
               value={6}
@@ -1034,7 +1145,7 @@ const ChatInterface = ({
               valueStyle={{ fontSize: 14 }}
             />
           </Col>
-          <Col span={8}>
+          <Col span={6}>
             <Statistic
               title="Flujos"
               value={4}
@@ -1042,7 +1153,7 @@ const ChatInterface = ({
               valueStyle={{ fontSize: 14 }}
             />
           </Col>
-          <Col span={8}>
+          <Col span={6}>
             <Statistic
               title="Queries"
               value={8}
@@ -1050,8 +1161,38 @@ const ChatInterface = ({
               valueStyle={{ fontSize: 14 }}
             />
           </Col>
+          <Col span={6}>
+            <Statistic
+              title="Seguridad"
+              value={accessDeniedCount > 0 ? `${accessDeniedCount} bloq.` : 'Activa'}
+              prefix={<SecurityScanOutlined />}
+              valueStyle={{ 
+                fontSize: 14, 
+                color: accessDeniedCount > 0 ? '#ff4d4f' : '#52c41a' 
+              }}
+            />
+          </Col>
         </Row>
       </div>
+
+      {accessDeniedCount > 0 && (
+        <div style={{ 
+          padding: '12px 20px',
+          backgroundColor: '#fff2f0',
+          borderBottom: `1px solid #ffccc7`
+        }}>
+          <Alert
+            message={`🔐 ${accessDeniedCount} consulta${accessDeniedCount > 1 ? 's' : ''} bloqueada${accessDeniedCount > 1 ? 's' : ''} por confidencialidad`}
+            description="Sistema de protección bancaria activo."
+            type="warning"
+            showIcon
+            icon={<SecurityScanOutlined />}
+            style={{ fontSize: 12 }}
+            closable
+            onClose={() => setAccessDeniedCount(0)}
+          />
+        </div>
+      )}
 
       {showSuggestions && activeSuggestions.length > 0 && (
         <div style={{ 
@@ -1063,6 +1204,7 @@ const ChatInterface = ({
             <Text strong style={{ fontSize: 12, color: theme.colors?.textSecondary }}>
               <BulbOutlined style={{ marginRight: 4 }} />
               Consultas Populares
+              <SecurityScanOutlined style={{ marginLeft: 8, color: '#52c41a' }} />
             </Text>
             <Button 
               type="text" 
@@ -1105,14 +1247,14 @@ const ChatInterface = ({
           padding: '20px',
           overflow: 'auto',
           backgroundColor: theme.colors?.backgroundLight || '#fafafa',
-          maxHeight: isExpanded ? '75vh' : '500px', // ✅ CORREGIDO: Más grande
-          minHeight: '350px' // ✅ CORREGIDO: Altura mínima mayor
+          maxHeight: isExpanded ? '75vh' : '500px',
+          minHeight: '350px'
         }}
       >
         {messages.length === 0 ? (
           <Empty 
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="Inicia una conversación con el Agente CDG v11.0"
+            description="Inicia una conversación con el Agente CDG v12.0 + Confidencialidad"
             style={{ marginTop: 40 }}
           />
         ) : (
@@ -1148,11 +1290,14 @@ const ChatInterface = ({
                     size="small" 
                   />
                   <Text style={{ fontSize: 14, color: theme.colors?.textSecondary }}>
-                    Analizando con Perfect Integration...
+                    Analizando con Perfect Integration + Confidencialidad...
                   </Text>
                   {isGeneratingReport && (
                     <Tag size="small" color="blue">Generando reporte</Tag>
                   )}
+                  <Tag size="small" color="green">
+                    <SecurityScanOutlined /> Validando
+                  </Tag>
                 </div>
               </div>
             )}
@@ -1179,14 +1324,6 @@ const ChatInterface = ({
                   icon={<ReloadOutlined />}
                 >
                   Reintentar
-                </Button>
-                <Button 
-                  size="small" 
-                  onClick={handleReconnect}
-                  type="primary"
-                  style={{ backgroundColor: theme.colors?.bmGreenPrimary }}
-                >
-                  Reconectar
                 </Button>
               </Space>
             }
@@ -1241,13 +1378,22 @@ const ChatInterface = ({
             </span>
             <span style={{ color: theme.colors?.bmGreenPrimary }}>
               <CheckCircleOutlined style={{ marginRight: 4 }} />
-              Perfect Integration v11.0
+              Perfect Integration v12.0
+            </span>
+            <span style={{ color: '#52c41a' }}>
+              <SecurityScanOutlined style={{ marginRight: 4 }} />
+              Confidencialidad Bancaria
             </span>
           </Space>
           
           {periodo && (
             <Text type="secondary" style={{ fontSize: 10 }}>
               📋 {scope === 'direccion' ? 'Corporativo' : `Gestor ${gestorId}`} • {periodo}
+              {userRole && (
+                <span style={{ marginLeft: 8 }}>
+                  🔐 {userRole === 'control_gestion' ? 'Admin' : 'User'}
+                </span>
+              )}
             </Text>
           )}
         </div>

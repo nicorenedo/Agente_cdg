@@ -2,11 +2,11 @@
 /* eslint-disable no-console */
 
 /**
- * CDG Frontend API Client v11.0 (Chat Agent v10.0 + CDG Agent v6.0)
+ * CDG Frontend API Client v12.0 (Chat Agent v11.0 + CDG Agent v6.1)
  * --------------------------------------------------------------------
- * - Perfect Integration con backend main.py v11.0
- * - Chat Agent v10.0: Clasificación inteligente + 6 catálogos
- * - CDG Agent v6.0: Análisis complejos especializados
+ * - Perfect Integration con backend main.py v12.0
+ * - Chat Agent v11.0: Sistema de confidencialidad bancaria
+ * - CDG Agent v6.1: Análisis especializados con validación de permisos
  * - Desenvelope automático: devuelve { data, meta, ts } por defecto
  * - Retries con backoff para 429/502/503/504
  * - Cancelación de requests (AbortController)
@@ -78,6 +78,14 @@ const shouldRetry = (error) => {
 // Interceptor de respuesta: desenvelope + retry
 instance.interceptors.response.use(
   (res) => {
+    // ✅ DEBUG: Respuesta exitosa
+    console.log('🔍 [API] RESPONSE SUCCESS:', {
+      status: res.status,
+      url: res.config?.url,
+      method: res.config?.method,
+      data: res.data
+    });
+    
     const payload = res.data;
     if (payload && typeof payload === "object" && "status" in payload) {
       if (payload.status !== "success") {
@@ -97,24 +105,67 @@ instance.interceptors.response.use(
     return { data: payload, meta: null, ts: null, raw: payload };
   },
   async (error) => {
+    // ✅ DEBUG: Error detallado
+    console.error('🔍 [API] RESPONSE ERROR:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      method: error.config?.method,
+      requestData: error.config?.data,
+      responseData: error.response?.data,
+      headers: error.response?.headers,
+      fullError: error
+    });
+
+    // ✅ DEBUG ESPECÍFICO: Ver mensaje de error detallado
+    if (error.response?.data) {
+      console.error('🔍 [API] ERROR RESPONSE DETAIL:', {
+        rawData: error.response.data,
+        message: error.response.data.message,
+        messageType: typeof error.response.data.message,
+        messageArray: Array.isArray(error.response.data.message) ? error.response.data.message : 'Not array',
+        detail: error.response.data.detail,
+        errors: error.response.data.errors
+      });
+    }
+
     const config = error.config || {};
     config.__retryCount = config.__retryCount || 0;
 
     if (shouldRetry(error) && config.__retryCount < 3) {
       config.__retryCount += 1;
       const backoff = 400 * 2 ** (config.__retryCount - 1);
+      console.log(`🔍 [API] RETRYING in ${backoff}ms (attempt ${config.__retryCount}/3)`);
       await sleep(backoff);
       return instance(config);
     }
 
     const status = error.response?.status || 0;
     const backend = error.response?.data;
-    const messageFromBackend =
-      backend?.message ||
-      backend?.detail ||
-      backend?.error ||
-      error.message ||
-      "Error de red";
+
+    // ✅ FIX: Extraer mensaje del detail si es array de objetos  
+    let messageFromBackend = backend?.message || error.message || "Error de red";
+
+    if (!messageFromBackend && backend?.detail && Array.isArray(backend.detail)) {
+      // El error viene en detail como array de objetos con message
+      const errorObj = backend.detail[0];
+      messageFromBackend = errorObj?.message || errorObj?.msg || JSON.stringify(errorObj) || backend?.error || "Error de validación";
+      console.log('🔍 [API] EXTRACTED FROM DETAIL ARRAY:', messageFromBackend);
+    } else if (!messageFromBackend && backend?.detail) {
+      messageFromBackend = backend.detail;
+    } else if (Array.isArray(messageFromBackend)) {
+      messageFromBackend = messageFromBackend.join(', ');
+      console.log('🔍 [API] CONVERTED ARRAY MESSAGE:', messageFromBackend);
+    }
+
+
+    // ✅ DEBUG: Error final que se va a lanzar
+    console.error('🔍 [API] THROWING ERROR:', {
+      message: messageFromBackend,
+      status,
+      code: backend?.code || status,
+      detail: backend
+    });
 
     throw new ApiClientError(messageFromBackend, {
       status,
@@ -123,6 +174,8 @@ instance.interceptors.response.use(
     });
   }
 );
+
+
 
 /* ============================
  * Core HTTP helpers
@@ -188,7 +241,7 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
     console.log('[WS] ✅ Chat Agent v10.0 conectado exitosamente');
     isAlive = true;
 
-    // ✅ Heartbeat cada 25s (más conservador que el servidor)
+    // ✅ Heartbeat cada 18s (sincronizado con backend 20s)
     heartbeatInterval = setInterval(() => {
       if (socket.readyState === WebSocket.OPEN) {
         console.log('[WS] 💓 Enviando ping a Chat Agent v10.0');
@@ -199,16 +252,16 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
           clearInterval(heartbeatInterval);
         }
 
-        // Timeout de 10s para recibir pong
+        // Timeout de 12s para recibir pong (vs backend 10s timeout)
         isAlive = false;
         setTimeout(() => {
           if (!isAlive && socket.readyState === WebSocket.OPEN) {
             console.log('[WS] ❌ Ping timeout, reconectando...');
             socket.close(1000, 'Ping timeout'); 
           }
-        }, 10000);
+        }, 120000); // ✅ AUMENTADO: 2 mins para OpenAI
       }
-    }, 25000);
+    }, 60000); // ✅ AUMENTADO: 60s para OpenAI
 
     onOpen && onOpen(evt);
   };
@@ -217,11 +270,22 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
     try {
       const msg = JSON.parse(evt.data);
       
-      // ✅ Manejar ready de Chat Agent v10.0 + CDG Agent v6.0
+      // ✅ Manejar ready de Chat Agent v11.0 + CDG Agent v6.1 CON ROLES
       if (msg.type === 'ready') {
         console.log(`[WS] 🎯 Ready: ${msg.chat_agent} + ${msg.cdg_agent} (${msg.integration})`);
+        console.log(`[WS] 🔐 Usuario rol: ${msg.user_role} con funcionalidades de seguridad: ${msg.security_features?.join(', ')}`);
+        // ✅ NUEVO: Guardar rol del usuario para el frontend
+        if (onOpen) onOpen({ ...msg, userRole: msg.user_role });
         return;
       }
+      
+      // 🚨 NUEVO: Manejar acceso denegado por confidencialidad
+      if (msg.type === 'access_denied') {
+        console.warn(`[WS] 🔐 Acceso denegado: ${msg.message}`);
+        if (onError) onError({ type: 'access_denied', ...msg });
+        return;
+      }
+
       
       // Manejar pong del servidor
       if (msg.type === 'pong') {
@@ -690,7 +754,15 @@ const feedback = {
 
 // ✅ Chat Agent v10.0 - COMPLETAMENTE ACTUALIZADO
 const chat = {
-  message: (payload, cfg) => unwrap(http.post("/chat/message", toQueryBody(payload), cfg)),
+  message: (payload, cfg) => {
+    // ✅ DEBUG: Ver payload antes de enviar
+    const cleanPayload = toQueryBody(payload);
+    console.log('🔍 [API.CHAT] ORIGINAL PAYLOAD:', payload);
+    console.log('🔍 [API.CHAT] CLEAN PAYLOAD:', cleanPayload);
+    console.log('🔍 [API.CHAT] SENDING TO:', '/chat/message');
+    
+    return unwrap(http.post("/chat/message", cleanPayload, cfg));
+  },
   status: (cfg) => unwrap(http.get("/chat/status", cfg)),
   // ✅ NUEVO: Capabilities
   capabilities: (cfg) => unwrap(http.get("/chat/capabilities", cfg)),

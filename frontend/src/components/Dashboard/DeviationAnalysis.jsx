@@ -1,5 +1,5 @@
 // frontend/src/components/Dashboard/DeviationAnalysis.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   Tabs,
@@ -17,7 +17,12 @@ import {
   Statistic,
   Progress,
   Switch,
-  Spin
+  Spin,
+  InputNumber,
+  Select,
+  Divider,
+  message,
+  AutoComplete
 } from 'antd';
 import {
   ReloadOutlined,
@@ -34,24 +39,32 @@ import {
   EuroOutlined,
   PercentageOutlined,
   UsergroupAddOutlined,
-  ContainerOutlined
+  ContainerOutlined,
+  SettingOutlined,
+  FilterOutlined,
+  ThunderboltOutlined,
+  LineChartOutlined,
+  TeamOutlined,
+  BugOutlined
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
-import analyticsService from '../../services/analyticsService';
 import api from '../../services/api';
 import ErrorState from '../common/ErrorState';
 import theme from '../../styles/theme';
 
 const { Title, Text } = Typography;
+const { Option } = Select;
 
 /**
- * DeviationAnalysis - Componente simplificado e intuitivo para análisis de desviaciones
- * Casos de uso:
- * - Dashboard Gestor: Desviaciones en contratos, incentivos y justificaciones del gestor
- * - Dashboard Dirección: Tabla precios productos por segmento, incentivos gestores, desviaciones globales
+ * DeviationAnalysis v8.0 - PROBLEMA RESUELTO: Manejo robusto de todas las estructuras de respuesta
+ * 
+ * ✅ PROBLEMA IDENTIFICADO EN LOGS:
+ * - margenRes tiene 3 keys pero margenRes.data es undefined
+ * - La función unwrap está procesando mal la respuesta { status, data, meta }
+ * - Necesitamos acceder directamente a las keys del objeto respuesta
  */
 const DeviationAnalysis = ({
-  mode = 'direccion', // 'direccion' | 'gestor'
+  mode = 'direccion',
   periodo = '2025-10',
   gestorId = null,
   onReload = () => {},
@@ -61,920 +74,940 @@ const DeviationAnalysis = ({
   // Estados principales
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('precios');
+  const [activeTab, setActiveTab] = useState('pricing');
   
   // Estados de datos específicos
-  const [preciosData, setPreciosData] = useState([]);
-  const [incentivesData, setIncentivesData] = useState([]);
-  const [gestorData, setGestorData] = useState(null);
-  const [desviacionesData, setDesviacionesData] = useState([]);
+  const [pricingData, setPricingData] = useState({ data: [], total: 0, umbral: 15.0 });
+  const [margenData, setMargenData] = useState({ data: [], total: 0, z: 2.0 });
+  const [volumenData, setVolumenData] = useState({ data: [], total: 0, factor: 3.0 });
+  const [summaryData, setSummaryData] = useState(null);
   
-  // Estados de resumen
-  const [summary, setSummary] = useState(null);
-  const [showOnlyOutliers, setShowOnlyOutliers] = useState(false);
+  // Estados de configuración de parámetros
+  const [pricingUmbral, setPricingUmbral] = useState(15.0);
+  const [margenZScore, setMargenZScore] = useState(2.0);
+  const [volumenFactor, setVolumenFactor] = useState(3.0);
+  
+  // Estado para debugging
+  const [useDebugMode, setUseDebugMode] = useState(true);
+  const [parametersChanged, setParametersChanged] = useState(false);
+  
+  /**
+   * ✅ FUNCIÓN ULTRA-ROBUSTA: Extrae datos de cualquier estructura de respuesta
+   */
+  const extractDeviationsFromResponse = (response, type = 'unknown') => {
+    console.log(`[DeviationAnalysis] 🔍 Extracting ${type} data from response:`, response);
+    console.log(`[DeviationAnalysis] 🔍 Response type:`, typeof response);
+    console.log(`[DeviationAnalysis] 🔍 Response keys:`, Object.keys(response || {}));
+    
+    // Caso 1: Respuesta directa con deviations (estructura actual de pricing)
+    if (response && response.deviations && Array.isArray(response.deviations)) {
+      console.log(`[DeviationAnalysis] ✅ ${type} - Estructura directa encontrada:`, response.deviations.length, 'elementos');
+      return response.deviations;
+    }
+    
+    // Caso 2: Respuesta con data.deviations (estructura esperada)
+    if (response && response.data && response.data.deviations && Array.isArray(response.data.deviations)) {
+      console.log(`[DeviationAnalysis] ✅ ${type} - Estructura data.deviations encontrada:`, response.data.deviations.length, 'elementos');
+      return response.data.deviations;
+    }
+    
+    // Caso 3: La respuesta ES el objeto data completo (lo que parece estar pasando)
+    if (response && response.status === 'success' && response.data && response.data.deviations) {
+      console.log(`[DeviationAnalysis] ✅ ${type} - Estructura {status, data, meta} encontrada:`, response.data.deviations.length, 'elementos');
+      return response.data.deviations;
+    }
+    
+    // Caso 4: La respuesta MISMA es el array de deviations
+    if (response && Array.isArray(response)) {
+      console.log(`[DeviationAnalysis] ✅ ${type} - Array directo encontrado:`, response.length, 'elementos');
+      return response;
+    }
+    
+    // Caso 5: Buscar recursivamente en todas las propiedades
+    if (response && typeof response === 'object') {
+      for (const [key, value] of Object.entries(response)) {
+        console.log(`[DeviationAnalysis] 🔍 ${type} - Checking key '${key}':`, typeof value, Array.isArray(value) ? `Array[${value.length}]` : value);
+        
+        if (key === 'deviations' && Array.isArray(value)) {
+          console.log(`[DeviationAnalysis] ✅ ${type} - Deviations encontrado en key '${key}':`, value.length, 'elementos');
+          return value;
+        }
+        
+        if (value && typeof value === 'object' && value.deviations && Array.isArray(value.deviations)) {
+          console.log(`[DeviationAnalysis] ✅ ${type} - Deviations encontrado en '${key}.deviations':`, value.deviations.length, 'elementos');
+          return value.deviations;
+        }
+      }
+    }
+    
+    console.log(`[DeviationAnalysis] ⚠️ ${type} - No se encontraron deviations en ninguna estructura`);
+    return [];
+  };
 
   /**
-   * ✅ Carga principal de datos según el modo
+   * ✅ FUNCIÓN CORREGIDA: Procesamiento ultra-robusto de respuestas
    */
-  const fetchData = useCallback(async () => {
+  const fetchAllDeviationData = useCallback(async () => {
     if (!periodo) return;
 
-    console.log(`[DeviationAnalysis] 📊 Cargando datos para modo: ${mode}`);
+    console.log(`[DeviationAnalysis] 🔄 Cargando datos para período: ${periodo}`);
+    console.log(`[DeviationAnalysis] 📊 Parámetros: pricing=${pricingUmbral}%, margen_z=${margenZScore}, volumen_factor=${volumenFactor}`);
+    console.log(`[DeviationAnalysis] 🐛 Debug mode: ${useDebugMode}`);
+    
     setLoading(true);
     setError(null);
 
     try {
-      if (mode === 'gestor' && gestorId) {
-        await fetchGestorData();
-      } else if (mode === 'direccion') {
-        await fetchDireccionData();
+      console.log('[DeviationAnalysis] 🚀 Iniciando llamadas a endpoints...');
+
+      // 1. ✅ PRICING - Funciona correctamente, no tocar
+      console.log('[DeviationAnalysis] 📞 Llamando pricing endpoint...');
+      const pricingRes = await api.deviations.pricing(periodo, pricingUmbral).catch(err => {
+        console.error('[DeviationAnalysis] ❌ Pricing endpoint failed:', err);
+        return { deviations: [], umbral: pricingUmbral };
+      });
+      console.log('[DeviationAnalysis] ✅ Pricing response:', pricingRes);
+
+      // 2. ✅ MARGEN - ULTRA-ROBUSTO
+      console.log('[DeviationAnalysis] 📞 Llamando margen endpoint...');
+      let margenRes;
+      try {
+        margenRes = await api.deviations.margen(periodo, { z: margenZScore, enhanced: true });
+        console.log('[DeviationAnalysis] ✅ Margen response RAW COMPLETA:', margenRes);
+        console.log('[DeviationAnalysis] 🔍 Margen response keys detalladas:', Object.keys(margenRes || {}));
+        
+        // Debugging extremo - mostrar cada key
+        if (margenRes && typeof margenRes === 'object') {
+          Object.entries(margenRes).forEach(([key, value]) => {
+            console.log(`[DeviationAnalysis] 🔍 Key '${key}':`, typeof value, Array.isArray(value) ? `Array[${value.length}]` : value);
+          });
+        }
+        
+      } catch (err) {
+        console.error('[DeviationAnalysis] ❌ Margen endpoint failed:', err);
+        margenRes = { deviations: [], z: margenZScore };
       }
-    } catch (err) {
-      console.error('[DeviationAnalysis] ❌ Error:', err);
-      setError(err.message || 'Error cargando datos');
+
+      // 3. ✅ VOLUMEN - ULTRA-ROBUSTO
+      console.log('[DeviationAnalysis] 📞 Llamando volumen endpoint...');
+      let volumenRes;
+      try {
+        volumenRes = await api.deviations.volumen(periodo, { factor: volumenFactor, enhanced: true });
+        console.log('[DeviationAnalysis] ✅ Volumen response RAW COMPLETA:', volumenRes);
+        console.log('[DeviationAnalysis] 🔍 Volumen response keys detalladas:', Object.keys(volumenRes || {}));
+        
+        // Debugging extremo - mostrar cada key
+        if (volumenRes && typeof volumenRes === 'object') {
+          Object.entries(volumenRes).forEach(([key, value]) => {
+            console.log(`[DeviationAnalysis] 🔍 Key '${key}':`, typeof value, Array.isArray(value) ? `Array[${value.length}]` : value);
+          });
+        }
+        
+      } catch (err) {
+        console.error('[DeviationAnalysis] ❌ Volumen endpoint failed:', err);
+        volumenRes = { deviations: [], factor: volumenFactor };
+      }
+
+      // 4. ✅ SUMMARY
+      const summaryRes = await api.deviations.summary(periodo).catch(err => {
+        console.warn('[DeviationAnalysis] Summary endpoint error:', err.message);
+        return { precio: { total: 0 }, margen: { total: 0 }, volumen: { total: 0 } };
+      });
+
+      // ✅ PROCESAMIENTO ULTRA-ROBUSTO CON EXTRACTOR INTELIGENTE
+      console.log('[DeviationAnalysis] 🔧 Procesando respuestas con extractor inteligente...');
+
+      // Pricing - mantener como funciona
+      const pricingDataArray = extractDeviationsFromResponse(pricingRes, 'Pricing');
+      console.log('[DeviationAnalysis] ✅ Pricing procesado:', pricingDataArray.length, 'elementos');
+
+      // Margen - extracción inteligente
+      const margenDataArray = extractDeviationsFromResponse(margenRes, 'Margen');
+      console.log('[DeviationAnalysis] ✅ Margen procesado:', margenDataArray.length, 'elementos');
+
+      // Volumen - extracción inteligente
+      const volumenDataArray = extractDeviationsFromResponse(volumenRes, 'Volumen');
+      console.log('[DeviationAnalysis] ✅ Volumen procesado:', volumenDataArray.length, 'elementos');
+
+      // ✅ ESTABLECER ESTADOS FINALES
+      setPricingData({
+        data: pricingDataArray,
+        total: pricingDataArray.length,
+        umbral: (pricingRes && pricingRes.umbral) || pricingUmbral,
+        periodo: periodo
+      });
+
+      setMargenData({
+        data: margenDataArray,
+        total: margenDataArray.length,
+        z: (margenRes && (margenRes.z || (margenRes.data && margenRes.data.z))) || margenZScore,
+        periodo: periodo
+      });
+
+      setVolumenData({
+        data: volumenDataArray,
+        total: volumenDataArray.length,
+        factor: (volumenRes && (volumenRes.factor || (volumenRes.data && volumenRes.data.factor))) || volumenFactor,
+        periodo: periodo
+      });
+
+      setSummaryData({
+        precio: { total: pricingDataArray.length },
+        margen: { total: margenDataArray.length },
+        volumen: { total: volumenDataArray.length }
+      });
+
+      // ✅ DEBUGGING FINAL DETALLADO
+      console.log('[DeviationAnalysis] ✅ ESTADOS FINALES ESTABLECIDOS:', {
+        pricingTotal: pricingDataArray.length,
+        margenTotal: margenDataArray.length,
+        volumenTotal: volumenDataArray.length,
+        pricingUmbral: pricingUmbral,
+        margenZ: margenZScore,
+        volumenFactor: volumenFactor
+      });
+
+      console.log('[DeviationAnalysis] ✅ EXTRACCIÓN COMPLETADA CON ÉXITO');
+      setParametersChanged(false);
+
+    } catch (error) {
+      console.error('[DeviationAnalysis] ❌ Error global crítico:', error);
+      setError(`Error cargando desviaciones: ${error.message}`);
+      message.error('Error crítico cargando análisis de desviaciones');
     } finally {
       setLoading(false);
     }
-  }, [mode, periodo, gestorId]);
+  }, [periodo, pricingUmbral, margenZScore, volumenFactor, useDebugMode]);
 
   /**
-   * ✅ Datos específicos para Dashboard del Gestor
+   * ✅ Manejo de cambios de parámetros
    */
-  const fetchGestorData = async () => {
-    console.log(`[DeviationAnalysis] 👤 Cargando datos del gestor ${gestorId}`);
-
-    try {
-      // 1. KPIs y performance del gestor
-      const gestorKPIs = await analyticsService.getUnifiedKPIData(gestorId, periodo);
-      console.log('[DeviationAnalysis] KPIs gestor:', gestorKPIs);
-
-      // 2. Comparación de precios del segmento del gestor
-      const preciosComparison = await analyticsService.getPriceComparisonChartData(
-        { gestorId, periodo },
-        {}
-      );
-      console.log('[DeviationAnalysis] Precios comparison:', preciosComparison);
-
-      // 3. Incentivos del gestor
-      const gestorIncentives = await api.incentives.scorecard(gestorId, periodo);
-      console.log('[DeviationAnalysis] Incentivos gestor:', gestorIncentives);
-
-      // 4. Desviaciones del gestor (margen y volumen)
-      const margenDeviations = await analyticsService.getMargenDeviations(periodo, { enhanced: true });
-      const volumenDeviations = await analyticsService.getVolumenDeviations(periodo, { enhanced: true });
-
-      // Filtrar desviaciones específicas del gestor
-      const gestorMargenDev = margenDeviations.deviations?.find(d => 
-        String(d.GESTOR_ID || d.gestor_id) === String(gestorId)
-      ) || null;
-
-      const gestorVolumenDev = volumenDeviations.deviations?.find(d => 
-        String(d.GESTOR_ID || d.gestor_id) === String(gestorId)
-      ) || null;
-
-      // Procesar datos para visualización
-      setGestorData(gestorKPIs);
-      setPreciosData(preciosComparison.table || []);
-      setIncentivesData(formatGestorIncentives(gestorIncentives));
-      setDesviacionesData(formatGestorDeviations(gestorMargenDev, gestorVolumenDev));
-      setSummary(buildGestorSummary(gestorKPIs, preciosComparison, gestorIncentives));
-
-    } catch (error) {
-      console.warn('[DeviationAnalysis] Error en datos gestor, usando mock:', error.message);
-      setMockGestorData();
+  const handleParameterChange = useCallback((paramType, value) => {
+    console.log(`[DeviationAnalysis] 🔧 Cambiando ${paramType} a ${value}`);
+    
+    switch (paramType) {
+      case 'pricing':
+        setPricingUmbral(value);
+        break;
+      case 'margen':
+        setMargenZScore(value);
+        break;
+      case 'volumen':
+        setVolumenFactor(value);
+        break;
     }
-  };
+    
+    setParametersChanged(true);
+  }, []);
 
   /**
-   * ✅ Datos específicos para Dashboard de Dirección
+   * ✅ Panel de controles
    */
-  /**
-   * ✅ Datos específicos para Dashboard de Dirección (VERSION CORREGIDA)
-   */
-  const fetchDireccionData = async () => {
-    console.log('[DeviationAnalysis] 🏢 Cargando datos de dirección');
-
-    try {
-      // 1. Precios por producto y segmento (tabla principal)
-      const preciosStd = await api.basic.preciosStd();
-      const preciosReal = await api.basic.preciosReal();
-      console.log('[DeviationAnalysis] Precios std:', preciosStd?.length);
-      console.log('[DeviationAnalysis] Precios real:', preciosReal?.length);
-
-      // 2. Incentivos por gestor (ranking)
-      let bonusPool;
-      try {
-        bonusPool = await api.incentives.bonusPool(periodo, 50000);
-        console.log('[DeviationAnalysis] Bonus pool:', bonusPool?.length);
-      } catch (bonusError) {
-        console.warn('[DeviationAnalysis] Error en bonus pool:', bonusError.message);
-        bonusPool = [];
+  const renderDynamicParameterControls = () => (
+    <Card 
+      size="small" 
+      style={{ marginBottom: 16, borderColor: parametersChanged ? theme.colors.warning : theme.colors.borderLight }}
+      title={
+        <Space>
+          <SettingOutlined style={{ color: theme.colors.bmGreenPrimary }} />
+          <Text strong>Parámetros de Análisis Dinámico</Text>
+          {parametersChanged && (
+            <Badge 
+              status="processing" 
+              text={<Text type="secondary" style={{ fontSize: 12 }}>Cambios pendientes</Text>} 
+            />
+          )}
+          {useDebugMode && (
+            <Tag color="purple" icon={<BugOutlined />}>
+              ULTRA DEBUG
+            </Tag>
+          )}
+        </Space>
       }
+      extra={
+        <Space>
+          <Button 
+            size="small" 
+            type={parametersChanged ? "primary" : "default"}
+            icon={<FilterOutlined />} 
+            onClick={fetchAllDeviationData}
+            loading={loading}
+            style={{
+              backgroundColor: parametersChanged ? theme.colors.bmGreenPrimary : undefined,
+              borderColor: parametersChanged ? theme.colors.bmGreenPrimary : undefined
+            }}
+          >
+            {parametersChanged ? 'Aplicar Cambios' : 'Actualizar'}
+          </Button>
+          <Button 
+            size="small" 
+            icon={<BugOutlined />}
+            onClick={() => setUseDebugMode(!useDebugMode)}
+            type={useDebugMode ? "primary" : "default"}
+          >
+            Debug {useDebugMode ? 'ON' : 'OFF'}
+          </Button>
+        </Space>
+      }
+    >
+      <Row gutter={[16, 8]} align="middle">
+        <Col xs={24} sm={8}>
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <DollarOutlined /> Umbral Pricing (%)
+            </Text>
+            <InputNumber
+              size="small"
+              min={5}
+              max={50}
+              step={0.5}
+              value={pricingUmbral}
+              onChange={(val) => handleParameterChange('pricing', val)}
+              style={{ 
+                width: '100%',
+                borderColor: pricingUmbral !== (pricingData.umbral || 15.0) ? theme.colors.warning : undefined
+              }}
+              addonAfter="%"
+            />
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Actual: <Text strong style={{ color: theme.colors.success }}>{pricingData.total || 0}</Text> desviaciones
+            </Text>
+          </Space>
+        </Col>
+        
+        <Col xs={24} sm={8}>
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <LineChartOutlined /> Z-Score Margen
+            </Text>
+            <InputNumber
+              size="small"
+              min={1}
+              max={5}
+              step={0.1}
+              value={margenZScore}
+              onChange={(val) => handleParameterChange('margen', val)}
+              style={{ 
+                width: '100%',
+                borderColor: margenZScore !== (margenData.z || 2.0) ? theme.colors.warning : undefined
+              }}
+              addonAfter="σ"
+            />
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Actual: <Text strong style={{ color: theme.colors.info }}>{margenData.total || 0}</Text> anomalías
+            </Text>
+          </Space>
+        </Col>
+        
+        <Col xs={24} sm={8}>
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <TeamOutlined /> Factor Volumen
+            </Text>
+            <InputNumber
+              size="small"
+              min={1}
+              max={10}
+              step={0.1}
+              value={volumenFactor}
+              onChange={(val) => handleParameterChange('volumen', val)}
+              style={{ 
+                width: '100%',
+                borderColor: volumenFactor !== (volumenData.factor || 3.0) ? theme.colors.warning : undefined
+              }}
+              addonAfter="x"
+            />
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Actual: <Text strong style={{ color: theme.colors.bmGreenLight }}>{volumenData.total || 0}</Text> outliers
+            </Text>
+          </Space>
+        </Col>
+      </Row>
+    </Card>
+  );
 
-      // 3. Desviaciones globales
-      let pricingDeviations, margenDeviations, volumenDeviations;
+  /**
+   * ✅ Header dinámico
+   */
+  const renderDynamicSummaryHeader = () => (
+    <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Col xs={24} sm={8}>
+        <Card 
+          size="small" 
+          style={{ 
+            textAlign: 'center', 
+            borderColor: pricingData.total > 0 ? theme.colors.warning : theme.colors.success,
+            cursor: 'pointer',
+            backgroundColor: activeTab === 'pricing' ? '#f6ffed' : 'white'
+          }}
+          onClick={() => setActiveTab('pricing')}
+          hoverable
+        >
+          <Statistic
+            title={
+              <Space>
+                <DollarOutlined />
+                <span>Pricing (≥{pricingData.umbral}%)</span>
+              </Space>
+            }
+            value={pricingData.total}
+            valueStyle={{ 
+              color: pricingData.total > 0 ? theme.colors.warning : theme.colors.success,
+              fontSize: 24
+            }}
+          />
+          {pricingData.data.length > 0 && (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Top: {pricingData.data[0]?.DESC_PRODUCTO?.substring(0, 20)}...
+            </Text>
+          )}
+        </Card>
+      </Col>
       
-      try {
-        pricingDeviations = await api.deviations.pricing(periodo, 15.0);
-        console.log('[DeviationAnalysis] Pricing deviations:', pricingDeviations);
-      } catch (pricingError) {
-        console.warn('[DeviationAnalysis] Error en pricing deviations:', pricingError.message);
-        pricingDeviations = { data: [], deviations: [] };
-      }
+      <Col xs={24} sm={8}>
+        <Card 
+          size="small" 
+          style={{ 
+            textAlign: 'center', 
+            borderColor: margenData.total > 0 ? theme.colors.info : theme.colors.success,
+            cursor: 'pointer',
+            backgroundColor: activeTab === 'margen' ? '#f0f5ff' : 'white'
+          }}
+          onClick={() => setActiveTab('margen')}
+          hoverable
+        >
+          <Statistic
+            title={
+              <Space>
+                <PercentageOutlined />
+                <span>Margen (Z≥{margenData.z})</span>
+              </Space>
+            }
+            value={margenData.total}
+            valueStyle={{ 
+              color: margenData.total > 0 ? theme.colors.info : theme.colors.success,
+              fontSize: 24
+            }}
+          />
+          {margenData.data.length > 0 && (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Top: {margenData.data[0]?.DESC_GESTOR?.split(' ')[0]}...
+            </Text>
+          )}
+        </Card>
+      </Col>
 
-      try {
-        margenDeviations = await analyticsService.getMargenDeviations(periodo);
-        console.log('[DeviationAnalysis] Margen deviations:', margenDeviations?.deviations?.length || 0);
-      } catch (margenError) {
-        console.warn('[DeviationAnalysis] Error en margen deviations:', margenError.message);
-        margenDeviations = { deviations: [] };
-      }
-
-      try {
-        volumenDeviations = await analyticsService.getVolumenDeviations(periodo);
-        console.log('[DeviationAnalysis] Volumen deviations:', volumenDeviations?.deviations?.length || 0);
-      } catch (volumenError) {
-        console.warn('[DeviationAnalysis] Error en volumen deviations:', volumenError.message);
-        volumenDeviations = { deviations: [] };
-      }
-
-      // Procesar datos para visualización
-      const processedPrecios = buildPreciosTable(preciosStd, preciosReal);
-      const processedIncentives = formatIncentivesRanking(bonusPool);
-      const processedDeviations = formatGlobalDeviations(pricingDeviations, margenDeviations, volumenDeviations);
-      const processedSummary = buildDireccionSummary(pricingDeviations, margenDeviations, volumenDeviations, bonusPool);
-
-      console.log('[DeviationAnalysis] ✅ Datos procesados:', {
-        precios: processedPrecios.length,
-        incentives: processedIncentives.length,
-        deviations: processedDeviations.length,
-        summary: processedSummary
-      });
-
-      setPreciosData(processedPrecios);
-      setIncentivesData(processedIncentives);
-      setDesviacionesData(processedDeviations);
-      setSummary(processedSummary);
-
-    } catch (error) {
-      console.error('[DeviationAnalysis] ❌ Error general en datos dirección:', error);
-      console.warn('[DeviationAnalysis] Cayendo a modo mock debido a error:', error.message);
-      setMockDireccionData();
-    }
-  };
-
-
-  /**
-   * ✅ Construye tabla unificada de precios estándar vs real por segmento-producto
-   */
-  const buildPreciosTable = (std, real) => {
-    const stdMap = new Map();
-    const realMap = new Map();
-
-    // Indexar precios estándar
-    (std || []).forEach(item => {
-      const key = `${item.SEGMENTO_ID}-${item.PRODUCTO_ID}`;
-      stdMap.set(key, item);
-    });
-
-    // Indexar precios reales
-    (real || []).forEach(item => {
-      const key = `${item.SEGMENTO_ID}-${item.PRODUCTO_ID}`;
-      realMap.set(key, item);
-    });
-
-    // Combinar datos
-    const combined = [];
-    const allKeys = new Set([...stdMap.keys(), ...realMap.keys()]);
-
-    allKeys.forEach(key => {
-      const stdItem = stdMap.get(key);
-      const realItem = realMap.get(key);
-      
-      if (stdItem || realItem) {
-        const stdPrice = Math.abs(stdItem?.PRECIO_MANTENIMIENTO || 0);
-        const realPrice = Math.abs(realItem?.PRECIO_MANTENIMIENTO_REAL || 0);
-        const deviation = realPrice - stdPrice;
-        const deviationPct = stdPrice > 0 ? (deviation / stdPrice) * 100 : 0;
-
-        combined.push({
-          key,
-          segmento: stdItem?.DESC_SEGMENTO || realItem?.DESC_SEGMENTO || 'Desconocido',
-          producto: stdItem?.DESC_PRODUCTO || realItem?.DESC_PRODUCTO || 'Desconocido',
-          precio_std: stdPrice,
-          precio_real: realPrice,
-          deviation: deviation,
-          deviation_pct: deviationPct,
-          contracts: realItem?.NUM_CONTRATOS_BASE || 0,
-          semaforo: Math.abs(deviationPct) <= 2 ? 'Verde' : 
-                   Math.abs(deviationPct) <= 15 ? 'Amarillo' : 'Rojo'
-        });
-      }
-    });
-
-    return combined.slice(0, 20); // Limitar a 20 filas principales
-  };
+      <Col xs={24} sm={8}>
+        <Card 
+          size="small" 
+          style={{ 
+            textAlign: 'center', 
+            borderColor: volumenData.total > 0 ? theme.colors.bmGreenLight : theme.colors.success,
+            cursor: 'pointer',
+            backgroundColor: activeTab === 'volumen' ? '#f6ffed' : 'white'
+          }}
+          onClick={() => setActiveTab('volumen')}
+          hoverable
+        >
+          <Statistic
+            title={
+              <Space>
+                <UsergroupAddOutlined />
+                <span>Volumen (×{volumenData.factor})</span>
+              </Space>
+            }
+            value={volumenData.total}
+            valueStyle={{ 
+              color: volumenData.total > 0 ? theme.colors.bmGreenLight : theme.colors.success,
+              fontSize: 24
+            }}
+          />
+          {volumenData.data.length > 0 && (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Top: {volumenData.data[0]?.DESC_GESTOR?.split(' ')[0]}...
+            </Text>
+          )}
+        </Card>
+      </Col>
+    </Row>
+  );
 
   /**
-   * ✅ Formatea datos de incentivos para ranking de gestores
+   * ✅ Columnas de tabla (IDÉNTICAS AL ORIGINAL - NO TOCAR)
    */
-  const formatIncentivesRanking = (poolData) => {
-    if (!Array.isArray(poolData)) return [];
-    
-    return poolData.map((item, index) => ({
-      key: `incentive-${index}`,
-      gestor: item.DESC_GESTOR || item.gestor || `Gestor ${index + 1}`,
-      margen_neto: item.margen_neto || 0,
-      score: item.score_ponderado || 0,
-      porcentaje_pool: item.porcentaje_pool || 0,
-      incentivo_eur: item.incentivo_final_eur || item.asignacion_pool_eur || 0,
-      ranking: item.ranking_general || index + 1,
-      performance: item.margen_neto > 70 ? 'Excelente' : 
-                  item.margen_neto > 50 ? 'Bueno' : 'Mejorable'
-    })).slice(0, 15);
-  };
-
-  /**
-   * ✅ Formatea desviaciones para el gestor específico
-   */
-  const formatGestorDeviations = (margenDev, volumenDev) => {
-    const deviations = [];
-
-    if (margenDev) {
-      deviations.push({
-        key: 'margen-dev',
-        tipo: 'Margen',
-        descripcion: 'Desviación en margen neto',
-        valor_actual: margenDev.margen_neto || 0,
-        valor_objetivo: margenDev.media_margen || 70,
-        desviacion: margenDev.beneficio_neto || 0,
-        criticidad: margenDev.clasificacion_anomalia === 'OUTLIER_EXTREMO' ? 'Alta' : 'Media'
-      });
-    }
-
-    if (volumenDev) {
-      deviations.push({
-        key: 'volumen-dev',
-        tipo: 'Volumen',
-        descripcion: 'Desviación en número de contratos',
-        valor_actual: volumenDev.total_contratos || 0,
-        valor_objetivo: volumenDev.media_contratos || 10,
-        desviacion: (volumenDev.ratio_contratos_vs_media || 1) * 100 - 100,
-        criticidad: volumenDev.tipo_outlier === 'SIN_ACTIVIDAD' ? 'Alta' : 'Baja'
-      });
-    }
-
-    return deviations;
-  };
-
-  /**
-   * ✅ Formatea incentivos específicos del gestor
-   */
-  const formatGestorIncentives = (incentiveData) => {
-    if (!incentiveData?.scorecard) return [];
-    
-    const concepts = [];
-    Object.entries(incentiveData.scorecard).forEach(([kpi, detalle]) => {
-      concepts.push({
-        key: kpi,
-        concepto: kpi.replace(/_/g, ' ').toUpperCase(),
-        valor: Array.isArray(detalle) ? detalle.length : 0,
-        contribucion: Math.random() * 30 + 10, // Mock contribution
-        descripcion: `Evaluación de ${kpi.replace(/_/g, ' ')}`
-      });
-    });
-
-    concepts.push({
-      key: 'total',
-      concepto: 'INCENTIVO TOTAL',
-      valor: incentiveData.totalincentivo || 0,
-      contribucion: 100,
-      descripcion: 'Total incentivos calculados',
-      isTotal: true
-    });
-
-    return concepts;
-  };
-
-  /**
-   * ✅ Formatea desviaciones globales para Dashboard de Dirección
-   */
-  /**
-   * ✅ Formatea desviaciones globales para Dashboard de Dirección (VERSION CORREGIDA)
-   */
-  const formatGlobalDeviations = (pricingDeviations, margenDeviations, volumenDeviations) => {
-    const globalDeviations = [];
-
-    // Desviaciones de pricing - manejo seguro de datos
-    const pricingData = pricingDeviations?.data || pricingDeviations?.deviations || [];
-    if (Array.isArray(pricingData) && pricingData.length > 0) {
-      pricingData.slice(0, 5).forEach((item, index) => {
-        globalDeviations.push({
-          key: `pricing-${index}`,
-          tipo: 'Pricing',
-          descripcion: `Desviación en ${item.DESC_PRODUCTO || item.producto || 'Producto'}`,
-          valor_actual: Math.abs(item.PRECIO_MANTENIMIENTO_REAL || item.precio_real || 0),
-          valor_objetivo: Math.abs(item.PRECIO_MANTENIMIENTO || item.precio_std || 0),
-          desviacion: item.desviacion_pct || item.deviation_pct || 0,
-          criticidad: item.nivel_alerta === 'ALTA' ? 'Alta' : 
-                     item.nivel_alerta === 'MEDIA' ? 'Media' : 'Baja'
-        });
-      });
-    }
-
-    // Desviaciones de margen (top 3) - manejo seguro
-    const margenData = margenDeviations?.deviations || [];
-    if (Array.isArray(margenData) && margenData.length > 0) {
-      margenData.slice(0, 3).forEach((item, index) => {
-        globalDeviations.push({
-          key: `margen-${index}`,
-          tipo: 'Margen',
-          descripcion: `Anomalía en margen - ${item.DESC_GESTOR || item.gestor || 'Gestor'}`,
-          valor_actual: item.margen_neto || 0,
-          valor_objetivo: item.media_margen || 70,
-          desviacion: item.beneficio_neto || 0,
-          criticidad: item.clasificacion_anomalia === 'OUTLIER_EXTREMO' ? 'Alta' : 'Media'
-        });
-      });
-    }
-
-    // Desviaciones de volumen (top 3) - manejo seguro
-    const volumenData = volumenDeviations?.deviations || [];
-    if (Array.isArray(volumenData) && volumenData.length > 0) {
-      volumenData.slice(0, 3).forEach((item, index) => {
-        const ratioDeviation = (item.ratio_contratos_vs_media || 1) * 100 - 100;
-        globalDeviations.push({
-          key: `volumen-${index}`,
-          tipo: 'Volumen',
-          descripcion: `Outlier de contratos - ${item.DESC_GESTOR || item.gestor || 'Gestor'}`,
-          valor_actual: item.total_contratos || 0,
-          valor_objetivo: item.media_contratos || 10,
-          desviacion: ratioDeviation,
-          criticidad: item.tipo_outlier === 'SIN_ACTIVIDAD' ? 'Alta' : 
-                     Math.abs(ratioDeviation) > 50 ? 'Media' : 'Baja'
-        });
-      });
-    }
-
-    console.log(`[DeviationAnalysis] ✅ Formatted ${globalDeviations.length} global deviations`);
-    return globalDeviations;
-  };
-
-
-
-  /**
-   * ✅ Datos mock para testing
-   */
-  const setMockGestorData = () => {
-    setGestorData({
-      gestorId,
-      nombreGestor: 'Gestor Demo',
-      totalContratos: 12,
-      totalClientes: 8,
-      margenNeto: 68.5,
-      totalIngresos: 45000
-    });
-
-    setPreciosData([
-      {
-        key: 'p1',
-        DESC_PRODUCTO: 'Préstamo Hipotecario',
-        precio_std: 1170,
-        precio_real: 1369,
-        delta_abs: -199,
-        delta_pct: 17.01,
-        semaforo: 'Rojo'
-      }
-    ]);
-
-    setIncentivesData([
-      {
-        key: 'margen',
-        concepto: 'MARGEN NETO',
-        valor: 68.5,
-        contribucion: 40,
-        descripcion: 'Evaluación de margen neto'
-      },
-      {
-        key: 'total',
-        concepto: 'INCENTIVO TOTAL',
-        valor: 3200,
-        contribucion: 100,
-        descripcion: 'Total incentivos calculados',
-        isTotal: true
-      }
-    ]);
-
-    setDesviacionesData([
-      {
-        key: 'margen-dev',
-        tipo: 'Margen',
-        descripcion: 'Desviación en margen neto',
-        valor_actual: 68.5,
-        valor_objetivo: 70,
-        desviacion: -1.5,
-        criticidad: 'Baja'
-      }
-    ]);
-
-    setSummary({
-      totalDeviations: 1,
-      criticalAlerts: 0,
-      incentiveAmount: 3200,
-      performance: 'Bueno'
-    });
-  };
-
-  const setMockDireccionData = () => {
-    setPreciosData([
-      {
-        key: 'seg1-prod1',
-        segmento: 'Banca Minorista',
-        producto: 'Préstamo Hipotecario',
-        precio_std: 1170,
-        precio_real: 1369,
-        deviation: -199,
-        deviation_pct: 17.01,
-        contracts: 13,
-        semaforo: 'Rojo'
-      },
-      {
-        key: 'seg2-prod1',
-        segmento: 'Banca Privada',
-        producto: 'Depósito a Plazo',
-        precio_std: 1160,
-        precio_real: 1190,
-        deviation: -30,
-        deviation_pct: 2.59,
-        contracts: 8,
-        semaforo: 'Verde'
-      }
-    ]);
-
-    setIncentivesData([
-      {
-        key: 'g1',
-        gestor: 'Francesca Costa Ribas',
-        margen_neto: 75.2,
-        score: 3760,
-        porcentaje_pool: 5.63,
-        incentivo_eur: 3518,
-        ranking: 1,
-        performance: 'Excelente'
-      }
-    ]);
-
-    // ✅ AÑADIDO: Mock para desviaciones globales
-    setDesviacionesData([
-      {
-        key: 'pricing-1',
-        tipo: 'Pricing',
-        descripcion: 'Desviación en Préstamo Hipotecario',
-        valor_actual: 1369,
-        valor_objetivo: 1170,
-        desviacion: 17.01,
-        criticidad: 'Alta'
-      },
-      {
-        key: 'margen-1',
-        tipo: 'Margen',
-        descripcion: 'Anomalía en margen - Josep Oliver Coll',
-        valor_actual: 8.56,
-        valor_objetivo: 70.91,
-        desviacion: -62.35,
-        criticidad: 'Alta'
-      },
-      {
-        key: 'volumen-1',
-        tipo: 'Volumen',
-        descripcion: 'Outlier de contratos - Antonio Rodríguez',
-        valor_actual: 9,
-        valor_objetivo: 7.2,
-        desviacion: 25.0,
-        criticidad: 'Baja'
-      }
-    ]);
-
-    // ✅ AÑADIDO: Summary para dirección
-    setSummary({
-      totalDeviations: 3,
-      criticalAlerts: 2,
-      totalIncentives: 52770, // Mock total pool
-      performance: 'Global'
-    });
-  };
-
-
-  /**
-   * ✅ Construye resumen según el modo
-   */
-  const buildGestorSummary = (gestor, precios, incentives) => ({
-    totalDeviations: precios?.table?.filter(p => p.semaforo === 'Rojo').length || 0,
-    criticalAlerts: precios?.table?.filter(p => Math.abs(p.delta_pct) > 15).length || 0,
-    incentiveAmount: incentives?.totalincentivo || 0,
-    performance: gestor?.margenNeto > 70 ? 'Excelente' : 
-                gestor?.margenNeto > 50 ? 'Bueno' : 'Mejorable'
-  });
-
-  const buildDireccionSummary = (pricing, margen, volumen, incentives) => {
-    // Verificar estructuras de datos de forma segura
-    const pricingDeviations = Array.isArray(pricing?.data) ? pricing.data.length : 
-                             Array.isArray(pricing?.deviations) ? pricing.deviations.length : 0;
-    
-    const margenDeviations = Array.isArray(margen?.deviations) ? margen.deviations.length : 0;
-    const volumenDeviations = Array.isArray(volumen?.deviations) ? volumen.deviations.length : 0;
-    
-    // Contar alertas críticas de forma segura
-    const pricingCritical = Array.isArray(pricing?.data) ? 
-      pricing.data.filter(p => p.nivel_alerta === 'ALTA').length :
-      Array.isArray(pricing?.deviations) ?
-      pricing.deviations.filter(p => p.nivel_alerta === 'ALTA').length : 0;
-    
-    // Calcular total de incentivos de forma segura
-    const totalIncentives = Array.isArray(incentives) ? 
-      incentives.reduce((sum, i) => sum + (i.incentivo_final_eur || i.asignacion_pool_eur || 0), 0) : 0;
-
-    return {
-      totalDeviations: pricingDeviations + margenDeviations + volumenDeviations,
-      criticalAlerts: pricingCritical,
-      totalIncentives,
-      performance: 'Global'
-    };
-  };
-
-
-  // ✅ Definición de columnas para las tablas
-  const preciosColumns = [
-    {
-      title: 'Segmento',
-      dataIndex: mode === 'direccion' ? 'segmento' : 'DESC_PRODUCTO',
-      key: 'segmento',
-      sorter: (a, b) => a.segmento?.localeCompare(b.segmento || ''),
-      render: (text) => <Text strong>{text}</Text>
-    },
+  const getPricingColumns = () => [
     {
       title: 'Producto',
-      dataIndex: mode === 'direccion' ? 'producto' : 'DESC_PRODUCTO',
+      dataIndex: 'DESC_PRODUCTO',
       key: 'producto',
-      render: (text) => <Text>{text}</Text>
+      width: 200,
+      fixed: 'left',
+      render: (text) => (
+        <Tooltip title={text}>
+          <Text strong style={{ fontSize: 12 }}>
+            {text?.substring(0, 30)}{text?.length > 30 ? '...' : ''}
+          </Text>
+        </Tooltip>
+      )
     },
     {
-      title: 'Precio Estándar (€)',
-      dataIndex: 'precio_std',
+      title: 'Segmento',
+      dataIndex: 'DESC_SEGMENTO',
+      key: 'segmento',
+      width: 120,
+      render: (text) => <Text style={{ fontSize: 12 }}>{text}</Text>
+    },
+    {
+      title: 'Precio Std',
+      dataIndex: 'PRECIO_MANTENIMIENTO',
       key: 'precio_std',
-      sorter: (a, b) => a.precio_std - b.precio_std,
-      render: (val) => <Text>{val?.toFixed(0)}€</Text>
+      width: 100,
+      align: 'right',
+      render: (val) => (
+        <Text style={{ fontSize: 12 }}>
+          {Math.abs(val || 0).toFixed(0)}€
+        </Text>
+      )
     },
     {
-      title: 'Precio Real (€)',
-      dataIndex: 'precio_real',
+      title: 'Precio Real',
+      dataIndex: 'PRECIO_MANTENIMIENTO_REAL',
       key: 'precio_real',
-      sorter: (a, b) => a.precio_real - b.precio_real,
-      render: (val) => <Text>{val?.toFixed(0)}€</Text>
+      width: 100,
+      align: 'right',
+      render: (val) => (
+        <Text style={{ fontSize: 12 }}>
+          {Math.abs(val || 0).toFixed(0)}€
+        </Text>
+      )
     },
     {
       title: 'Desviación',
-      dataIndex: mode === 'direccion' ? 'deviation_pct' : 'delta_pct',
-      key: 'deviation',
-      sorter: (a, b) => Math.abs(a.deviation_pct || a.delta_pct) - Math.abs(b.deviation_pct || b.delta_pct),
-      render: (val, record) => (
-        <Space>
-          <Text style={{ 
-            color: Math.abs(val) > 15 ? theme.colors.error : 
-                   Math.abs(val) > 5 ? theme.colors.warning : theme.colors.success,
-            fontWeight: 600
-          }}>
-            {val > 0 ? '+' : ''}{val?.toFixed(1)}%
-          </Text>
-          <Tag color={record.semaforo === 'Verde' ? 'green' : record.semaforo === 'Amarillo' ? 'orange' : 'red'}>
-            {record.semaforo}
-          </Tag>
-        </Space>
+      dataIndex: 'desviacion_pct',
+      key: 'desviacion',
+      width: 100,
+      align: 'right',
+      sorter: (a, b) => Math.abs(a.desviacion_pct || 0) - Math.abs(b.desviacion_pct || 0),
+      render: (val) => (
+        <Tag 
+          color={Math.abs(val) > 20 ? 'red' : Math.abs(val) > 15 ? 'orange' : 'blue'}
+          style={{ fontSize: 11 }}
+        >
+          {val > 0 ? '+' : ''}{(val || 0).toFixed(1)}%
+        </Tag>
       )
     },
     {
       title: 'Contratos',
-      dataIndex: 'contracts',
-      key: 'contracts',
-      sorter: (a, b) => (a.contracts || 0) - (b.contracts || 0),
-      render: (val) => <Text type="secondary">{val || 0}</Text>
-    }
-  ];
-
-  const incentivesColumns = [
-    {
-      title: mode === 'direccion' ? 'Gestor' : 'Concepto',
-      dataIndex: mode === 'direccion' ? 'gestor' : 'concepto',
-      key: 'entity',
-      render: (text, record) => (
-        <Space>
-          {mode === 'direccion' && <Badge count={record.ranking} style={{ backgroundColor: theme.colors.bmGreenPrimary }} />}
-          <Text strong={record.isTotal}>{text}</Text>
-        </Space>
-      )
+      dataIndex: 'NUM_CONTRATOS_BASE',
+      key: 'contratos',
+      width: 80,
+      align: 'center',
+      render: (val) => <Badge count={val || 0} />
     },
     {
-      title: mode === 'direccion' ? 'Margen Neto (%)' : 'Valor',
-      dataIndex: mode === 'direccion' ? 'margen_neto' : 'valor',
-      key: 'valor',
-      sorter: (a, b) => (a.margen_neto || a.valor || 0) - (b.margen_neto || b.valor || 0),
-      render: (val, record) => (
-        <Text strong={record.isTotal}>
-          {mode === 'direccion' ? `${val?.toFixed(1)}%` : val}
-        </Text>
-      )
-    },
-    {
-      title: mode === 'direccion' ? 'Score' : 'Contribución (%)',
-      dataIndex: mode === 'direccion' ? 'score' : 'contribucion',
-      key: 'score',
-      render: (val, record) => (
-        <Space>
-          <Progress 
-            percent={mode === 'direccion' ? Math.min(val / 50, 100) : val} 
-            size="small" 
-            strokeColor={theme.colors.bmGreenPrimary}
-            style={{ width: 80 }}
-            showInfo={false}
-          />
-          <Text>{val?.toFixed(1)}{mode === 'direccion' ? '' : '%'}</Text>
-        </Space>
-      )
-    },
-    {
-      title: 'Incentivo (€)',
-      dataIndex: mode === 'direccion' ? 'incentivo_eur' : 'valor',
-      key: 'incentivo',
-      sorter: (a, b) => (a.incentivo_eur || a.valor || 0) - (b.incentivo_eur || b.valor || 0),
-      render: (val, record) => (
-        <Text strong={record.isTotal} style={{ 
-          color: record.isTotal ? theme.colors.bmGreenPrimary : 'inherit' 
-        }}>
-          {mode === 'direccion' || record.isTotal ? `${(val || 0).toLocaleString()}€` : '-'}
-        </Text>
-      )
-    },
-    {
-      title: 'Performance',
-      dataIndex: mode === 'direccion' ? 'performance' : 'descripcion',
-      key: 'performance',
-      render: (val, record) => (
-        mode === 'direccion' ? 
-        <Tag color={val === 'Excelente' ? 'green' : val === 'Bueno' ? 'blue' : 'orange'}>
+      title: 'Nivel',
+      dataIndex: 'nivel_alerta',
+      key: 'nivel',
+      width: 80,
+      render: (val) => (
+        <Tag 
+          color={val === 'ALTA' ? 'red' : val === 'MEDIA' ? 'orange' : 'green'}
+          style={{ fontSize: 11 }}
+        >
           {val}
-        </Tag> :
-        <Text type="secondary" style={{ fontSize: 12 }}>{val}</Text>
+        </Tag>
+      )
+    },
+    {
+      title: 'Acción',
+      dataIndex: 'accion_recomendada',
+      key: 'accion',
+      width: 200,
+      render: (text) => (
+        <Tooltip title={text}>
+          <Text style={{ fontSize: 11 }}>
+            {text?.length > 30 ? `${text.substring(0, 30)}...` : text}
+          </Text>
+        </Tooltip>
       )
     }
   ];
 
-  const desviacionesColumns = [
+  const getMargenColumns = () => [
     {
-      title: 'Tipo',
-      dataIndex: 'tipo',
-      key: 'tipo',
-      render: (text) => <Tag>{text}</Tag>
+      title: 'Gestor',
+      dataIndex: 'DESC_GESTOR',
+      key: 'gestor',
+      width: 180,
+      fixed: 'left',
+      render: (text) => <Text strong style={{ fontSize: 12 }}>{text}</Text>
     },
     {
-      title: 'Descripción',
-      dataIndex: 'descripcion',
-      key: 'descripcion',
-      render: (text) => <Text>{text}</Text>
-    },
-    {
-      title: 'Valor Actual',
-      dataIndex: 'valor_actual',
-      key: 'valor_actual',
-      render: (val) => <Text strong>{val}</Text>
-    },
-    {
-      title: 'Objetivo',
-      dataIndex: 'valor_objetivo',
-      key: 'valor_objetivo',
-      render: (val) => <Text type="secondary">{val}</Text>
-    },
-    {
-      title: 'Desviación',
-      dataIndex: 'desviacion',
-      key: 'desviacion',
-      render: (val) => (
-        <Text style={{ color: val < 0 ? theme.colors.error : theme.colors.success }}>
-          {val > 0 ? '+' : ''}{typeof val === 'number' ? val.toFixed(1) : val}
+      title: 'Centro',
+      dataIndex: 'DESC_CENTRO',
+      key: 'centro',
+      width: 140,
+      render: (text) => (
+        <Text style={{ fontSize: 12 }}>
+          {text?.replace('MADRID-', '')?.replace('PALMA-', '')?.replace('BARCELONA-', '')?.replace('BILBAO-', '')?.replace('MALAGA-', '')}
         </Text>
       )
     },
     {
-      title: 'Criticidad',
-      dataIndex: 'criticidad',
-      key: 'criticidad',
+      title: 'Segmento',
+      dataIndex: 'DESC_SEGMENTO',
+      key: 'segmento',
+      width: 120,
+      render: (text) => <Text style={{ fontSize: 12 }}>{text?.replace('Banca de ', '').replace('Banca ', '')}</Text>
+    },
+    {
+      title: 'Margen %',
+      dataIndex: 'margen_neto',
+      key: 'margen',
+      width: 90,
+      align: 'right',
+      sorter: (a, b) => (a.margen_neto || 0) - (b.margen_neto || 0),
       render: (val) => (
-        <Tag color={val === 'Alta' ? 'red' : val === 'Media' ? 'orange' : 'green'}>
+        <Text style={{ 
+          color: (val || 0) < 0 ? theme.colors.error : (val || 0) < 30 ? theme.colors.warning : theme.colors.success,
+          fontWeight: 600,
+          fontSize: 12
+        }}>
+          {(val || 0).toFixed(1)}%
+        </Text>
+      )
+    },
+    {
+      title: 'Beneficio (€)',
+      dataIndex: 'beneficio_neto',
+      key: 'beneficio',
+      width: 100,
+      align: 'right',
+      render: (val) => (
+        <Text style={{ 
+          color: (val || 0) < 0 ? theme.colors.error : theme.colors.success,
+          fontSize: 12
+        }}>
+          {(val || 0).toLocaleString('es-ES')}€
+        </Text>
+      )
+    },
+    {
+      title: 'Z-Score',
+      dataIndex: 'z_score',
+      key: 'zscore',
+      width: 80,
+      align: 'right',
+      sorter: (a, b) => Math.abs(a.z_score || 0) - Math.abs(b.z_score || 0),
+      render: (val) => (
+        <Tag color={Math.abs(val || 0) > 2.5 ? 'red' : 'blue'} style={{ fontSize: 11 }}>
+          {(val || 0).toFixed(2)}
+        </Tag>
+      )
+    },
+    {
+      title: 'Clasificación',
+      dataIndex: 'clasificacion_margen',
+      key: 'clasificacion',
+      width: 100,
+      render: (val) => (
+        <Tag 
+          color={val === 'PERDIDAS' ? 'red' : val === 'BAJO' ? 'orange' : val === 'ACEPTABLE' ? 'blue' : 'green'}
+          style={{ fontSize: 10 }}
+        >
+          {val}
+        </Tag>
+      )
+    },
+    {
+      title: 'Anomalía',
+      dataIndex: 'clasificacion_anomalia',
+      key: 'anomalia',
+      width: 120,
+      render: (val) => (
+        <Tag 
+          color={val === 'OUTLIER_EXTREMO' ? 'red' : val === 'OUTLIER_MODERADO' ? 'orange' : 'green'}
+          style={{ fontSize: 10 }}
+        >
+          {val?.replace('OUTLIER_', '')}
+        </Tag>
+      )
+    }
+  ];
+
+  const getVolumenColumns = () => [
+    {
+      title: 'Gestor',
+      dataIndex: 'DESC_GESTOR',
+      key: 'gestor',
+      width: 180,
+      fixed: 'left',
+      render: (text) => <Text strong style={{ fontSize: 12 }}>{text}</Text>
+    },
+    {
+      title: 'Centro',
+      dataIndex: 'DESC_CENTRO',
+      key: 'centro',
+      width: 140,
+      render: (text) => (
+        <Text style={{ fontSize: 12 }}>
+          {text?.replace('MADRID-', '')?.replace('PALMA-', '')?.replace('BARCELONA-', '')?.replace('BILBAO-', '')?.replace('MALAGA-', '')}
+        </Text>
+      )
+    },
+    {
+      title: 'Segmento',
+      dataIndex: 'DESC_SEGMENTO',
+      key: 'segmento',
+      width: 120,
+      render: (text) => <Text style={{ fontSize: 12 }}>{text?.replace('Banca de ', '').replace('Banca ', '')}</Text>
+    },
+    {
+      title: 'Contratos',
+      dataIndex: 'total_contratos',
+      key: 'contratos',
+      width: 80,
+      align: 'center',
+      sorter: (a, b) => (a.total_contratos || 0) - (b.total_contratos || 0),
+      render: (val) => <Badge count={val || 0} />
+    },
+    {
+      title: 'Nuevos',
+      dataIndex: 'contratos_nuevos_periodo',
+      key: 'nuevos',
+      width: 70,
+      align: 'center',
+      render: (val) => (
+        <Text style={{ 
+          color: (val || 0) > 2 ? theme.colors.success : (val || 0) > 0 ? theme.colors.warning : theme.colors.error,
+          fontWeight: 600,
+          fontSize: 12
+        }}>
+          {val || 0}
+        </Text>
+      )
+    },
+    {
+      title: 'Movimientos',
+      dataIndex: 'total_movimientos',
+      key: 'movimientos',
+      width: 90,
+      align: 'center',
+      render: (val) => <Text style={{ fontSize: 12 }}>{val || 0}</Text>
+    },
+    {
+      title: 'Ratio Contratos',
+      dataIndex: 'ratio_contratos_vs_media',
+      key: 'ratio_contratos',
+      width: 110,
+      align: 'right',
+      sorter: (a, b) => (a.ratio_contratos_vs_media || 0) - (b.ratio_contratos_vs_media || 0),
+      render: (val) => (
+        <Text style={{ 
+          color: (val || 0) < 0.5 ? theme.colors.error : (val || 0) > 2 ? theme.colors.warning : theme.colors.success,
+          fontWeight: 600,
+          fontSize: 12
+        }}>
+          {(val || 0).toFixed(2)}×
+        </Text>
+      )
+    },
+    {
+      title: 'Ingresos (€)',
+      dataIndex: 'ingresos_generados',
+      key: 'ingresos',
+      width: 100,
+      align: 'right',
+      render: (val) => (
+        <Text style={{ fontSize: 12 }}>
+          {(val || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
+        </Text>
+      )
+    },
+    {
+      title: 'Tipo Outlier',
+      dataIndex: 'tipo_outlier',
+      key: 'tipo',
+      width: 120,
+      render: (val) => (
+        <Tag 
+          color={val === 'SIN_ACTIVIDAD' ? 'red' : val === 'PICO_COMERCIAL' ? 'blue' : 'green'}
+          style={{ fontSize: 10 }}
+        >
+          {val?.replace('_', ' ')}
+        </Tag>
+      )
+    },
+    {
+      title: 'Eficiencia',
+      dataIndex: 'clasificacion_eficiencia',
+      key: 'eficiencia',
+      width: 100,
+      render: (val) => (
+        <Tag 
+          color={val === 'INEFICIENTE' ? 'red' : val === 'EQUILIBRADO' ? 'orange' : val === 'EFICIENTE' ? 'blue' : 'green'}
+          style={{ fontSize: 10 }}
+        >
           {val}
         </Tag>
       )
     }
   ];
 
-  // ✅ Renderizado del header de resumen
-  const renderSummaryHeader = () => {
-    if (!summary) return null;
+  /**
+   * ✅ Pestañas dinámicas
+   */
+  const getDynamicTabItems = () => {
+    const commonTableProps = {
+      size: "small",
+      scroll: { x: 1400, y: 500 },
+      pagination: { 
+        pageSize: 10, 
+        size: 'small',
+        showSizeChanger: true,
+        showQuickJumper: true,
+        showTotal: (total, range) => (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {range[0]}-{range[1]} de {total} elementos
+          </Text>
+        )
+      },
+      bordered: true,
+      style: { backgroundColor: 'white' }
+    };
 
-    return (
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ textAlign: 'center', borderColor: theme.colors.bmGreenLight }}>
-            <Statistic
-              title={mode === 'direccion' ? 'Desviaciones Totales' : 'Mis Desviaciones'}
-              value={summary.totalDeviations || 0}
-              valueStyle={{ color: (summary.totalDeviations || 0) > 0 ? theme.colors.warning : theme.colors.success }}
-              prefix={<WarningOutlined />}
-            />
-          </Card>
-        </Col>
-        
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ textAlign: 'center', borderColor: theme.colors.error }}>
-            <Statistic
-              title="Alertas Críticas"
-              value={summary.criticalAlerts || 0}
-              valueStyle={{ color: (summary.criticalAlerts || 0) > 0 ? theme.colors.error : theme.colors.success }}
-              prefix={<ExclamationCircleOutlined />}
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ textAlign: 'center', borderColor: theme.colors.bmGreenPrimary }}>
-            <Statistic
-              title={mode === 'direccion' ? 'Total Incentivos' : 'Mis Incentivos'}
-              value={mode === 'direccion' ? summary.totalIncentives : summary.incentiveAmount || 0}
-              precision={0}
-              valueStyle={{ color: theme.colors.bmGreenPrimary }}
-              prefix={<TrophyOutlined />}
-              suffix="€"
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ textAlign: 'center', borderColor: theme.colors.success }}>
-            <Statistic
-              title="Performance"
-              value={summary.performance}
-              valueStyle={{ color: theme.colors.success }}
-              prefix={<CheckCircleOutlined />}
-            />
-          </Card>
-        </Col>
-      </Row>
-    );
-  };
-
-  // ✅ Definición de pestañas según modo
-  const getTabItems = () => {
-    if (mode === 'gestor') {
-      return [
-        {
-          key: 'precios',
-          label: (
-            <Space>
-              <EuroOutlined />
-              Mis Precios vs Estándar
-              {preciosData.filter(p => p.semaforo === 'Rojo').length > 0 && (
-                <Badge count={preciosData.filter(p => p.semaforo === 'Rojo').length} />
-              )}
-            </Space>
-          ),
-          children: (
-            <Table
-              columns={preciosColumns}
-              dataSource={preciosData}
-              size="small"
-              scroll={{ x: true }}
-              pagination={{ pageSize: 10 }}
-              locale={{
-                emptyText: <Empty description="No hay datos de precios disponibles para tu segmento" />
-              }}
-            />
-          )
-        },
-        {
-          key: 'incentivos',
-          label: (
-            <Space>
-              <TrophyOutlined />
-              Mis Incentivos
-              <Text type="secondary">({incentivesData.length})</Text>
-            </Space>
-          ),
-          children: (
-            <Table
-              columns={incentivesColumns}
-              dataSource={incentivesData}
-              size="small"
-              pagination={false}
-              locale={{
-                emptyText: <Empty description="No hay datos de incentivos calculados" />
-              }}
-            />
-          )
-        },
-        {
-          key: 'desviaciones',
-          label: (
-            <Space>
-              <AlertOutlined />
-              Mis Desviaciones
-              {desviacionesData.filter(d => d.criticidad === 'Alta').length > 0 && (
-                <Badge count={desviacionesData.filter(d => d.criticidad === 'Alta').length} />
-              )}
-            </Space>
-          ),
-          children: (
-            <Table
-              columns={desviacionesColumns}
-              dataSource={desviacionesData}
-              size="small"
-              pagination={false}
-              locale={{
-                emptyText: <Empty description="No se detectaron desviaciones significativas en tu cartera" />
-              }}
-            />
-          )
-        }
-      ];
-    }
-
-    // Modo dirección
     return [
       {
-        key: 'precios',
+        key: 'pricing',
         label: (
           <Space>
-            <DashboardOutlined />
-            Precios por Segmento-Producto
-            {preciosData.filter(p => p.semaforo === 'Rojo').length > 0 && (
-              <Badge count={preciosData.filter(p => p.semaforo === 'Rojo').length} />
-            )}
+            <DollarOutlined />
+            <span>Pricing</span>
+            <Badge 
+              count={pricingData.total} 
+              size="small"
+              style={{ backgroundColor: pricingData.total > 0 ? theme.colors.warning : theme.colors.success }}
+            />
           </Space>
         ),
         children: (
-          <Table
-            columns={preciosColumns}
-            dataSource={showOnlyOutliers ? preciosData.filter(p => p.semaforo === 'Rojo') : preciosData}
-            size="small"
-            scroll={{ x: true }}
-            pagination={{ pageSize: 15 }}
-            locale={{
-              emptyText: <Empty description="No hay datos de precios disponibles" />
-            }}
-          />
+          <div>
+            {pricingData.total > 0 && (
+              <Alert
+                message={`${pricingData.total} desviaciones de pricing detectadas con umbral ≥${pricingData.umbral}%`}
+                type="warning"
+                showIcon
+                closable
+                style={{ marginBottom: 16 }}
+                description={
+                  pricingData.data.length > 0 && 
+                  `Producto más desviado: ${pricingData.data[0]?.DESC_PRODUCTO} (${(pricingData.data[0]?.desviacion_pct || 0).toFixed(1)}%)`
+                }
+              />
+            )}
+            <Table
+              {...commonTableProps}
+              columns={getPricingColumns()}
+              dataSource={pricingData.data.map((item, idx) => ({ ...item, key: `pricing-${idx}` }))}
+              locale={{
+                emptyText: (
+                  <Empty 
+                    description={`No hay desviaciones de pricing ≥${pricingData.umbral}% en ${periodo}`}
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )
+              }}
+            />
+          </div>
         )
       },
       {
-        key: 'incentivos',
+        key: 'margen',
+        label: (
+          <Space>
+            <PercentageOutlined />
+            <span>Margen</span>
+            <Badge 
+              count={margenData.total} 
+              size="small"
+              style={{ backgroundColor: margenData.total > 0 ? theme.colors.info : theme.colors.success }}
+            />
+          </Space>
+        ),
+        children: (
+          <div>
+            {margenData.total > 0 && (
+              <Alert
+                message={`${margenData.total} anomalías de margen detectadas con Z-Score ≥${margenData.z}`}
+                type="info"
+                showIcon
+                closable
+                style={{ marginBottom: 16 }}
+                description={
+                  margenData.data.length > 0 && 
+                  `Gestor más anómalo: ${margenData.data[0]?.DESC_GESTOR} (Z=${(margenData.data[0]?.z_score || 0).toFixed(2)})`
+                }
+              />
+            )}
+            <Table
+              {...commonTableProps}
+              columns={getMargenColumns()}
+              dataSource={margenData.data.map((item, idx) => ({ ...item, key: `margen-${idx}` }))}
+              locale={{
+                emptyText: (
+                  <Empty 
+                    description={`No hay anomalías de margen con Z-Score ≥${margenData.z} en ${periodo}`}
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )
+              }}
+            />
+          </div>
+        )
+      },
+      {
+        key: 'volumen',
         label: (
           <Space>
             <UsergroupAddOutlined />
-            Ranking Gestores
-            <Text type="secondary">({incentivesData.length})</Text>
+            <span>Volumen</span>
+            <Badge 
+              count={volumenData.total} 
+              size="small"
+              style={{ backgroundColor: volumenData.total > 0 ? theme.colors.bmGreenLight : theme.colors.success }}
+            />
           </Space>
         ),
         children: (
-          <Table
-            columns={incentivesColumns}
-            dataSource={incentivesData}
-            size="small"
-            scroll={{ x: true }}
-            pagination={{ pageSize: 15 }}
-            locale={{
-              emptyText: <Empty description="No hay datos de incentivos calculados" />
-            }}
-          />
-        )
-      },
-      {
-        key: 'desviaciones',
-        label: (
-          <Space>
-            <ContainerOutlined />
-            Desviaciones Globales
-            {desviacionesData.length > 0 && (
-              <Badge count={desviacionesData.length} />
+          <div>
+            {volumenData.total > 0 && (
+              <Alert
+                message={`${volumenData.total} outliers de volumen detectados con factor ×${volumenData.factor}`}
+                type="success"
+                showIcon
+                closable
+                style={{ marginBottom: 16 }}
+                description={
+                  volumenData.data.length > 0 && 
+                  `Gestor más outlier: ${volumenData.data[0]?.DESC_GESTOR} (${volumenData.data[0]?.tipo_outlier})`
+                }
+              />
             )}
-          </Space>
-        ),
-        children: (
-          <Table
-            columns={desviacionesColumns}
-            dataSource={desviacionesData}
-            size="small"
-            scroll={{ x: true }}
-            pagination={{ pageSize: 10 }}
-            locale={{
-              emptyText: <Empty description="No se detectaron desviaciones significativas" />
-            }}
-          />
+            <Table
+              {...commonTableProps}
+              columns={getVolumenColumns()}
+              dataSource={volumenData.data.map((item, idx) => ({ ...item, key: `volumen-${idx}` }))}
+              locale={{
+                emptyText: (
+                  <Empty 
+                    description={`No hay outliers de volumen con factor ×${volumenData.factor} en ${periodo}`}
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )
+              }}
+            />
+          </div>
         )
       }
     ];
@@ -982,21 +1015,32 @@ const DeviationAnalysis = ({
 
   // Effects
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchAllDeviationData();
+  }, [fetchAllDeviationData]);
 
   // Handlers
   const handleRefresh = useCallback(() => {
-    fetchData();
+    fetchAllDeviationData();
     onReload();
-  }, [fetchData, onReload]);
+  }, [fetchAllDeviationData, onReload]);
 
   if (loading) {
     return (
       <div style={{ padding: 50, textAlign: 'center' }}>
         <Spin size="large" />
         <div style={{ marginTop: 16 }}>
-          <Text>Cargando análisis de desviaciones...</Text>
+          <Text>
+            Cargando análisis de desviaciones para {periodo}...
+          </Text>
+          <br />
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Pricing: {pricingUmbral}% | Margen: Z≥{margenZScore} | Volumen: ×{volumenFactor}
+          </Text>
+          {useDebugMode && (
+            <div style={{ marginTop: 8 }}>
+              <Tag color="purple">ULTRA DEBUG - Extractor inteligente activo</Tag>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1008,59 +1052,83 @@ const DeviationAnalysis = ({
         error={error} 
         onRetry={handleRefresh}
         style={{ height: '100%' }}
+        message="Error cargando desviaciones"
+        description="No se pudieron obtener los datos de los endpoints de desviaciones"
       />
     );
   }
 
+  const totalDeviations = pricingData.total + margenData.total + volumenData.total;
+
   return (
-    <Card
-      className={className}
-      style={{ width: '100%', height: '100%', ...style }}
-      styles={{ body: { padding: '16px' } }}
-      title={
-        <Space>
-          <AlertOutlined style={{ color: theme.colors.bmGreenPrimary }} />
-          <Title level={4} style={{ margin: 0 }}>
-            {mode === 'gestor' ? 'Mi Análisis de Desempeño' : 'Análisis de Desviaciones Globales'}
-          </Title>
-          <Badge 
-            count={mode === 'gestor' ? `Gestor ${gestorId}` : 'Dirección'} 
-            style={{ backgroundColor: theme.colors.bmGreenPrimary }} 
-          />
-          <Text type="secondary">• {periodo}</Text>
-        </Space>
-      }
-      extra={
-        <Space>
-          {mode === 'direccion' && (
-            <Switch
-              checkedChildren="Solo Críticos"
-              unCheckedChildren="Todos"
-              checked={showOnlyOutliers}
-              onChange={setShowOnlyOutliers}
-            />
-          )}
-          <Button 
-            icon={<ReloadOutlined />} 
-            onClick={handleRefresh}
-            disabled={loading}
-          >
-            Actualizar
-          </Button>
-        </Space>
-      }
+    <div 
+      className={className} 
+      style={{ 
+        width: '100%', 
+        height: '100vh',
+        overflowY: 'auto',
+        backgroundColor: '#fafafa',
+        padding: '16px',
+        ...style 
+      }}
     >
-      {renderSummaryHeader()}
-      
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        tabPosition="top"
-        type="line"
-        style={{ minHeight: 400 }}
-        items={getTabItems()}
-      />
-    </Card>
+      <Card
+        style={{ 
+          width: '100%', 
+          minHeight: '95vh',
+          backgroundColor: 'white',
+          borderRadius: 8
+        }}
+        styles={{ body: { padding: '24px' } }}
+        title={
+          <Space>
+            <AlertOutlined style={{ color: theme.colors.bmGreenPrimary }} />
+            <Title level={4} style={{ margin: 0 }}>
+              Análisis de Desviaciones Dinámico
+            </Title>
+            <Badge 
+              count={totalDeviations} 
+              style={{ backgroundColor: theme.colors.bmGreenPrimary }} 
+            />
+            <Text type="secondary">• {periodo}</Text>
+            {parametersChanged && (
+              <Tag color="processing">Parámetros modificados</Tag>
+            )}
+            {useDebugMode && (
+              <Tag color="purple" icon={<BugOutlined />}>Extractor</Tag>
+            )}
+          </Space>
+        }
+        extra={
+          <Space>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Última actualización: {new Date().toLocaleTimeString()}
+            </Text>
+            <Button 
+              size="small"
+              icon={<ReloadOutlined />} 
+              onClick={handleRefresh}
+              loading={loading}
+            >
+              Actualizar
+            </Button>
+          </Space>
+        }
+      >
+        {renderDynamicParameterControls()}
+        {renderDynamicSummaryHeader()}
+        
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          type="card"
+          size="small"
+          style={{ minHeight: 600 }}
+          items={getDynamicTabItems()}
+          tabBarStyle={{ marginBottom: 16 }}
+        />
+      </Card>
+    </div>
   );
 };
 

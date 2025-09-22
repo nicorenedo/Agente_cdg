@@ -1,6 +1,6 @@
 """
-Chat Agent Universal v10.0 - Agente Conversacional CDG Completo
-===============================================================
+Chat Agent Universal v11.0 - Agente Conversacional CDG Completo con Mejoras de Confidencialidad
+=================================================================================================
 
 Agente completamente mejorado que maneja CUALQUIER consulta sobre control de gestión mediante:
 - Sistema de clasificación inteligente con prompts catalogados  
@@ -9,19 +9,24 @@ Agente completamente mejorado que maneja CUALQUIER consulta sobre control de ges
 - Respuestas contextuales sin SQL para preguntas generales
 - Integración completa con CDG Agent para análisis complejos
 - Soporte completo para gráficos y visualizaciones
+- 🔐 NUEVO: Sistema de roles y confidencialidad bancaria
+- 🎯 NUEVO: Inyección inteligente de gestor_id desde mensajes
+- 🎯 NUEVO: Validación de permisos por rol de usuario
 
-Versión: 10.0 - Integración Completa con Catálogos de Queries
+Versión: 11.0 - Integración Completa con Sistema de Confidencialidad
 Autor: CDG Development Team  
-Fecha: 2025-09-11
+Fecha: 2025-09-19
 """
 
 import json
 import logging
 import sqlite3
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from pathlib import Path
+from enum import Enum
 import asyncio
 
 # Configuración
@@ -50,7 +55,7 @@ try:
         CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT,
         CHAT_FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
         CHAT_SQL_GENERATION_SYSTEM_PROMPT,
-        # 🎯 NUEVOS CATÁLOGOS DE QUERIES INTEGRADOS
+        # 🎯 CATÁLOGOS DE QUERIES INTEGRADOS (6 CATÁLOGOS)
         BASIC_QUERIES_CATALOG_PROMPT,
         COMPARATIVE_QUERIES_CATALOG_PROMPT,
         DEVIATION_QUERIES_CATALOG_PROMPT,
@@ -66,23 +71,24 @@ try:
     )
     # 🎯 IMPORTACIÓN DE TODAS LAS QUERIES PREDEFINIDAS
     from queries.basic_queries import basic_queries
-    from queries.comparative_queries import ComparativeQueries
-    from queries.deviation_queries import DeviationQueries
-    from queries.gestor_queries import GestorQueries
-    from queries.incentive_queries import IncentiveQueries
-    from queries.period_queries import PeriodQueries
+    from queries.comparative_queries import comparative_queries
+    from queries.deviation_queries import deviation_queries
+    from queries.gestor_queries import gestor_queries
+    from queries.incentive_queries import incentive_queries
+    from queries.period_queries import period_queries
     
     IMPORTS_SUCCESSFUL = True
     logger = logging.getLogger(__name__)
     mode = "PRODUCTION" if IMPORTS_SUCCESSFUL else "FALLBACK"
     print(f"\n{'='*60}")
-    print(f"🚀 CHAT AGENT v10.0 INICIALIZADO")
+    print(f"🚀 CHAT AGENT v11.0 INICIALIZADO")
     print(f"   Modo: {mode}")
     print(f"   Imports: {'✅ Exitosos' if IMPORTS_SUCCESSFUL else '⚠️ Fallback'}")
     print(f"   Catálogos: {'✅ 6 catálogos cargados' if IMPORTS_SUCCESSFUL else '⚠️ Mock'}")
     print(f"   Query Engines: {'✅ Disponibles' if IMPORTS_SUCCESSFUL else '⚠️ Mock'}")
+    print(f"   🔐 Sistema de confidencialidad: ✅ Activado")
     print(f"{'='*60}\n")
-    logger.info(f"🚀 Chat Agent v10.0 inicializado - Modo: {mode}")
+    logger.info(f"🚀 Chat Agent v11.0 inicializado - Modo: {mode}")
 
     
 except ImportError as e:
@@ -153,7 +159,109 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# 🎯 CLASIFICADOR INTELIGENTE CON CATÁLOGOS INTEGRADOS
+# 🔐 SISTEMA DE ROLES Y PERMISOS BANCARIOS - NUEVA FUNCIONALIDAD v11.0
+# ============================================================================
+
+class UserRole(Enum):
+    CONTROL_GESTION = "control_gestion"  # Acceso total a todos los datos
+    GESTOR = "gestor"                   # Solo datos propios + comparativas anónimas
+
+class PermissionManager:
+    """🔐 NUEVO: Gestor de permisos y confidencialidad bancaria"""
+    
+    @staticmethod
+    def extract_gestor_id_from_message(message: str, context: Dict = None) -> Optional[int]:
+        """🎯 MEJORADA: Extracción inteligente de gestor_id con detección de consultas confidenciales"""
+        message_lower = message.lower()
+
+        # 🔍 PATRONES CONFIDENCIALES que indican acceso a otros gestores
+        confidential_patterns = [
+            r'gestor\s*(\d+)',
+            r'compara.*con.*gestor\s*(\d+)',  # ← ¡PATRÓN CRÍTICO AGREGADO!
+            r'comparar.*gestor\s*(\d+)',
+            r'datos.*gestor\s*(\d+)',
+            r'información.*gestor\s*(\d+)',
+            r'performance.*gestor\s*(\d+)',
+            r'del\s+gestor\s*(\d+)',
+            r'para.*gestor\s*(\d+)'
+        ]
+
+        for pattern in confidential_patterns:
+            match = re.search(pattern, message_lower)
+            if match and match.groups():
+                gestor_id = int(match.group(1))
+                logger.info(f"🎯 Gestor_id extraído del mensaje: {gestor_id}")
+                return gestor_id
+
+        # Si no encuentra patrón específico, verificar si es consulta confidencial genérica
+        confidential_keywords = ['ranking gestores', 'comparar con', 'todos los gestores', 'otros gestores', 'listado gestores']
+        if any(keyword in message_lower for keyword in confidential_keywords):
+            logger.info(f"🎯 Consulta confidencial genérica detectada")
+            return -1  # Indicador de consulta confidencial genérica
+
+        return None
+
+    @staticmethod 
+    def determine_user_role(user_id: str) -> UserRole:
+        """🔍 Determina rol basado en user_id CON LÓGICA MEJORADA"""
+        user_lower = user_id.lower()
+        
+        # 🎯 PATRONES ESPECÍFICOS PARA CONTROL DE GESTIÓN
+        control_patterns = [
+            "direccion-", "control-gestion", "cdg-admin", "supervisor-", "manager-"
+        ]
+        
+        # 🎯 PATRONES ESPECÍFICOS PARA GESTOR (MÁS ESPECÍFICO)
+        gestor_patterns = [
+            "gestor-", "-gestor-", "chat-v", "dashboard-gestor"
+        ]
+        
+        # Primero verificar si es gestor (más específico)
+        if any(pattern in user_lower for pattern in gestor_patterns):
+            return UserRole.GESTOR
+        
+        # Luego verificar si es control de gestión
+        if any(pattern in user_lower for pattern in control_patterns):
+            return UserRole.CONTROL_GESTION
+        
+        # Por defecto: GESTOR (más restrictivo)
+        return UserRole.GESTOR
+
+    
+    @staticmethod
+    def validate_access_permission(user_role: UserRole, requested_gestor_id: int, user_gestor_id: int) -> bool:
+        """🔐 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD BANCARIA"""
+
+        # 🚨 REGLAS DE CONFIDENCIALIDAD:
+        # - CONTROL_GESTION: Acceso total sin restricciones
+        # - GESTOR: Solo puede acceder a SUS PROPIOS datos
+
+        if user_role == UserRole.CONTROL_GESTION:
+            logger.info(f"🔓 Acceso TOTAL autorizado para {user_role.value}")
+            return True
+
+        if user_role == UserRole.GESTOR:
+            # Consulta confidencial genérica (requested_gestor_id = -1)
+            if requested_gestor_id == -1:
+                logger.warning(f"🔐 Acceso DENEGADO - Gestor {user_gestor_id} no puede acceder a datos comparativos confidenciales")
+                return False
+
+            # Consulta de gestor específico
+            if requested_gestor_id and user_gestor_id:
+                if requested_gestor_id == user_gestor_id:
+                    logger.info(f"🔓 Acceso PROPIO autorizado - Gestor {user_gestor_id}")
+                    return True
+                else:
+                    logger.warning(f"🔐 Acceso DENEGADO - Gestor {user_gestor_id} pidiendo datos de Gestor {requested_gestor_id}")
+                    return False
+
+        # Por defecto: acceso denegado
+        logger.warning(f"🔐 Acceso DENEGADO - Rol {user_role.value} no reconocido")
+        return False
+
+
+# ============================================================================
+# 🎯 CLASIFICADOR INTELIGENTE CON CATÁLOGOS INTEGRADOS - MEJORADO v11.0
 # ============================================================================
 
 class IntelligentQueryClassifier:
@@ -167,7 +275,7 @@ class IntelligentQueryClassifier:
     
     def __init__(self):
         self.llm_client = iniciar_agente_llm()
-        # 🎯 CATÁLOGOS DE QUERIES INTEGRADOS
+        # 🎯 CATÁLOGOS DE QUERIES INTEGRADOS (6 CATÁLOGOS COMPLETOS)
         self.query_catalogs = {
             'basic': BASIC_QUERIES_CATALOG_PROMPT,
             'comparative': COMPARATIVE_QUERIES_CATALOG_PROMPT,
@@ -180,19 +288,38 @@ class IntelligentQueryClassifier:
         # 🎯 INSTANCIAS DE QUERIES PREDEFINIDAS
         self.query_engines = {
             'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
-            'comparative': ComparativeQueries() if IMPORTS_SUCCESSFUL else None,
-            'deviation': DeviationQueries() if IMPORTS_SUCCESSFUL else None,
-            'gestor': GestorQueries() if IMPORTS_SUCCESSFUL else None,
-            'incentive': IncentiveQueries() if IMPORTS_SUCCESSFUL else None,
-            'period': PeriodQueries() if IMPORTS_SUCCESSFUL else None
+            'comparative': comparative_queries if IMPORTS_SUCCESSFUL else None,
+            'deviation': deviation_queries if IMPORTS_SUCCESSFUL else None,
+            'gestor': gestor_queries if IMPORTS_SUCCESSFUL else None,
+            'incentive': incentive_queries if IMPORTS_SUCCESSFUL else None,
+            'period': period_queries if IMPORTS_SUCCESSFUL else None
         }
 
-    
     async def classify_and_route(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
         """
-        🎯 CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE
+        🎯 CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE CON VALIDACIÓN DE PERMISOS
         """
         try:
+            # 🔐 NUEVO: Validación de acceso temprana
+            extracted_gestor_id = PermissionManager.extract_gestor_id_from_message(user_message, context)
+            user_role = PermissionManager.determine_user_role(context.get('user_id', ''))
+            user_gestor_id = context.get('gestor_id') if context else None
+            
+            # 🚨 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD
+            if extracted_gestor_id is not None:
+                if not PermissionManager.validate_access_permission(user_role, extracted_gestor_id, user_gestor_id):
+                    return {
+                        'flow_type': 'ACCESS_DENIED',
+                        'classification': {'intent': 'confidentiality_violation'},
+                        'confidence': 1.0,
+                        'access_info': {
+                            'requested_gestor': extracted_gestor_id if extracted_gestor_id != -1 else 'consulta_comparativa',
+                            'user_gestor': user_gestor_id,
+                            'user_role': user_role.value,
+                            'violation_type': 'generic_comparison' if extracted_gestor_id == -1 else 'cross_gestor_access'
+                        }
+                    }
+  
             # 1️⃣ CLASIFICACIÓN INICIAL: ¿Qué tipo de consulta es?
             initial_classification = await self._classify_query_type(user_message, context)
             
@@ -238,35 +365,67 @@ class IntelligentQueryClassifier:
     
     async def _classify_query_type(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
         """
-        🎯 CLASIFICACIÓN INICIAL: Determina si necesita SQL, CDG Agent o respuesta contextual
+        🎯 CLASIFICACIÓN CONTEXTUAL INTELIGENTE CON ROLES
         """
         try:
-            classification_prompt = f"""
-            Analiza esta consulta de control de gestión bancario y clasifícala:
+            # ✅ NUEVO: Analizar contexto del usuario con roles
+            user_context = ""
+            if context:
+                gestor_id = context.get('gestor_id')
+                periodo = context.get('periodo', '2025-10')
+                user_id = context.get('user_id', '')
+                user_role = PermissionManager.determine_user_role(user_id)
 
-            CONSULTA: "{user_message}"
+                if gestor_id:
+                    user_context = f"\nCONTEXTO USUARIO: Gestor ID {gestor_id}, período {periodo}, rol {user_role.value}"
+
+            classification_prompt = f"""
+            Analiza esta consulta de control de gestión bancario considerando el contexto específico del usuario:
+
+            CONSULTA: "{user_message}"{user_context}
+
+            🧠 ANÁLISIS SEMÁNTICO REQUERIDO:
+            - Si pregunta incluye "me comparo", "mi posición", "cómo estoy" → ES PERSONAL, usar gestor_id del contexto
+            - Si pregunta es genérica "ranking gestores" → ES GENERAL, no usar gestor_id específico
+            - Si menciona "oportunidades", "mejora" → INCLUIR análisis de recomendaciones
+
+            🧠 ANÁLISIS DE INTENCIÓN ESPECÍFICO:
+            - "mis/mi" + "mejores/top" + "clientes" → GESTOR personal query 
+            - "ranking/listado" SIN "mi/mis" → COMPARATIVE general query
+            - "problemas/alertas/desviaciones" → DEVIATION analysis
+            - "incentivos/bonus/comisiones" → INCENTIVE calculation
+            - "evolución/histórico/trimestre" → PERIOD analysis  
+            - Consultas básicas generales → BASIC queries
+            
+            🎯 CONTEXTO BANCARIO:
+            - Usuario con gestor_id específico = consultas personalizadas
+            - Consultas sin contexto personal = análisis generales
+            - Palabras como "comparo", "posición" = enfoque individual
 
             Responde en JSON con esta estructura:
             {{
                 "intent": "tipo_de_consulta",
                 "requires_sql": true/false,
                 "requires_cdg_agent": true/false,
+                "is_personal_query": true/false,
+                "context_sensitivity": "high/medium/low",
+                "recommended_focus": "individual/comparative/general",
                 "complexity": "simple/medium/complex",
                 "confidence": 0.0-1.0,
-                "reasoning": "explicación"
+                "reasoning": "explicación detallada"
             }}
 
-            CRITERIOS:
-            - requires_sql: true si necesita datos específicos de la BD
-            - requires_cdg_agent: true si requiere análisis complejo/comparativo/explicativo
-            - Si es pregunta conceptual/general → requires_sql: false
+            CRITERIOS MEJORADOS:
+            - is_personal_query: true si la pregunta es sobre "mi" performance
+            - context_sensitivity: qué tan importante es el contexto del usuario
+            - recommended_focus: cómo enfocar la respuesta
 
-            EJEMPLOS:
-            - "¿Cuántos gestores hay?" → requires_sql: true, requires_cdg_agent: false
-            - "Analiza el performance del gestor 5" → requires_sql: true, requires_cdg_agent: true  
-            - "¿Qué es el margen neto?" → requires_sql: false, requires_cdg_agent: false
+            EJEMPLOS CONTEXTUALES:
+            - "¿Cómo me comparo?" + gestor_id=27 → is_personal_query: true, focus: individual
+            - "Ranking de gestores" + gestor_id=27 → is_personal_query: false, focus: general  
+            - "Mis oportunidades de mejora" + gestor_id=27 → is_personal_query: true, focus: individual
             """
-            
+
             if IMPORTS_SUCCESSFUL:
                 response = self.llm_client.chat.completions.create(
                     model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
@@ -275,113 +434,165 @@ class IntelligentQueryClassifier:
                         {"role": "user", "content": classification_prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=200
+                    max_tokens=400  # ✅ Aumentado para análisis detallado
                 )
-                
+
                 result_text = response.choices[0].message.content.strip()
                 return self._parse_classification_response(result_text)
             else:
                 return self._fallback_classification(user_message)
-                
+
         except Exception as e:
-            logger.error(f"Error en clasificación inicial: {e}")
+            logger.error(f"Error en clasificación contextual: {e}")
             return self._fallback_classification(user_message)
+
     
     async def _find_predefined_query(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
         """
-        🎯 BÚSQUEDA INTELIGENTE EN QUERIES PREDEFINIDAS
-        Busca en los 6 catálogos para encontrar la query más apropiada
+        🎯 BÚSQUEDA SECUENCIAL ESTRICTA - UN CATÁLOGO A LA VEZ
+        Previene mezcla de catálogos y asegura selección correcta
         """
         try:
-            # Construir prompt con todos los catálogos
-            all_catalogs = "\n\n".join([
-                f"=== {catalog_name.upper()} ===\n{catalog_content}"
-                for catalog_name, catalog_content in self.query_catalogs.items()
-            ])
-            
-            search_prompt = f"""
-            Busca en estos catálogos la función más apropiada para esta consulta:
+            # 🔥 ORDEN INTELIGENTE CON ROLES: Empezar por el más probable
+            catalog_priority = self._determine_catalog_priority(user_message, context)
 
-            CONSULTA: "{user_message}"
+            logger.info(f"🔍 Búsqueda secuencial en orden: {catalog_priority}")
 
-            CATÁLOGOS DISPONIBLES:
-            {all_catalogs}
+            # 🔥 BUSCAR UNO POR UNO - NUNCA MEZCLAR
+            for catalog_name in catalog_priority:
+                catalog_content = self.query_catalogs.get(catalog_name)
+                if not catalog_content:
+                    continue
 
-            Responde en JSON:
-            {{
-                "found": true/false,
-                "catalog": "nombre_del_catalogo",
-                "function_name": "nombre_funcion_exacto",
-                "parameters": {{}},
-                "confidence": 0.0-1.0,
-                "reasoning": "explicación"
-            }}
+                logger.info(f"🔎 Buscando SOLO en: {catalog_name}")
 
-            IMPORTANTE:
-            - Si encuentras una función que coincida ≥70%, found: true
-            - Usa el nombre EXACTO de la función del catálogo
-            - Si no hay coincidencia clara, found: false
-            """
-            
-            if IMPORTS_SUCCESSFUL:
-                response = self.llm_client.chat.completions.create(
-                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
-                    messages=[
-                        {"role": "system", "content": "Eres un experto buscador de funciones en catálogos de queries."},
-                        {"role": "user", "content": search_prompt}
-                    ],
-                    temperature=0.1,
-                    max_tokens=300
+                # 🎯 BÚSQUEDA EXCLUSIVA EN UN SOLO CATÁLOGO
+                match_result = await self._search_exclusive_catalog(
+                    user_message, 
+                    catalog_name, 
+                    catalog_content,
+                    context
                 )
-                
-                result_text = response.choices[0].message.content.strip()
-                return self._parse_predefined_search_response(result_text)
-            else:
-                return {'found': False, 'confidence': 0.0}
-                
-        except Exception as e:
-            logger.error(f"Error buscando query predefinida: {e}")
+
+                if match_result['found'] and match_result['confidence'] > 0.75:
+                    logger.info(f"✅ MATCH exclusivo en {catalog_name}: {match_result['function_name']}")
+                    return {
+                        'found': True,
+                        'catalog': catalog_name,  # 🔥 GARANTIZADO CORRECTO
+                        'function_name': match_result['function_name'],
+                        'parameters': match_result.get('parameters', {}),
+                        'confidence': match_result['confidence'],
+                        'reasoning': f"Función exclusiva de {catalog_name}: {match_result['reasoning']}"
+                    }
+
+            # No se encontró en ningún catálogo
+            logger.info("❌ No se encontró función específica en ningún catálogo")
             return {'found': False, 'confidence': 0.0}
-    
-    def _parse_classification_response(self, response_text: str) -> Dict[str, Any]:
-        """Parsea respuesta de clasificación inicial"""
-        try:
-            import re
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group(0))
-                return {
-                    'intent': result.get('intent', 'general_query'),
-                    'requires_sql': result.get('requires_sql', True),
-                    'requires_cdg_agent': result.get('requires_cdg_agent', False),
-                    'complexity': result.get('complexity', 'medium'),
-                    'confidence': float(result.get('confidence', 0.5)),
-                    'reasoning': result.get('reasoning', 'Clasificación automática')
-                }
-        except:
-            pass
+
+        except Exception as e:
+            logger.error(f"Error en búsqueda secuencial: {e}")
+            return {'found': False, 'confidence': 0.0}
+
+    def _determine_catalog_priority(self, user_message: str, context: Dict = None) -> List[str]:
+        """🎯 DETERMINA ORDEN DE BÚSQUEDA INTELIGENTE CON ROLES"""
+        message_lower = user_message.lower()
         
-        return self._fallback_classification("")
-    
-    def _parse_predefined_search_response(self, response_text: str) -> Dict[str, Any]:
-        """Parsea respuesta de búsqueda en catálogos"""
+        # 🔐 NUEVO: Considerar rol del usuario
+        user_role = UserRole.GESTOR  # Default
+        if context and context.get('user_id'):
+            user_role = PermissionManager.determine_user_role(context.get('user_id'))
+
+        # 🔥 PRIORIZACIÓN POR ROL
+        if user_role == UserRole.CONTROL_GESTION:
+            # Control de gestión: prioriza análisis comparativos y generales
+            base_priority = ['comparative', 'basic', 'deviation', 'incentive', 'period', 'gestor']
+        else:
+            # Dashboard gestor: prioriza análisis personales
+            base_priority = ['gestor', 'basic', 'incentive', 'period', 'deviation', 'comparative']
+
+        # 🔥 ESPECIAL: Si menciona "mejores clientes", BASIC tiene prioridad ABSOLUTA
+        if any(phrase in message_lower for phrase in ['mejores clientes', 'clientes mejores', 'clientes por margen', 'ranking clientes']):
+            return ['basic', 'gestor']  # 🎯 BASIC primero para clientes
+
+        # 🔥 ESPECIAL: Si menciona "clientes", BASIC tiene prioridad alta
+        if 'clientes' in message_lower:
+            return ['basic', 'gestor', 'comparative']
+
+        # 🔥 ANÁLISIS PERSONAL vs GENERAL
+        if any(word in message_lower for word in ['mi', 'me', 'mis', 'cómo estoy', 'me comparo']):
+            return ['gestor', 'basic', 'comparative']
+
+        # 🔥 ANÁLISIS POR PALABRAS CLAVE
+        if any(word in message_lower for word in ['desviación', 'problema', 'alerta', 'anomalía']):
+            return ['deviation', 'basic', 'gestor', 'comparative']
+
+        if any(word in message_lower for word in ['ranking', 'comparar', 'mejor', 'top', 'vs']):
+            return ['comparative', 'basic', 'gestor', 'deviation']
+
+        if any(word in message_lower for word in ['incentivo', 'bonus', 'comisión', 'premio']):
+            return ['incentive', 'basic', 'gestor', 'comparative']
+
+        if any(word in message_lower for word in ['histórico', 'evolución', 'trimestre', 'período']):
+            return ['period', 'basic', 'gestor', 'comparative']
+
+        return base_priority
+
+    async def _search_exclusive_catalog(self, user_message: str, catalog_name: str, 
+                                       catalog_content: str, context: Dict = None) -> Dict[str, Any]:
+        """
+        🎯 BÚSQUEDA EXCLUSIVA EN UN SOLO CATÁLOGO - NO PUEDE CONFUNDIRSE
+        """
+        search_prompt = f"""
+        Busca EXCLUSIVAMENTE en este catálogo específico una función para esta consulta:
+
+        CONSULTA: "{user_message}"
+
+        CATÁLOGO EXCLUSIVO: {catalog_name.upper()}
+        {catalog_content}
+
+        🚨 REGLAS ABSOLUTAS:
+        1. SOLO buscar funciones que existan en {catalog_name.upper()}
+        2. NO mencionar otros catálogos  
+        3. function_name EXACTAMENTE como aparece aquí
+        4. Si NO hay función apropiada en {catalog_name.upper()}, devolver found: false
+
+        RESPONDE EN JSON:
+        {{
+            "found": true/false,
+            "function_name": "nombre_exacto_del_catalogo_{catalog_name}",
+            "parameters": {{}},
+            "confidence": 0.0-1.0,
+            "reasoning": "Por qué esta función de {catalog_name} es apropiada O por qué no se encontró en {catalog_name}"
+        }}
+
+        ⚠️ CRÍTICO: found=true SOLO si hay función PERFECTA en {catalog_name.upper()}
+        """
+
+        if IMPORTS_SUCCESSFUL:
+            response = self.llm_client.chat.completions.create(
+                model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                messages=[
+                    {"role": "system", "content": f"Eres un buscador EXCLUSIVO del catálogo {catalog_name}. NO puedes usar otros catálogos."},
+                    {"role": "user", "content": search_prompt}
+                ],
+                temperature=0.05,  # 🔥 MUY BAJO para precisión absoluta
+                max_tokens=200
+            )
+
+            result_text = response.choices[0].message.content.strip()
+            return self._parse_exclusive_response(result_text, catalog_name)
+        else:
+            return {'found': False, 'confidence': 0.0}
+
+    def _parse_exclusive_response(self, response_text: str, expected_catalog: str) -> Dict[str, Any]:
+        """Parsea respuesta exclusiva con validación de catálogo"""
         try:
-            import re
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
-                
-                # ✅ CORRECCIÓN: Limpiar nombre de catálogo
-                catalog = result.get('catalog', '').lower()
-                # Remover extensiones .py y limpiar
-                if '.py' in catalog:
-                    catalog = catalog.replace('_queries.py', '').replace('.py', '')
-                if catalog.endswith('_queries'):
-                    catalog = catalog.replace('_queries', '')
-                
+
                 return {
                     'found': result.get('found', False),
-                    'catalog': catalog,  # ✅ Catálogo limpio
                     'function_name': result.get('function_name', ''),
                     'parameters': result.get('parameters', {}),
                     'confidence': float(result.get('confidence', 0.0)),
@@ -391,8 +602,7 @@ class IntelligentQueryClassifier:
             pass
         
         return {'found': False, 'confidence': 0.0}
-    
-    
+
     def _fallback_classification(self, user_message: str) -> Dict[str, Any]:
         """Clasificación fallback básica por palabras clave"""
         message_lower = user_message.lower() if user_message else ""
@@ -437,8 +647,31 @@ class IntelligentQueryClassifier:
                 'reasoning': 'Consulta de datos general'
             }
 
+    def _parse_classification_response(self, response_text: str) -> Dict[str, Any]:
+        """Parsea respuesta de clasificación del LLM"""
+        try:
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                return {
+                    'intent': result.get('intent', 'general_query'),
+                    'requires_sql': result.get('requires_sql', True),
+                    'requires_cdg_agent': result.get('requires_cdg_agent', False),
+                    'is_personal_query': result.get('is_personal_query', False),
+                    'context_sensitivity': result.get('context_sensitivity', 'medium'),
+                    'recommended_focus': result.get('recommended_focus', 'general'),
+                    'complexity': result.get('complexity', 'medium'),
+                    'confidence': float(result.get('confidence', 0.7)),
+                    'reasoning': result.get('reasoning', 'Análisis automático')
+                }
+        except Exception as e:
+            logger.error(f"Error parseando clasificación: {e}")
+
+        return self._fallback_classification(response_text)
+
+
 # ============================================================================
-# 🎯 EJECUTOR DE QUERIES PREDEFINIDAS
+# 🎯 EJECUTOR DE QUERIES PREDEFINIDAS - MEJORADO v11.0
 # ============================================================================
 
 class PredefinedQueryExecutor:
@@ -449,55 +682,79 @@ class PredefinedQueryExecutor:
     def __init__(self):
         self.query_engines = {
             'basic': basic_queries if IMPORTS_SUCCESSFUL else None,
-            'comparative': ComparativeQueries() if IMPORTS_SUCCESSFUL else None,  # Con ()
-            'deviation': DeviationQueries() if IMPORTS_SUCCESSFUL else None,      # Con ()
-            'gestor': GestorQueries() if IMPORTS_SUCCESSFUL else None,            # Con ()
-            'incentive': IncentiveQueries() if IMPORTS_SUCCESSFUL else None,      # Con ()
-            'period': PeriodQueries() if IMPORTS_SUCCESSFUL else None             # Con ()
+            'comparative': comparative_queries if IMPORTS_SUCCESSFUL else None,
+            'deviation': deviation_queries if IMPORTS_SUCCESSFUL else None,
+            'gestor': gestor_queries if IMPORTS_SUCCESSFUL else None,
+            'incentive': incentive_queries if IMPORTS_SUCCESSFUL else None,
+            'period': period_queries if IMPORTS_SUCCESSFUL else None
         }
     
     async def execute_predefined_query(self, match_info: Dict[str, Any], user_message: str, context: Dict = None) -> Dict[str, Any]:
         """
-        🎯 EJECUTA la query predefinida identificada por el clasificador
+        🎯 EJECUTA query predefinida con VALIDACIÓN ESTRICTA del catálogo Y PERMISOS
         """
         try:
-            catalog = match_info.get('catalog', '').lower()
-            function_name = match_info.get('function_name', '')
-            parameters = match_info.get('parameters', {})
-            
+            catalog = match_info.get('catalog', '').lower().strip()
+            function_name = match_info.get('function_name', '').strip()
+
+            # 🔥 VALIDACIÓN ESTRICTA
+            if not catalog or not function_name:
+                logger.error("❌ Catálogo o función vacía")
+                return {'success': False, 'error': 'Información de función incompleta'}
+
             logger.info(f"🎯 Ejecutando query predefinida: {catalog}.{function_name}")
-            
-            # Obtener el engine correcto
+
+            # Obtener engine con validación
             engine = self.query_engines.get(catalog)
             if not engine:
-                logger.error(f"Engine no encontrado para catálogo: {catalog}")
+                logger.error(f"❌ Engine no encontrado: {catalog}")
+                available_catalogs = list(self.query_engines.keys())
                 return {
-                    'success': False,
-                    'error': f'Catálogo {catalog} no disponible',
-                    'data': None
+                    'success': False, 
+                    'error': f'Catálogo {catalog} no disponible. Disponibles: {available_catalogs}'
                 }
-            
-            # Obtener la función
+
+            # Validar función existe
             if not hasattr(engine, function_name):
-                logger.error(f"Función no encontrada: {function_name} en {catalog}")
+                logger.error(f"❌ Función no encontrada: {function_name} en {catalog}")
+                available_functions = [attr for attr in dir(engine) if not attr.startswith('_')]
                 return {
                     'success': False,
-                    'error': f'Función {function_name} no existe en {catalog}',
-                    'data': None
+                    'error': f'Función {function_name} no existe en {catalog}. Disponibles: {available_functions[:10]}'
                 }
-            
+
+            # 🎯 EJECUTAR con parámetros enriquecidos Y VALIDACIÓN DE PERMISOS
             query_function = getattr(engine, function_name)
+            enhanced_params = self._enhance_parameters(match_info.get('parameters', {}), context, user_message)
             
-            # 🎯 PARÁMETROS INTELIGENTES basados en contexto
-            enhanced_params = self._enhance_parameters(parameters, context, user_message)
-            
-            # Ejecutar la función
+            # 🚨 NUEVO: Verificar si se denegó acceso
+            if enhanced_params.get('access_denied'):
+                return {
+                    'success': False,
+                    'error': 'Acceso denegado por confidencialidad',
+                    'access_info': enhanced_params
+                }
+
+            # 🔥 NUEVO: VALIDAR PARÁMETROS COMPATIBLES
+            import inspect
+            function_signature = inspect.signature(query_function)
+            valid_params = {}
+
+            for param_name, param_value in enhanced_params.items():
+                if param_name in function_signature.parameters:
+                    valid_params[param_name] = param_value
+                elif param_name not in ['access_validated', 'focus_mode', 'is_personal_query', 'user_role']:
+                    # No loggar parámetros de control interno
+                    logger.warning(f"⚠️ Parámetro {param_name} no válido para {function_name}, ignorado")
+
+            logger.info(f"🔧 Ejecutando {catalog}.{function_name} con parámetros válidos: {valid_params}")
+
             if callable(query_function):
-                if enhanced_params:
-                    result = query_function(**enhanced_params)
+                if valid_params:  # 🔥 Usar parámetros validados
+                    result = query_function(**valid_params)
                 else:
                     result = query_function()
-                
+
                 return {
                     'success': True,
                     'data': result.data if hasattr(result, 'data') else result,
@@ -506,49 +763,99 @@ class PredefinedQueryExecutor:
                         'function': function_name,
                         'parameters_used': enhanced_params,
                         'execution_time': getattr(result, 'execution_time', 0),
-                        'row_count': getattr(result, 'row_count', 0)
+                        'row_count': len(result.data) if hasattr(result, 'data') and isinstance(result.data, list) else 0
                     }
                 }
             else:
-                return {
-                    'success': False,
-                    'error': f'{function_name} no es ejecutable',
-                    'data': None
-                }
-                
+                return {'success': False, 'error': f'{function_name} no es ejecutable'}
+
         except Exception as e:
-            logger.error(f"Error ejecutando query predefinida: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'data': None
-            }
+            logger.error(f"❌ Error ejecutando query predefinida: {e}")
+            return {'success': False, 'error': f'Error de ejecución: {str(e)}'}
+
     
     def _enhance_parameters(self, base_params: Dict, context: Dict, user_message: str) -> Dict[str, Any]:
         """
-        🎯 ENRIQUECE los parámetros con contexto inteligente
+        🎯 ENRIQUECE PARÁMETROS CON CONTEXTO INTELIGENTE Y VALIDACIÓN DE PERMISOS
         """
         enhanced = base_params.copy()
+
+        # 🔥 DEBUG: Ver qué llega
+        logger.info(f"🔍 Parámetros base: {base_params}")
+        logger.info(f"🔍 Contexto recibido: {context}")
+        logger.info(f"🔍 Mensaje: {user_message}")
+
+        # 🔐 NUEVO: VALIDACIÓN DE PERMISOS Y EXTRACCIÓN INTELIGENTE
+        extracted_gestor_id = PermissionManager.extract_gestor_id_from_message(user_message, context)
+        user_role = UserRole.GESTOR  # Default
+        user_gestor_id = context.get('gestor_id') if context else None
         
-        # Período inteligente
+        if context and context.get('user_id'):
+            user_role = PermissionManager.determine_user_role(context.get('user_id'))
+
+        # 🔥 LÓGICA DE ASIGNACIÓN CON VALIDACIÓN
+        if extracted_gestor_id:
+            # Si se extrajo gestor_id del mensaje, validar permisos
+            if PermissionManager.validate_access_permission(user_role, extracted_gestor_id, user_gestor_id):
+                enhanced['gestor_id'] = extracted_gestor_id
+                enhanced['access_validated'] = True
+                logger.info(f"🎯 Acceso autorizado a datos del gestor {extracted_gestor_id}")
+            else:
+                # CRÍTICO: Denegar acceso por confidencialidad
+                enhanced['access_denied'] = True
+                enhanced['reason'] = 'confidencialidad'
+                enhanced['requested_gestor'] = extracted_gestor_id
+                enhanced['user_gestor'] = user_gestor_id
+                logger.warning(f"🚨 Acceso denegado: gestor {user_gestor_id} no puede ver datos del gestor {extracted_gestor_id}")
+                return enhanced
+        
+        elif user_gestor_id and any(word in user_message.lower() for word in ['mi', 'me', 'mis']):
+            # Consulta personal del gestor
+            enhanced['gestor_id'] = user_gestor_id
+            enhanced['is_personal_query'] = True
+            enhanced['focus_mode'] = 'individual'
+            logger.info(f"🎯 Consulta personal detectada para gestor {user_gestor_id}")
+
+        # 📅 PERÍODO INTELIGENTE  
         if 'periodo' not in enhanced and context:
-            enhanced['periodo'] = context.get('periodo') or self._extract_period_from_message(user_message)
-        
-        # Gestor ID
-        if 'gestor_id' not in enhanced and context:
-            enhanced['gestor_id'] = context.get('gestor_id')
-        
-        # Umbrales por defecto
-        if 'umbral' not in enhanced and any(word in user_message.lower() for word in ['desviación', 'threshold']):
-            enhanced['umbral'] = 15.0
-        
+            periodo = context.get('periodo') or self._extract_period_from_message(user_message)
+            if periodo:
+                enhanced['periodo'] = periodo
+                logger.info(f"📅 Período aplicado: {periodo}")
+
+        # 🎯 ANÁLISIS SEMÁNTICO DE LA PREGUNTA
+        message_lower = user_message.lower()
+
+        # 🔥 NUEVO: DETECCIÓN INTELIGENTE DE CONSULTAS PERSONALES
+        if any(word in message_lower for word in ['me comparo', 'mi posición', 'cómo estoy', 'mi ranking']):
+            if context and context.get('gestor_id') and 'gestor_id' not in enhanced:
+                enhanced['gestor_id'] = str(context.get('gestor_id'))
+                enhanced['focus_mode'] = 'individual'  # ✅ NUEVO: Modo enfocado
+                enhanced['is_personal_query'] = True   # ✅ NUEVO: Flag para formatter
+                logger.info(f"🎯 Análisis personal detectado para gestor {enhanced['gestor_id']}")
+
+        # Para análisis de desviaciones
+        if any(word in message_lower for word in ['desviación', 'problema', 'alerta']):
+            enhanced['umbral'] = enhanced.get('umbral', 15.0)
+            enhanced['only_critical'] = True  # ✅ NUEVO: Solo críticos
+
+        # Para oportunidades de mejora
+        if any(word in message_lower for word in ['oportunidad', 'mejora', 'optimizar']):
+            enhanced['include_recommendations'] = True  # ✅ NUEVO: Incluir recomendaciones
+            enhanced['analysis_depth'] = 'detailed'
+
+        # 🎯 NUEVO: CONTEXTO ADICIONAL PARA FORMATTER
+        enhanced['user_role'] = user_role.value
+
         # Limpiar parámetros None
-        return {k: v for k, v in enhanced.items() if v is not None}
+        cleaned = {k: v for k, v in enhanced.items() if v is not None}
+
+        logger.info(f"🔧 Parámetros enriquecidos: {cleaned}")
+        return cleaned
+
     
     def _extract_period_from_message(self, user_message: str) -> Optional[str]:
         """Extrae período del mensaje del usuario"""
-        import re
-        
         # Buscar patrones YYYY-MM
         period_pattern = r'20\d{2}-\d{2}'
         match = re.search(period_pattern, user_message)
@@ -564,11 +871,11 @@ class PredefinedQueryExecutor:
         return '2025-10'  # Default actual
 
 # ============================================================================
-# INSPECTOR DINÁMICO DE ESQUEMA DE BASE DE DATOS (HEREDADO DEL V9.0)
+# INSPECTOR DINÁMICO DE ESQUEMA DE BASE DE DATOS (HEREDADO DEL V10.0)
 # ============================================================================
 
 class DatabaseSchemaInspector:
-    """Inspector dinámico de esquema - heredado del v9.0"""
+    """Inspector dinámico de esquema - heredado del v10.0"""
     
     def __init__(self, db_path: str = None):
         self.db_path = db_path or settings.DATABASE_PATH
@@ -695,7 +1002,7 @@ class DatabaseSchemaInspector:
         }
 
 # ============================================================================
-# QUERY BUILDER DINÁMICO (HEREDADO DEL V9.0 CON MEJORAS)
+# QUERY BUILDER DINÁMICO (HEREDADO DEL V10.0 CON MEJORAS)
 # ============================================================================
 
 class EnhancedQueryBuilder:
@@ -714,45 +1021,45 @@ class EnhancedQueryBuilder:
             
             sql_generation_prompt = f"""
             Eres un especialista en Control de Gestión de Banca March. Genera SQL considerando nuestra lógica de negocio:
-            
+
             PREGUNTA: "{user_message}"
-            
+
             {schema_context}
-            
+
             🏦 LÓGICA DE NEGOCIO BANCA MARCH:
-            
+
             📊 CÁLCULO DE GASTOS POR CENTRO:
             - USA PRECIO_POR_PRODUCTO_REAL (ya incluye redistribución automática)
             - Fórmula: GastoRedistribuido = GastoCentral × (Contratos_Centro_i / Total_Contratos_Finalistas)
             - Solo centros finalistas (IND_CENTRO_FINALISTA = 1, centros 1-5)
             - Centros soporte (6-8) se redistribuyen automáticamente
-            
+
             💰 PRECIOS POR PRODUCTO:
             - PRECIO_POR_PRODUCTO_REAL: Costes reales mensuales (recalculados cada mes)
             - PRECIO_POR_PRODUCTO_STD: Estándares presupuestarios (fijos todo el año)
             - Desviación crítica: >15% entre real vs estándar
             - Valores NEGATIVOS = costes para el banco
-            
+
             📈 MÁRGENES Y KPIs:
             - Margen Neto = (Ingresos - Gastos) / Ingresos × 100
             - ROE = Beneficio Neto / Patrimonio × 100
             - Eficiencia = Ingresos / Gastos
-            
+
             🎯 ESTRUCTURA ORGANIZATIVA:
             - 5 centros finalistas (1-5) con contratos directos
             - 3 centros soporte (6-8) sin contratos, gastos se redistribuyen
             - 30 gestores especializados por segmento único
             - 5 segmentos: N10101(Minorista), N10102(Privada), N10103(Empresas), N10104(Personal), N20301(Fondos)
-            
+
             📅 PERÍODOS:
             - Actual: 2025-10-01 (FECHA_CALCULO para precios reales)
             - Formato estándar: YYYY-MM
-            
+
             ⚠️ CONSULTAS TÍPICAS:
             - "Gastos por centro" → Usar PRECIO_POR_PRODUCTO_REAL con JOINs correctos
             - "Centros con problemas" → Analizar DESVIACIONES, no valores absolutos
             - "Ranking gestores" → Incluir cálculo de margen real basado en ingresos-gastos
-            
+
             RESPONDE EN JSON:
             {{
                 "sql": "SELECT...",
@@ -836,7 +1143,6 @@ class EnhancedQueryBuilder:
     def _parse_llm_sql_response(self, llm_response: str) -> Dict[str, Any]:
         """Parsea respuesta del LLM extrayendo SQL válido"""
         try:
-            import re
             json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
@@ -891,54 +1197,83 @@ class EnhancedQueryBuilder:
         }
 
 # ============================================================================
-# FORMATEADOR DE RESPUESTAS NATURALES
+# FORMATEADOR DE RESPUESTAS NATURALES - MEJORADO v11.0
 # ============================================================================
 
 class BankingResponseFormatter:
-    """Formateador especializado en contexto bancario"""
+    """Formateador especializado en contexto bancario CON PERSONALIZACIÓN"""
     
     def __init__(self):
         self.llm_client = iniciar_agente_llm()
     
     async def format_response(self, data: Any, query: str, context: Dict = None) -> str:
-        """Convierte datos en respuesta natural con contexto bancario"""
+        """
+        Convierte datos en respuesta natural CON CONTEXTO PERSONAL Y ROLES
+        """
         try:
             if not data:
-                return "No se encontraron datos para su consulta. ¿Podría proporcionar más detalles específicos sobre el período o gestor de interés?"
-    
+                return "No se encontraron datos para su consulta. ¿Podría proporcionar más detalles específicos?"
+
+            # ✅ NUEVO: Detectar si es análisis personal Y rol del usuario
+            is_personal = context and context.get('is_personal_query', False)
+            gestor_id = context and context.get('gestor_id')
+            focus_mode = context and context.get('focus_mode')
+            user_role = context and context.get('user_role', 'gestor')
+
             # Preparar contexto de forma segura
             safe_data = data if data is not None else []
             safe_query = str(query) if query else "consulta"
-            
+
+            # ✅ PROMPT CONTEXTUAL MEJORADO CON ROLES
             banking_prompt = f"""
-            Genera una respuesta profesional para esta consulta de Control de Gestión:
+            Genera una respuesta profesional PERSONALIZADA para esta consulta de Control de Gestión:
 
             CONSULTA: "{safe_query}"
             DATOS: {safe_data}
 
-            CONTEXTO BANCARIO:
-            - Banca March - Departamento de Control de Gestión
-            - Enfoque en rentabilidad y eficiencia operativa
-            - Audiencia: Directivos y gestores comerciales
-            - Estilo: Profesional, directo, con insights accionables
+            CONTEXTO ESPECÍFICO:
+            - Análisis personal: {is_personal}
+            - Gestor ID: {gestor_id}
+            - Modo de enfoque: {focus_mode}
+            - Rol del usuario: {user_role}
+
+            🎯 INSTRUCCIONES ESPECÍFICAS:
+
+            SI ES ANÁLISIS PERSONAL (is_personal=true):
+            - Usar "Su posición es..." en lugar de "Pablo Moreno García es..."
+            - Enfocar en comparativa personal: "Usted está en posición X de Y gestores"  
+            - Incluir insights específicos para este gestor
+            - Dar recomendaciones personalizadas
+
+            SI ES ANÁLISIS GENERAL (is_personal=false):
+            - Mostrar ranking completo o información general
+            - No personalizar el enfoque
+
+            SI ES ROL CONTROL_GESTION:
+            - Puede ver datos específicos de cualquier gestor
+            - Enfocar en análisis gerencial y comparativas
+
+            SI ES ROL GESTOR:
+            - Solo datos propios + comparativas anónimas
+            - Enfocar en performance individual
 
             FORMATO REQUERIDO:
-            - Respuesta directa al inicio
+            - Respuesta directa al inicio dirigida al usuario correcto
             - Datos estructurados con bullets
-            - Insights o recomendaciones al final
+            - Insights o recomendaciones personalizadas al final
             - Números con formato bancario (€, %, separadores de miles)
-            
-            EJEMPLO:
-            "📊 **Análisis de Gestores - Octubre 2025**
-            
-            Se identificaron 25 gestores activos:
-            • **Banca Privada:** 8 gestores (32%)
-            • **Banca Personal:** 12 gestores (48%)  
-            • **Empresas:** 5 gestores (20%)
-            
-            💡 **Insights:** La concentración en Banca Personal sugiere oportunidades de crecimiento en segmentos premium."
+
+            EJEMPLOS DE RESPUESTAS PERSONALIZADAS:
+            "📊 **Su Posición en el Ranking - Octubre 2025**
+
+            **Su Performance (Gestor {gestor_id}):**
+            - **Posición:** 15 de 30 gestores
+            - **Margen Neto:** 12.5%
+            - **Por encima de:** 50% de sus colegas
+
+            💡 **Oportunidades de Mejora:** Enfoque en productos de alto margen como Fondos de Inversión."
             """
-            
+
             if IMPORTS_SUCCESSFUL:
                 response = self.llm_client.chat.completions.create(
                     model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
@@ -947,15 +1282,23 @@ class BankingResponseFormatter:
                         {"role": "user", "content": banking_prompt}
                     ],
                     temperature=0.3,
-                    max_tokens=800
+                    max_tokens=900  # ✅ Aumentado para respuestas personalizadas
                 )
                 return response.choices[0].message.content.strip()
             else:
-                return self._format_fallback(data, query)
-    
+                return self._format_personal_fallback(data, query, gestor_id, is_personal)
+
         except Exception as e:
-            logger.error(f"Error formateando respuesta: {e}")
-            return f"Se procesaron los datos para '{query}', pero hubo un error en el formateo de la respuesta."
+            logger.error(f"Error formateando respuesta personalizada: {e}")
+            return f"Se procesaron los datos para '{query}', pero hubo un error en el formateo personalizado."
+
+    def _format_personal_fallback(self, data: Any, query: str, gestor_id: str, is_personal: bool) -> str:
+        """Formateo fallback con contexto personal"""
+        if is_personal and gestor_id:
+            return f"📊 **Su Análisis Personal (Gestor {gestor_id})**\n\nHe procesado su consulta '{query}' con enfoque en su performance individual.\n\n**Datos encontrados:** {len(data) if isinstance(data, list) else 'Información disponible'}"
+        else:
+            return f"📊 **Análisis General**\n\nResultados para: {query}\n\n**Registros:** {len(data) if isinstance(data, list) else 'Datos procesados'}"
+
     
     def _format_fallback(self, data: Any, query: str) -> str:
         """Formateo fallback con contexto bancario"""
@@ -1013,31 +1356,38 @@ class ChatSession:
     preferences: Dict[str, Any] = field(default_factory=dict)
 
 # ============================================================================
-# 🚀 AGENTE DE CHAT PRINCIPAL - VERSION 10.0 COMPLETA
+# 🚀 AGENTE DE CHAT PRINCIPAL - VERSION 11.0 COMPLETA CON CONFIDENCIALIDAD
 # ============================================================================
 
-class UniversalChatAgentV10:
+class UniversalChatAgentV11:
     """
-    🚀 Chat Agent Universal v10.0 - VERSIÓN COMPLETA DEFINITIVA
+    🚀 Chat Agent Universal v11.0 - VERSIÓN COMPLETA DEFINITIVA CON CONFIDENCIALIDAD
     
     Flujo perfecto implementado:
-    consulta_usuario → ¿Necesita SQL?
+    consulta_usuario → 🔐 Validar permisos → ¿Necesita SQL?
         ├── SÍ → ¿Existe query predefinida?
         │    ├── SÍ → Usar query predefinida  
         │    └── NO → Generar SQL dinámicamente
         └── NO → Respuesta LLM con contexto bancario
+
+    NUEVO v11.0:
+    - Sistema de roles (CONTROL_GESTION vs GESTOR)
+    - Validación de confidencialidad bancaria
+    - Inyección inteligente de gestor_id desde mensajes
+    - Priorización de catálogos por rol de usuario
     """
     
     def __init__(self, db_path: str = None):
         self.db_path = db_path or settings.DATABASE_PATH
         self.sessions: Dict[str, ChatSession] = {}
         
-        # 🎯 COMPONENTES PRINCIPALES V10.0
+        # 🎯 COMPONENTES PRINCIPALES V11.0
         self.classifier = IntelligentQueryClassifier()
         self.predefined_executor = PredefinedQueryExecutor()
         self.query_builder = EnhancedQueryBuilder(self.db_path)
         self.formatter = BankingResponseFormatter()
         self.llm_client = iniciar_agente_llm()
+        
         # Integraciones externas
         self.cdg_agent = create_cdg_agent() if IMPORTS_SUCCESSFUL else None
         self.chart_generator = None
@@ -1049,13 +1399,15 @@ class UniversalChatAgentV10:
         
         mode = "PRODUCTION" if IMPORTS_SUCCESSFUL else "FALLBACK"
         print(f"\n{'='*60}")
-        print(f"🚀 UNIVERSAL CHAT AGENT v10.0 COMPLETO")
+        print(f"🚀 UNIVERSAL CHAT AGENT v11.0 COMPLETO CON CONFIDENCIALIDAD")
         print(f"   Estado: ✅ LISTO")
         print(f"   Modo: {mode}")
         print(f"   Componentes: {'✅ Todos activos' if IMPORTS_SUCCESSFUL else '⚠️ Modo fallback'}")
         print(f"   CDG Integration: {'✅ Conectado' if self.cdg_agent else '❌ No disponible'}")
+        print(f"   🔐 Sistema confidencialidad: ✅ ACTIVADO")
+        print(f"   🎯 Roles soportados: CONTROL_GESTION + GESTOR")
         print(f"{'='*60}\n")
-        logger.info("🚀 Universal Chat Agent v10.0 COMPLETO inicializado exitosamente")
+        logger.info("🚀 Universal Chat Agent v11.0 CON CONFIDENCIALIDAD inicializado exitosamente")
 
     
     def get_session(self, user_id: str) -> ChatSession:
@@ -1073,10 +1425,16 @@ class UniversalChatAgentV10:
     
     async def process_chat_message(self, message: ChatMessage) -> ChatResponse:
         """
-        🎯 MÉTODO PRINCIPAL: Implementa el flujo perfecto de clasificación y enrutamiento
+        🎯 MÉTODO PRINCIPAL CON VALIDACIÓN DE CONFIDENCIALIDAD
+        Implementa el flujo perfecto de clasificación y enrutamiento con permisos
         """
         start_time = datetime.now()
         session = self.get_session(message.user_id)
+        
+        # ✅ LOGGING DE VERIFICACIÓN
+        logger.info(f"📨 Procesando mensaje de usuario: {message.user_id}")
+        logger.info(f"🎯 Gestor ID en mensaje: {message.gestor_id}")
+        logger.info(f"📋 Contexto completo: {message.context}")
         
         try:
             if not message.message.strip():
@@ -1087,7 +1445,7 @@ class UniversalChatAgentV10:
                     execution_time=0.0
                 )
             
-            # 🎯 PASO 1: CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE
+            # 🎯 PASO 1: CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE CON VALIDACIÓN
             routing_result = await self.classifier.classify_and_route(
                 message.message, 
                 {
@@ -1095,12 +1453,35 @@ class UniversalChatAgentV10:
                     'charts': session.chart_configs,
                     'preferences': session.preferences,
                     'gestor_id': message.gestor_id,
-                    'periodo': message.periodo
+                    'periodo': message.periodo,
+                    'user_id': message.user_id  # 🔐 NUEVO: Para validación de roles
                 }
             )
             
             flow_type = routing_result['flow_type']
             logger.info(f"🎯 Flujo determinado: {flow_type} (confianza: {routing_result['confidence']})")
+            
+            # 🚨 NUEVO: MANEJO DE ACCESO DENEGADO
+            if flow_type == 'ACCESS_DENIED':
+                return ChatResponse(
+                    response=f"""🔐 **Acceso Restringido por Confidencialidad**
+
+Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas. 
+
+**Disponible para usted:**
+• Su análisis personal y performance individual
+• Datos agregados y promedios del sector  
+• Benchmarks anónimos sin identificación personal
+
+¿Le gustaría consultar su propio análisis o información general?""",
+                    response_type="access_denied",
+                    metadata={
+                        'flow_type': 'ACCESS_DENIED',
+                        'access_info': routing_result.get('access_info', {})
+                    },
+                    session_id=message.user_id,
+                    execution_time=(datetime.now() - start_time).total_seconds()
+                )
             
             # 🎯 PASO 2: EJECUTAR FLUJO CORRESPONDIENTE
             if flow_type == 'PREDEFINED_QUERY':
@@ -1139,30 +1520,45 @@ class UniversalChatAgentV10:
             
             predefined_match = routing_result['predefined_match']
             
-            # Ejecutar query predefinida
+            # Ejecutar query predefinida CON CONTEXTO COMPLETO
             execution_result = await self.predefined_executor.execute_predefined_query(
                 predefined_match, 
                 message.message,
                 {
                     'gestor_id': message.gestor_id,
                     'periodo': message.periodo,
-                    'context': message.context
+                    'context': message.context,
+                    'user_id': message.user_id  # 🔐 NUEVO: Para validación
                 }
             )
             
             if not execution_result['success']:
                 logger.warning(f"Query predefinida falló: {execution_result['error']}")
-                # Fallback a SQL dinámico
+                
+                # 🚨 NUEVO: Si falló por permisos, retornar error específico
+                if 'confidencialidad' in execution_result.get('error', ''):
+                    return ChatResponse(
+                        response="🔐 Acceso denegado por confidencialidad. Solo puede consultar sus propios datos.",
+                        response_type="access_denied",
+                        session_id=message.user_id,
+                        execution_time=(datetime.now() - start_time).total_seconds()
+                    )
+                
+                # Fallback a SQL dinámico para otros errores
                 return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
             
-            # Formatear respuesta
+            # 🔥 FORMATEAR CON CONTEXTO PERSONAL MEJORADO
             formatted_response = await self.formatter.format_response(
                 execution_result['data'],
                 message.message,
                 {
                     'predefined_query': True,
                     'metadata': execution_result['metadata'],
-                    'preferences': session.preferences
+                    'preferences': session.preferences,
+                    'is_personal_query': execution_result['metadata'].get('parameters_used', {}).get('is_personal_query', False),
+                    'gestor_id': message.gestor_id,
+                    'focus_mode': execution_result['metadata'].get('parameters_used', {}).get('focus_mode'),
+                    'user_role': execution_result['metadata'].get('parameters_used', {}).get('user_role', 'gestor')
                 }
             )
             
@@ -1198,10 +1594,42 @@ class UniversalChatAgentV10:
     
     async def _execute_dynamic_sql_flow(self, message: ChatMessage, session: ChatSession,
                                       routing_result: Dict, start_time: datetime) -> ChatResponse:
-        """🎯 FLUJO: Generar SQL dinámicamente"""
+        """🎯 FLUJO: Generar SQL dinámicamente CON VALIDACIÓN DE CONFIDENCIALIDAD"""
         try:
             logger.info("🎯 Ejecutando FLUJO SQL DINÁMICO")
-            
+
+            # 🔐 VALIDACIÓN DE CONFIDENCIALIDAD EN SQL DINÁMICO
+            extracted_gestor_id = PermissionManager.extract_gestor_id_from_message(message.message, message.context)
+            user_role = PermissionManager.determine_user_role(message.user_id)
+            user_gestor_id = message.gestor_id
+
+            if extracted_gestor_id is not None:
+                if not PermissionManager.validate_access_permission(user_role, extracted_gestor_id, user_gestor_id):
+                    logger.warning(f"🔐 SQL DINÁMICO BLOQUEADO por confidencialidad - Usuario: {message.user_id}, Gestor solicitado: {extracted_gestor_id}")
+
+                    if extracted_gestor_id == -1:
+                        return ChatResponse(
+                            response="🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a información comparativa o listados completos de otros gestores por motivos de confidencialidad bancaria.\n\n💡 **Alternativas:**\n- Consulte únicamente sus propios datos\n- Solicite promedios agregados sin identificación personal",
+                            response_type="access_denied",
+                            session_id=message.user_id,
+                            execution_time=(datetime.now() - start_time).total_seconds()
+                        )
+                    else:
+                        return ChatResponse(
+                            response=f"🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a datos del Gestor {extracted_gestor_id}. Solo puede consultar sus propios datos por motivos de confidencialidad bancaria.\n\n💡 **Puede consultar:**\n- Sus propias métricas: 'mi incentivo', 'mi performance'\n- Datos agregados: 'promedio de incentivos', 'benchmark del sector'",
+                            response_type="access_denied",
+                            session_id=message.user_id,
+                            execution_time=(datetime.now() - start_time).total_seconds()
+                        )
+
+            # PROBLEMA CRÍTICO: Detectar consultas que devuelven listados de todos los gestores
+            message_lower = message.message.lower()
+            if any(pattern in message_lower for pattern in ['todos los gestores', 'listado', 'incentivos']) and user_role == UserRole.GESTOR:
+                if user_gestor_id:
+                    # Modificar consulta para que solo devuelva datos del gestor actual
+                    message.message = f"incentivo del gestor {user_gestor_id}"
+                    logger.info(f"🔐 Consulta filtrada para gestor {user_gestor_id}: {message.message}")
+
             # Construir SQL dinámicamente
             sql_result = await self.query_builder.build_sql_for_any_query(
                 message.message,
@@ -1212,6 +1640,7 @@ class UniversalChatAgentV10:
                     'context': message.context
                 }
             )
+
             
             if not sql_result['is_safe']:
                 logger.warning(f"❌ SQL bloqueado por seguridad: {sql_result.get('sql', '')}")
@@ -1232,7 +1661,8 @@ class UniversalChatAgentV10:
                 {
                     'sql_explanation': sql_result['explanation'],
                     'tables_used': sql_result['tables_used'],
-                    'preferences': session.preferences
+                    'preferences': session.preferences,
+                    'user_role': PermissionManager.determine_user_role(message.user_id).value
                 }
             )
             
@@ -1302,7 +1732,8 @@ class UniversalChatAgentV10:
                     message.message,
                     {
                         'cdg_analysis': True,
-                        'preferences': session.preferences
+                        'preferences': session.preferences,
+                        'user_role': PermissionManager.determine_user_role(message.user_id).value
                     }
                 )
             else:
@@ -1342,6 +1773,7 @@ class UniversalChatAgentV10:
             schema_info = self.query_builder.schema_inspector.get_database_schema()
             available_tables = list(schema_info['tables'].keys())
             total_records = schema_info['metadata']['total_records']
+            user_role = PermissionManager.determine_user_role(message.user_id)
             
             contextual_prompt = f"""
             Responde esta pregunta sobre Control de Gestión bancario con contexto profesional:
@@ -1353,6 +1785,7 @@ class UniversalChatAgentV10:
             - Base de datos: {len(available_tables)} tablas, {total_records:,} registros
             - Alcance: Análisis de rentabilidad, KPIs, gestores comerciales
             - Productos: Fondos, Banca Privada, Empresas, Seguros
+            - Usuario rol: {user_role.value}
             
             TIPO DE RESPUESTA REQUERIDA:
             - Profesional y clara
@@ -1362,6 +1795,7 @@ class UniversalChatAgentV10:
             
             Si es una pregunta conceptual (qué es X), explica con ejemplos de control de gestión.
             Si es una pregunta general, orienta hacia consultas específicas disponibles.
+            Si es rol gestor, enfocar en análisis personal. Si es control_gestion, enfocar en visión gerencial.
             """
             
             if IMPORTS_SUCCESSFUL:
@@ -1376,10 +1810,10 @@ class UniversalChatAgentV10:
                 )
                 contextual_response = response.choices[0].message.content.strip()
             else:
-                contextual_response = self._generate_contextual_fallback(message.message, schema_info)
+                contextual_response = self._generate_contextual_fallback(message.message, schema_info, user_role)
             
             # Generar sugerencias dinámicas
-            suggestions = self._generate_contextual_suggestions(message.message, schema_info)
+            suggestions = self._generate_contextual_suggestions(message.message, schema_info, user_role)
             
             # Actualizar historial
             session.conversation_history.append({
@@ -1402,6 +1836,7 @@ class UniversalChatAgentV10:
                         'total_records': total_records,
                         'last_updated': schema_info['metadata']['last_updated']
                     },
+                    'user_role': user_role.value,
                     'routing_confidence': routing_result['confidence']
                 },
                 execution_time=execution_time,
@@ -1432,8 +1867,8 @@ class UniversalChatAgentV10:
             logger.error(f"Error ejecutando SQL: {e}")
             return {"error": f"Error en consulta SQL: {str(e)}"}
     
-    def _generate_contextual_fallback(self, user_message: str, schema_info: Dict) -> str:
-        """Genera respuesta contextual fallback"""
+    def _generate_contextual_fallback(self, user_message: str, schema_info: Dict, user_role: UserRole) -> str:
+        """Genera respuesta contextual fallback CON ROLES"""
         message_lower = user_message.lower()
         
         if any(word in message_lower for word in ['qué es', 'define', 'concepto']):
@@ -1448,23 +1883,26 @@ class UniversalChatAgentV10:
             • **Eficiencia Operativa:** Ratio ingresos/gastos
             
             💡 **Consultas específicas que puedo responder:**
-            • "¿Cuál es el margen neto del gestor 15?"
+            {"• '¿Cuál es MI margen neto?'" if user_role == UserRole.GESTOR else "• '¿Cuál es el margen neto del gestor 15?'"}
             • "Muestra la eficiencia operativa por centro"  
             • "Compara ROE entre segmentos"
             """
+        
+        role_focus = "individual" if user_role == UserRole.GESTOR else "gerencial"
         
         return f"""
         👋 **Bienvenido al Sistema de Control de Gestión**
         
         He recibido su consulta: "{user_message}"
         
-        📊 **Sistema disponible:**
+        📊 **Sistema disponible (Rol {user_role.value}):**
         • {schema_info['metadata']['total_tables']} tablas especializadas
         • {schema_info['metadata']['total_records']:,} registros actualizados
         • Cobertura completa de gestores, productos y KPIs
+        • Enfoque {role_focus} según su rol
         
         💡 **Para mejores resultados, puede consultar:**
-        • Performance específico de gestores
+        {"• Su performance específico" if user_role == UserRole.GESTOR else "• Performance específico de gestores"}
         • Análisis comparativos entre períodos  
         • KPIs financieros y operativos
         • Desviaciones de precios y márgenes
@@ -1472,19 +1910,28 @@ class UniversalChatAgentV10:
         ¿En qué aspecto específico le gustaría que le ayude?
         """
     
-    def _generate_contextual_suggestions(self, user_message: str, schema_info: Dict) -> List[str]:
-        """Genera sugerencias contextuales dinámicas"""
-        base_suggestions = [
-            "¿Cuántos gestores tenemos activos?",
-            "Muestra el ranking de gestores por margen neto",
-            "¿Cuál es la distribución de contratos por producto?",
-            "Analiza las desviaciones de precio del último período"
-        ]
+    def _generate_contextual_suggestions(self, user_message: str, schema_info: Dict, user_role: UserRole) -> List[str]:
+        """Genera sugerencias contextuales dinámicas CON ROLES"""
+        if user_role == UserRole.GESTOR:
+            base_suggestions = [
+                "¿Cuál es mi posición en el ranking?",
+                "¿Cómo está mi performance este mes?",
+                "¿Cuáles son mis mejores clientes?",
+                "¿Qué oportunidades de mejora tengo?"
+            ]
+        else:
+            base_suggestions = [
+                "¿Cuántos gestores tenemos activos?",
+                "Muestra el ranking de gestores por margen neto",
+                "¿Cuál es la distribución de contratos por producto?",
+                "Analiza las desviaciones de precio del último período"
+            ]
         
         # Añadir sugerencias específicas según tablas disponibles
         if 'MAESTRO_GESTORES' in schema_info['tables']:
             count = schema_info['tables']['MAESTRO_GESTORES']['record_count']
-            base_suggestions.append(f"Analizar los {count} gestores disponibles")
+            if user_role == UserRole.CONTROL_GESTION:
+                base_suggestions.append(f"Analizar los {count} gestores disponibles")
         
         if 'PRECIO_POR_PRODUCTO_REAL' in schema_info['tables']:
             base_suggestions.append("Detectar desviaciones críticas de precios")
@@ -1492,21 +1939,25 @@ class UniversalChatAgentV10:
         return base_suggestions[:5]  # Limitar a 5 sugerencias
     
     def get_agent_status(self) -> Dict[str, Any]:
-        """Estado completo del agente v10.0"""
+        """Estado completo del agente v11.0"""
         schema_info = self.query_builder.schema_inspector.get_database_schema()
         
         return {
             'status': 'active',
-            'version': '10.0 - Integración Completa con Catálogos',
+            'version': '11.0 - Integración Completa con Sistema de Confidencialidad',
             'capabilities': [
                 'Clasificación inteligente de consultas',
                 'Búsqueda automática en queries predefinidas (6 catálogos)',
                 'Generación SQL dinámica con contexto bancario',
                 'Respuestas contextuales sin SQL',
                 'Integración completa con CDG Agent',
-                'Flujo perfecto de enrutamiento'
+                'Flujo perfecto de enrutamiento',
+                '🔐 NUEVO: Sistema de roles y confidencialidad',
+                '🎯 NUEVO: Inyección inteligente de gestor_id',
+                '🎯 NUEVO: Priorización por rol de usuario'
             ],
             'query_catalogs': list(self.classifier.query_catalogs.keys()),
+            'user_roles': [role.value for role in UserRole],
             'database_info': {
                 'path': self.db_path,
                 'tables_available': len(schema_info['tables']),
@@ -1514,46 +1965,54 @@ class UniversalChatAgentV10:
                 'last_schema_update': schema_info['metadata']['last_updated']
             },
             'sessions_active': len(self.sessions),
-            'imports_successful': IMPORTS_SUCCESSFUL
+            'imports_successful': IMPORTS_SUCCESSFUL,
+            'security_features': [
+                'Validación de permisos por rol',
+                'Confidencialidad de datos personales',
+                'Extracción inteligente de gestor_id',
+                'Bloqueo automático de accesos no autorizados'
+            ]
         }
 
 # ============================================================================
 # FUNCIONES DE CONVENIENCIA Y EXPORTS
 # ============================================================================
 
-def create_universal_chat_agent(db_path: str = None) -> UniversalChatAgentV10:
-    """Factory para crear agente v10.0 completo"""
-    return UniversalChatAgentV10(db_path)
+def create_universal_chat_agent(db_path: str = None) -> UniversalChatAgentV11:
+    """Factory para crear agente v11.0 completo"""
+    return UniversalChatAgentV11(db_path)
 
 # Instancia global
 _universal_agent = None
 
-def get_universal_chat_agent() -> UniversalChatAgentV10:
-    """Obtiene instancia global del agente v10.0"""
+def get_universal_chat_agent() -> UniversalChatAgentV11:
+    """Obtiene instancia global del agente v11.0"""
     global _universal_agent
     if _universal_agent is None:
         _universal_agent = create_universal_chat_agent()
     return _universal_agent
 
 # Para compatibilidad con código existente
-CDGChatAgent = UniversalChatAgentV10
+CDGChatAgent = UniversalChatAgentV11
 
 __all__ = [
-    'UniversalChatAgentV10',
+    'UniversalChatAgentV11',
     'CDGChatAgent', 
     'ChatMessage',
     'ChatResponse',
     'IntelligentQueryClassifier',
     'PredefinedQueryExecutor',
     'BankingResponseFormatter',
+    'PermissionManager',
+    'UserRole',
     'create_universal_chat_agent',
     'get_universal_chat_agent'
 ]
 
 if __name__ == "__main__":
-    # Demo del agente v10.0 completo
+    # Demo del agente v11.0 completo
     async def demo():
-        print("🚀 Iniciando Universal Chat Agent v10.0 - VERSIÓN COMPLETA...")
+        print("🚀 Iniciando Universal Chat Agent v11.0 - VERSIÓN COMPLETA CON CONFIDENCIALIDAD...")
         
         agent = create_universal_chat_agent()
         status = agent.get_agent_status()

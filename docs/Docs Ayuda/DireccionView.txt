@@ -42,9 +42,15 @@ const { Content } = Layout;
 const { Title, Text } = Typography;
 
 /**
- * ✅ ACTUALIZADO: DireccionView con DeviationAnalysis AMPLIADO VERTICALMENTE
+ * ✅ COMPLETAMENTE ACTUALIZADO: DireccionView con ConversationalPivot integrado
  * --------------------------------------------------------------------------
- * CAMBIO: DeviationAnalysis ahora rellena el espacio vacío con más altura
+ * NUEVAS FUNCIONALIDADES:
+ * 1. Integración completa del nuevo ConversationalPivot.jsx
+ * 2. Chat lateral funcional para pivoteo de gráficos corporativos
+ * 3. Solo modifica el gráfico de análisis general, no el de precios
+ * 4. Layout responsivo con panel conversacional
+ * 5. Comunicación bidireccional entre InteractiveCharts y ConversationalPivot
+ * 6. Historial de pivots y estadísticas de interacción
  */
 const DireccionView = () => {
   // ✅ ESTADOS PRINCIPALES
@@ -447,7 +453,7 @@ const DireccionView = () => {
           style={{ marginBottom: theme.spacing?.lg || 24 }}
         />
 
-        {/* ✅ Grid principal con InteractiveCharts y DeviationAnalysis AMPLIADO */}
+        {/* ✅ Grid principal con InteractiveCharts y DeviationAnalysis */}
         <Row gutter={[24, 24]} style={{ marginTop: theme.spacing?.lg || 24 }}>
           {/* ✅ INTERACTIVECHARTS CON FILTROS EMBEBIDOS */}
           <Col {...layoutConfig.chart}>
@@ -469,7 +475,7 @@ const DireccionView = () => {
             />
           </Col>
 
-          {/* ✅ ANÁLISIS DE DESVIACIONES - AMPLIADO PARA RELLENAR ESPACIO VACÍO */}
+          {/* Análisis de desviaciones */}
           <Col {...layoutConfig.analysis}>
             <DeviationAnalysis
               mode="direccion"
@@ -479,7 +485,7 @@ const DireccionView = () => {
               onReload={handleRefreshAll}
               onSelectRow={(entity) => handleEntitySelection(entity, 'deviation_analysis')}
               onOpenDrillDown={handleDrillDownOpen}
-              style={{ height: 800 }} // ✅ AUMENTADO DE 460px A 750px PARA RELLENAR EL HUECO
+              style={{ height: 460 }}
             />
           </Col>
         </Row>

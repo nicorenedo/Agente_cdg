@@ -1899,6 +1899,7 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - get_centros_no_finalistas() - Solo centros de soporte (6-8) redistribuyen gastos
 - count_centros_by_type() - Diccionario: finalistas, no_finalistas, total
 
+
 ## 👨‍💼 CONSULTAS DE GESTORES:
 - get_all_gestores() - Todos los gestores con centro y segmento
 - get_gestores_by_centro(centro_id) - Gestores de un centro específico
@@ -1907,14 +1908,17 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - count_gestores_by_centro() - Lista: centro, descripción, num_gestores
 - count_gestores_by_segmento() - Lista: segmento, descripción, num_gestores
 
+
 ## 🛍️ CONSULTAS DE PRODUCTOS:
 - get_all_productos() - Todos con IND_FABRICA, porcentajes FABRICA/BANCO
 - count_productos() - Número total de productos
 - get_productos_fabrica_vs_banco() - Clasificados por modelo negocio
 
+
 ## 📋 CONSULTAS DE SEGMENTOS:
 - get_all_segmentos() - Todos los segmentos (N10101-Minorista, N10102-Privada, etc.)
 - count_segmentos() - Número total de segmentos
+
 
 ## 👥 CONSULTAS DE CLIENTES:
 - get_all_clientes() - Todos con gestor asignado
@@ -1922,6 +1926,7 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - get_clientes_by_gestor(gestor_id) - Clientes de un gestor específico
 - count_clientes_by_gestor() - Ranking: gestor, num_clientes
 - get_clientes_by_centro(centro_id) - Clientes de un centro (vía gestores)
+
 
 ## 📄 CONSULTAS DE CONTRATOS:
 - get_all_contratos() - Todos con cliente, gestor, producto, centro
@@ -1933,16 +1938,19 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - count_contratos_by_producto() - Ranking: producto, num_contratos
 - count_contratos_by_centro() - Ranking: centro, num_contratos
 
+
 ## 📊 CONSULTAS DE LÍNEAS CDR Y CUENTAS:
 - get_all_lineas_cdr() - Todas las líneas del Cuadro de Resultados
 - count_lineas_cdr() - Total líneas CDR
 - get_all_cuentas() - Todas las cuentas contables con línea CDR
 - get_cuentas_by_linea_cdr(linea_cdr) - Cuentas de una línea CDR específica
 
+
 ## 💰 CONSULTAS DE PRECIOS ESTÁNDAR:
 - get_all_precios_std() - Todos con segmento y producto descripción
 - get_precio_std_by_segmento_producto(segmento_id, producto_id) - Precio específico
 - get_precios_std_by_segmento(segmento_id) - Todos los precios de un segmento
+
 
 ## 💵 CONSULTAS DE PRECIOS REALES:
 - get_all_precios_real() - Todos ordenados por fecha_calculo DESC
@@ -1951,44 +1959,55 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - get_precios_real_by_segmento_periodo(segmento_id, periodo) - Segmento en período YYYY-MM
 - get_precios_real_by_segmento(segmento_id) - Todos los precios (últimos disponibles)
 
+
 ## ⚖️ COMPARATIVAS PRECIOS:
 - compare_precios_std_vs_real(fecha_calculo=None) - Desviaciones precio real vs estándar
+
 
 ## 💸 CONSULTAS DE GASTOS:
 - get_gastos_by_fecha(fecha) - Gastos de una fecha específica con centro
 - get_gastos_by_centro(centro_id) - Histórico gastos de un centro
 - get_gastos_totales_by_fecha(fecha) - Resumen: total, finalistas, centrales
 
+
 ## 💼 CONSULTAS DE MOVIMIENTOS:
 - get_movimientos_by_contrato(contrato_id) - Todos los movimientos de un contrato
 - get_movimientos_by_fecha(fecha) - Todos los movimientos de una fecha
 - get_movimientos_by_gestor(gestor_id, fecha_inicio=None, fecha_fin=None) - Movimientos de un gestor
 
+
 ## 🏦 MÉTRICAS FINANCIERAS POR CENTRO (✨ CRÍTICAS CDG):
 - get_centro_metricas_financieras(centro_id, periodo=None) - ROE, margen, eficiencia completa
 - get_centro_gestores_con_metricas(centro_id, periodo=None) - Gestores con KPIs financieros
 
+
 ## 📈 MÉTRICAS FINANCIERAS POR SEGMENTO (✨ CRÍTICAS CDG):
 - get_segmento_metricas_financieras(segmento_id, periodo=None) - Análisis completo segmento
 
+
 ## 👨‍💼 MÉTRICAS FINANCIERAS POR GESTOR (✨ CRÍTICAS CDG):
 - get_gestor_metricas_completas(gestor_id, periodo=None) - KPIs completos: ingresos, gastos, ROE, margen
-- get_gestor_clientes_con_metricas(gestor_id, periodo=None) - 🔥 CLIENTES CON RENTABILIDAD INDIVIDUAL
+- get_gestor_clientes_con_metricas(gestor_id, periodo=None) - Clientes con rentabilidad individual
+
 
 ## 👤 MÉTRICAS FINANCIERAS POR CLIENTE (✨ CRÍTICAS CDG):
 - get_cliente_metricas(cliente_id, periodo=None) - Rentabilidad completa del cliente
 - get_cliente_contratos_con_metricas(cliente_id, periodo=None) - Contratos con métricas individuales
 
+
 ## 📋 MÉTRICAS FINANCIERAS POR CONTRATO (✨ CRÍTICAS CDG):
 - get_contrato_detalle_completo(contrato_id) - Análisis completo: ingresos, gastos, margen
+
 
 ## 📊 CONSULTAS AGREGADAS Y RANKINGS:
 - get_resumen_general() - Conteos completos: centros, gestores, clientes, contratos, productos, segmentos
 - get_ranking_gestores_por_contratos() - Ranking completo con centro y segmento
 - get_productos_mas_contratados() - Ranking productos con IND_FABRICA
 
+
 ## 🔬 ANÁLISIS AVANZADO CON PANDAS:
 - get_dataframe_movimientos(fecha_inicio=None, fecha_fin=None) - DataFrame completo para análisis
+
 
 ## 🎯 FUNCIONES DE CONVENIENCIA DIRECTAS:
 - get_centro_metricas(centro_id, periodo=None) - Alias directo
@@ -1999,6 +2018,7 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - get_cliente_metricas(cliente_id, periodo=None) - Alias directo
 - get_cliente_contratos_metricas(cliente_id, periodo=None) - Alias directo
 - get_contrato_detalle(contrato_id) - Alias directo
+
 
 ## 🔥 CASOS DE USO CRÍTICOS CDG:
 
@@ -2016,6 +2036,7 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - "Ranking de gestores por contratos" → get_ranking_gestores_por_contratos()
 - "¿Qué productos son más populares?" → get_productos_mas_contratados()
 - "Resumen general del sistema" → get_resumen_general()
+
 
 ## ⚡ REGLAS DE CLASIFICACIÓN INTELIGENTE:
 
@@ -2037,6 +2058,7 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - IDs string: segmento_id ("N10101", "N10102", etc.), producto_id
 - Fechas: formato "YYYY-MM-DD"
 
+
 ## 🎯 MAPEO INTENCIÓN → FUNCIÓN EXACTA:
 
 **BÁSICOS:**
@@ -2056,23 +2078,15 @@ BASIC_QUERIES_CATALOG_PROMPT = """
 - "rentabilidad cliente 25" → get_cliente_metricas(25, "2025-10")
 - "detalle contrato 1005" → get_contrato_detalle_completo(1005)
 
-**🔥 MEJORES CLIENTES (LA FUNCIÓN QUE FALTABA):**
-- "mejores clientes del gestor 18" → get_gestor_clientes_con_metricas(18, "2025-10")
-- "clientes más rentables" → get_gestor_clientes_con_metricas(gestor_id, periodo)
-- "ranking clientes por margen" → get_gestor_clientes_con_metricas(gestor_id, periodo)
-- "mis mejores clientes" → get_gestor_clientes_con_metricas(gestor_id, periodo)
-
 **COMPARATIVAS:**
 - "comparar precios" → compare_precios_std_vs_real("2025-10-01")
 - "ranking gestores" → get_ranking_gestores_por_contratos()
 - "productos más populares" → get_productos_mas_contratados()
 
+
 💡 **NOTA CRÍTICA**: Las funciones de métricas financieras son EL CORAZÓN del sistema CDG. 
 Úsalas SIEMPRE para análisis de rentabilidad, performance y control de gestión.
-
-🚨 **ESPECIAL ATENCIÓN**: get_gestor_clientes_con_metricas() es LA FUNCIÓN CLAVE para "mejores clientes", "clientes más rentables", "ranking clientes por margen". Es crítica para consultas de gestores individuales.
 """
-
 
 COMPARATIVE_QUERIES_CATALOG_PROMPT = """
 🏆 CATÁLOGO INTELIGENTE COMPARATIVE QUERIES - BANCA MARCH CDG

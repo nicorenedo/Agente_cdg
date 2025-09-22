@@ -2,10 +2,12 @@
 /* eslint-disable no-console */
 
 /**
- * ChatService v11.0 — Perfect Integration + Chart Pivoting (Chat Agent v10.0 + CDG Agent v6.0)
+/**
+ * ChatService v12.0 — Perfect Integration + Chart Pivoting + Confidentiality (Chat Agent v11.0 + CDG Agent v6.1)
  * -------------------------------------------------------------------------------------------
- * - Integración completa con Chat Agent v10.0: clasificación inteligente + 6 catálogos
- * - Soporte para CDG Agent v6.0: análisis complejos especializados  
+ * - Integración completa con Chat Agent v11.0: sistema de confidencialidad bancaria
+ * - Soporte para CDG Agent v6.1: análisis especializados con validación de permisos
+ * - 🔐 NUEVO: Sistema de roles y confidencialidad automática
  * - Cliente WebSocket optimizado con heartbeat compatible
  * - Cola de salida inteligente y auto-reconexión exponencial
  * - API de eventos completa: 'open'|'ready'|'message'|'error'|'close'|'reconnect'|'typing'
@@ -243,24 +245,56 @@ const buildChatPayload = ({
   use_basic_queries = true,
   quick_mode = false,
 } = {}) => {
+  // ✅ DEBUG: Ver datos de entrada
+  console.log('🔍 [buildChatPayload] ENTRADA:', {
+    user_id,
+    message,
+    gestor_id,
+    periodo,
+    gestor_id_type: typeof gestor_id,
+    periodo_type: typeof periodo
+  });
+
   if (!user_id) throw new Error("user_id es obligatorio en ChatRequest");
   if (!message || !String(message).trim()) {
     throw new Error("message no puede estar vacío");
   }
-  return {
+  
+  // ✅ FILTRAR CAMPOS UNDEFINED PARA EVITAR ERROR 422
+  const payload = {
     user_id,
     message: String(message).trim(),
-    gestor_id,
-    periodo,
     include_charts,
     include_recommendations,
     context: context || {},
-    current_chart_config,
-    chart_interaction_type,
     use_basic_queries,
     quick_mode,
   };
+  
+  // ✅ SOLO AÑADIR CAMPOS SI NO SON undefined
+  if (gestor_id !== undefined) {
+    payload.gestor_id = gestor_id;
+    console.log('🔍 [buildChatPayload] AÑADIDO gestor_id:', gestor_id, typeof gestor_id);
+  } else {
+    console.log('🔍 [buildChatPayload] OMITIDO gestor_id (undefined)');
+  }
+  
+  if (periodo !== undefined) {
+    payload.periodo = periodo;
+    console.log('🔍 [buildChatPayload] AÑADIDO periodo:', periodo, typeof periodo);
+  } else {
+    console.log('🔍 [buildChatPayload] OMITIDO periodo (undefined)');
+  }
+  
+  if (current_chart_config !== undefined) payload.current_chart_config = current_chart_config;
+  if (chart_interaction_type !== undefined) payload.chart_interaction_type = chart_interaction_type;
+  
+  // ✅ DEBUG: Ver payload final
+  console.log('🔍 [buildChatPayload] PAYLOAD FINAL:', payload);
+  
+  return payload;
 };
+
 
 // ✅ Normalización mejorada para Chat Agent v10.0
 const normalizeChatData = (raw = {}) => {
@@ -302,10 +336,14 @@ const httpChat = {
    * ✅ Envía mensaje al Chat Agent v10.0 con clasificación inteligente
    */
   async sendMessage(req) {
+    console.log('🔍 [sendMessage] REQUEST RECIBIDA:', req);
     const payload = buildChatPayload(req);
+    console.log('🔍 [sendMessage] PAYLOAD CONSTRUIDO:', payload);
+    console.log('🔍 [sendMessage] ENVIANDO A BACKEND...');
     const data = await chatApi.message(payload);
     return normalizeChatData(data);
   },
+
 
   /** ✅ Estado del Chat Agent v10.0 */
   status(cfg) {
@@ -532,16 +570,13 @@ const httpChat = {
  * ✅ Opciones optimizadas para Chat Agent v10.0 + CDG Agent v6.0
  */
 const DEFAULT_WS_OPTS = {
-  // Reconexión optimizada para Perfect Integration
   reconnect: true,
-  maxRetries: 8, // ✅ Más reintentos para análisis largos
-  backoffBaseMs: 800, // ✅ Más conservador
-  heartbeatIntervalMs: 25000, // ✅ Compatible con servidor
-  typingTimeoutMs: 2000, // ✅ Más tiempo para análisis complejos
-  
-  // ✅ NUEVO: Configuración específica para CDG Agent v6.0
-  complexAnalysisTimeout: 45000, // 45s para análisis complejos
-  enableIntegrationFlow: true,    // Habilitar flujo de integración
+  maxRetries: 3,               // ✅ REDUCIDO: 5 (was 8)
+  backoffBaseMs: 2000,         // ✅ AUMENTADO: 1s (was 800ms)
+  heartbeatIntervalMs: 60000,  // ✅ SINCRONIZADO: 18s (was 25s)
+  typingTimeoutMs: 5000,
+  complexAnalysisTimeout: 120000,
+  enableIntegrationFlow: true,
 };
 
 /**
@@ -577,6 +612,9 @@ class ChatSocketClient {
 
     // Cola de mensajes mejorada
     this.outbox = [];
+
+    // 🔐 NUEVO: Propiedades de roles y confidencialidad
+    this.userRole = null;
 
     // Callbacks opcionales
     if (opts.onMessage) this.on("message", opts.onMessage);
@@ -617,6 +655,16 @@ class ChatSocketClient {
     }
   }
 
+  // 🔐 NUEVO: Getter para rol de usuario
+  getUserRole() {
+    return this.userRole || 'gestor'; // Default a gestor
+  }
+
+  // 🔐 NUEVO: Verificar si el usuario es control de gestión
+  isControlGestion() {
+    return this.userRole === 'control_gestion';
+  }
+
   /* ====== Conexión optimizada ====== */
 
   connect() {
@@ -635,18 +683,41 @@ class ChatSocketClient {
       },
       
       onMessage: (msg) => {
-        // ✅ Manejo mejorado para Chat Agent v10.0 + CDG Agent v6.0
+        // ✅ Manejo mejorado para Chat Agent v11.0 + CDG Agent v6.1 CON CONFIDENCIALIDAD
         if (msg?.type === "ready") {
           console.log(`[ChatService] 🎯 Perfect Integration: ${msg.chat_agent} + ${msg.cdg_agent}`);
+          console.log(`[ChatService] 🔐 Usuario rol: ${msg.user_role} con funcionalidades: ${msg.security_features?.join(', ')}`);
           this.integrationReady = true;
+          this.userRole = msg.user_role; // 🔐 NUEVO: Guardar rol
           this.emit("ready", { 
             userId: this.userId, 
             chatAgent: msg.chat_agent,
             cdgAgent: msg.cdg_agent,
             integration: msg.integration,
+            userRole: msg.user_role, // 🔐 NUEVO
+            securityFeatures: msg.security_features, // 🔐 NUEVO
             ts: msg.ts 
           });
-          this.emit("integration-ready", { integration: msg.integration });
+          this.emit("integration-ready", { integration: msg.integration, userRole: msg.user_role });
+          return;
+        }
+
+        // 🚨 NUEVO: Manejo de acceso denegado
+        if (msg?.type === "access_denied") {
+          console.warn(`[ChatService] 🔐 Acceso denegado: ${msg.message}`);
+          this.emit("error", { 
+            type: 'access_denied', 
+            message: msg.message,
+            accessInfo: msg.access_info,
+            suggestions: msg.suggestions
+          });
+          // También emitir como mensaje normal para que la UI lo maneje
+          this.emit("message", { 
+            type: 'access_denied',
+            text: msg.message,
+            accessInfo: msg.access_info,
+            suggestions: msg.suggestions
+          });
           return;
         }
 
@@ -905,10 +976,37 @@ class ChatSocketClient {
 /**
  * ✅ Crea sesión de chat con Perfect Integration + Pivoteo
  */
+/**
+ * ✅ Crea sesión de chat con Perfect Integration + Pivoteo
+ * NUEVO: Gestión de conexiones únicas para evitar conflictos
+ */
+
+// ✅ NUEVO: Map para gestionar sesiones activas
+const activeSessions = new Map();
+
 function createChatSession(userId = uid(), options = {}) {
+  if (!userId) {
+    throw new Error('userId es requerido para crear sesión de chat');
+  }
+
+  // ✅ NUEVA: Cerrar sesión existente para evitar conflictos
+  if (activeSessions.has(userId)) {
+    console.log(`[ChatService] 🔄 Cerrando sesión existente para: ${userId}`);
+    const existingSession = activeSessions.get(userId);
+    try {
+      if (existingSession.close) {
+        existingSession.close();
+      }
+    } catch (e) {
+      console.warn('[ChatService] Error cerrando sesión existente:', e);
+    }
+    activeSessions.delete(userId);
+  }
+
+  console.log(`[ChatService] 🚀 Creando nueva sesión para: ${userId}`);
   const wsClient = new ChatSocketClient(userId, options);
 
-  return {
+  const session = {
     userId,
 
     // ✅ HTTP Chat Agent v10.0
@@ -949,7 +1047,10 @@ function createChatSession(userId = uid(), options = {}) {
     send: (messageOrObj) => wsClient.send(messageOrObj),
     sendComplexAnalysis: (type, params) => wsClient.sendComplexAnalysis(type, params), // ✅ NUEVO
     sendChartPivot: (message, config) => wsClient.sendChartPivot(message, config), // ✅ NUEVO
-    close: () => wsClient.close(),
+    close: () => {
+      wsClient.close();
+      activeSessions.delete(userId); // ✅ NUEVA: Limpiar del map
+    },
 
     // Pub/Sub extendido
     on: (event, fn) => wsClient.on(event, fn),
@@ -959,7 +1060,23 @@ function createChatSession(userId = uid(), options = {}) {
     get connected() { return wsClient.connected; },
     get integrationReady() { return wsClient.integrationReady; }, // ✅ NUEVO
   };
+
+  // ✅ NUEVO: Registrar sesión en el map
+  activeSessions.set(userId, session);
+  return session;
 }
+
+/**
+ * ✅ NUEVA: Función para obtener conexiones activas
+ */
+function getActiveConnections() {
+  return Array.from(activeSessions.entries()).map(([userId, session]) => ({
+    userId,
+    connected: session.connected,
+    integrationReady: session.integrationReady
+  }));
+}
+
 
 /* =========================================
  * Exports actualizados con PIVOTEO
@@ -998,4 +1115,7 @@ export {
   PIVOT_CONFIG,
   parsePivotIntent,
   validatePivotCombination,
+
+ // ✅ NUEVA exportación para gestión de conexiones
+  getActiveConnections,
 };

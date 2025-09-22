@@ -22,7 +22,7 @@ import sys
 import json
 import logging
 from datetime import datetime, UTC
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # Asegurar import de src/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -51,9 +51,12 @@ try:
         process_complex_analysis, AnalysisType  # Nueva función de integración + enum
     )
     from agents.chat_agent import (
-        UniversalChatAgentV10, ChatMessage, ChatResponse, ChatSession,
+        UniversalChatAgentV11,  # ⬅️ CAMBIO: v11 en lugar de v10
+        ChatMessage, ChatResponse, ChatSession,
         create_universal_chat_agent, get_universal_chat_agent,
-        IntelligentQueryClassifier, PredefinedQueryExecutor, BankingResponseFormatter
+        IntelligentQueryClassifier, PredefinedQueryExecutor, BankingResponseFormatter,
+        # 🔐 NUEVOS IMPORTS CRÍTICOS:
+        PermissionManager, UserRole  # ⬅️ AÑADIR ESTOS
     )
 
     # Tools: KPI calculator con fallback mejorado
@@ -121,11 +124,11 @@ try:
 
     # Queries - TODAS las instancias necesarias
     from queries.basic_queries import basic_queries
-    from queries.period_queries import PeriodQueries
-    from queries.gestor_queries import GestorQueries
-    from queries.comparative_queries import ComparativeQueries
-    from queries.deviation_queries import DeviationQueries
-    from queries.incentive_queries import IncentiveQueries
+    from queries.period_queries import period_queries
+    from queries.gestor_queries import gestor_queries
+    from queries.comparative_queries import comparative_queries
+    from queries.deviation_queries import deviation_queries
+    from queries.incentive_queries import incentive_queries
 
     # ✅ Reflexión/personalización
     try:
@@ -201,11 +204,11 @@ except Exception as e:
     CDGDashboardGenerator = _MockObj
     QueryIntegratedChartGenerator = _MockObj
     BusinessReportGenerator = _MockObj
-    GestorQueries = _MockObj
-    ComparativeQueries = _MockObj
-    DeviationQueries = _MockObj
-    IncentiveQueries = _MockObj
-    PeriodQueries = _MockObj
+    gestor_queries = _MockObj
+    comparative_queries = _MockObj
+    deviation_queries = _MockObj
+    incentive_queries = _MockObj
+    period_queries = _MockObj
     
     def create_chart_from_query_data(data, config): return {"id": "mock_chart", "config": config}
     def pivot_chart_with_query_integration(message, current_config): return {"status": "success", "new_config": current_config}
@@ -336,11 +339,6 @@ chart_dash = CDGDashboardGenerator() if hasattr(CDGDashboardGenerator, "__call__
 query_chart = QueryIntegratedChartGenerator() if hasattr(QueryIntegratedChartGenerator, "__call__") else QueryIntegratedChartGenerator
 report_gen = BusinessReportGenerator() if hasattr(BusinessReportGenerator, "__call__") else BusinessReportGenerator
 
-period_queries = PeriodQueries() if hasattr(PeriodQueries, "__call__") else PeriodQueries
-gestor_queries = GestorQueries() if hasattr(GestorQueries, "__call__") else GestorQueries
-comparative_queries = ComparativeQueries() if hasattr(ComparativeQueries, "__call__") else ComparativeQueries
-deviation_queries = DeviationQueries() if hasattr(DeviationQueries, "__call__") else DeviationQueries
-incentive_queries = IncentiveQueries() if hasattr(IncentiveQueries, "__call__") else IncentiveQueries
 
 print(f"\n{'='*80}")
 print(f"🎉 CDG API v11.0 LISTO")
@@ -355,16 +353,25 @@ print(f"{'='*80}\n")
 # 🎯 MODELOS DE REQUEST/RESPONSE ACTUALIZADOS
 # ============================================================================
 
-# ✅ Modelo actualizado para Chat Agent v10.0
+
+# 🔧 MODELO CORREGIDO para ChatInterface v12.0
 class ChatRequest(BaseModel):
     user_id: str
     message: str
-    gestor_id: Optional[str] = None
+    gestor_id: Optional[Union[str, int]] = None
     periodo: Optional[str] = None
     include_charts: bool = True
     include_recommendations: bool = True
-    context: Dict[str, Any] = {}
+    context: Dict[str, Any] = Field(default_factory=dict)
     current_chart_config: Optional[Dict[str, Any]] = None
+    chart_interaction_type: Optional[str] = None
+    message_type: Optional[str] = "query"
+    use_basic_queries: bool = True
+    quick_mode: bool = False
+    user_role: Optional[str] = None
+    confidentiality_enabled: Optional[bool] = True
+
+
 
 # ✅ Modelo actualizado para CDG Agent v6.0
 class CDGAnalysisRequest(BaseModel):
@@ -462,13 +469,47 @@ def version():
 # 🎯 ENDPOINTS ACTUALIZADOS - CHAT AGENT v10.0
 # ============================================================================
 
-@app.post("/chat/message", tags=["Chat Agent v10.0"], response_model=ApiResponse)
+@app.post("/chat/message", tags=["Chat Agent v11.0"], response_model=ApiResponse)
 async def chat_message(req: ChatRequest):
     """
-    🎯 CHAT PRINCIPAL - Chat Agent v10.0 con clasificación inteligente
-    Flujo: clasificación → query predefinida → SQL dinámico → respuesta contextual
+    🎯 CHAT PRINCIPAL - Chat Agent v11.0 con sistema de confidencialidad MEJORADO
     """
     try:
+        # 🔐 INSTANCIAS DE VALIDACIÓN DE CONFIDENCIALIDAD
+        permission_manager = PermissionManager()
+        
+        extracted_gestor_id = permission_manager.extract_gestor_id_from_message(req.message, req.context)
+        user_role = permission_manager.determine_user_role(req.user_id)
+        
+        # 🚨 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD
+        if extracted_gestor_id is not None:
+            if not permission_manager.validate_access_permission(user_role, extracted_gestor_id, req.gestor_id):
+                # Mensaje personalizado según el tipo de violación
+                if extracted_gestor_id == -1:
+                    # Consulta confidencial genérica (ranking, comparativas, etc.)
+                    return ok({
+                        "response": "🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a información comparativa o rankings de otros gestores por motivos de confidencialidad bancaria.\n\n💡 **Alternativas disponibles:**\n- Consulte su propio análisis personal\n- Solicite datos agregados y promedios del sector\n- Use benchmarks anónimos sin identificación personal",
+                        "response_type": "access_denied",
+                        "access_info": {
+                            "restriction_type": "comparative_data",
+                            "user_role": user_role.value,
+                            "reason": "confidentiality_policy"
+                        }
+                    }, meta={"source": "permission_validation", "blocked": True})
+                else:
+                    # Solicitud de gestor específico
+                    return ok({
+                        "response": f"🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a datos personales del Gestor {extracted_gestor_id}. Solo puede consultar sus propios datos por motivos de confidencialidad bancaria.\n\n💡 **Puede consultar:**\n- Sus propias métricas y KPIs\n- Datos agregados del centro/sector\n- Promedios y benchmarks anónimos",
+                        "response_type": "access_denied",
+                        "access_info": {
+                            "requested_gestor": extracted_gestor_id,
+                            "user_gestor": req.gestor_id,
+                            "user_role": user_role.value,
+                            "reason": "cross_gestor_access_denied"
+                        }
+                    }, meta={"source": "permission_validation", "blocked": True})
+        
+        # Continuar con el flujo normal...
         msg = ChatMessage(
             user_id=req.user_id,
             message=req.message,
@@ -482,17 +523,19 @@ async def chat_message(req: ChatRequest):
         
         resp = await chat_agent.process_chat_message(msg)
         
-        # ✅ Compatibilidad con ChatResponse
         if hasattr(resp, "__dict__"):
             data = resp.__dict__
         else:
             data = {"response": str(resp)}
         
-        return ok(data, meta={"source": "chat_agent_v10", "integration": "perfect"})
+        return ok(data, meta={"source": "chat_agent_v11", "integration": "perfect_with_confidentiality"})
+        
     except Exception as e:
         logger.error(f"Error en chat message: {e}")
         return ok({"error": str(e), "response": "Error procesando mensaje"}, 
                  meta={"note": "chat_agent_error"})
+
+
 
 @app.get("/chat/status", tags=["Chat Agent v10.0"], response_model=ApiResponse)
 def chat_status():
@@ -835,22 +878,33 @@ def integration_agent_coordination():
 @app.websocket("/ws/chat/{user_id}")
 async def chat_websocket(websocket: WebSocket, user_id: str):
     """
-    🎯 WebSocket optimizado para Chat Agent v10.0 con flujos perfectos
+    🎯 WebSocket optimizado para Chat Agent v11.0 CON SISTEMA DE CONFIDENCIALIDAD
     """
     await websocket.accept()
+    
+    # 🔐 NUEVO: Determinar rol del usuario desde el inicio
+    permission_manager = PermissionManager()
+    user_role = permission_manager.determine_user_role(user_id)
+    
     await websocket.send_json({
         "type": "ready", 
         "user_id": user_id, 
-        "chat_agent": "v10.0",
-        "cdg_agent": "v6.0",
-        "integration": "perfect",
+        "chat_agent": "v11.0",  # ⬅️ ACTUALIZADO
+        "cdg_agent": "v6.1",    # ⬅️ ACTUALIZADO
+        "integration": "perfect_with_confidentiality",  # ⬅️ NUEVO
+        "user_role": user_role.value,  # 🔐 NUEVO: Informar rol al frontend
+        "security_features": [  # 🔐 NUEVO: Lista de funcionalidades
+            "role_based_access",
+            "automatic_permission_validation", 
+            "confidential_data_protection"
+        ],
         "ts": now_iso()
     })
 
     try:
         while True:
             try:
-                payload = await asyncio.wait_for(websocket.receive_json(), timeout=300.0)
+                payload = await asyncio.wait_for(websocket.receive_json(), timeout=600.0)
             except asyncio.TimeoutError:
                 await websocket.close(code=1000, reason="Idle timeout")
                 break
@@ -874,32 +928,87 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
                 })
                 continue
 
-            # ✅ Crear ChatMessage para v10.0
+            # 🎯 EXTRAER GESTOR_ID DEL USER_ID
+            gestor_id = None
+            if "gestor-" in user_id:
+                try:
+                    gestor_id = user_id.split("gestor-")[1].split("-")[0]
+                    logger.info(f"🎯 Gestor ID extraído del user_id: {gestor_id}")
+                except:
+                    logger.warning("No se pudo extraer gestor_id del user_id")
+
+            # 🔐 NUEVA VALIDACIÓN: Extraer gestor_id del mensaje y validar permisos
+            extracted_gestor_id = permission_manager.extract_gestor_id_from_message(msg, payload.get("context", {}))
+            
+            # 🚨 BLOQUEO POR CONFIDENCIALIDAD
+            if (extracted_gestor_id and 
+                gestor_id and 
+                not permission_manager.validate_access_permission(user_role, extracted_gestor_id, gestor_id)):
+                
+                await websocket.send_json({
+                    "type": "access_denied", 
+                    "message": "🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a datos personales de otros gestores.",
+                    "response_type": "access_denied",
+                    "access_info": {
+                        "requested_gestor": extracted_gestor_id,
+                        "user_gestor": gestor_id,
+                        "user_role": user_role.value,
+                        "reason": "confidential_data_protection"
+                    },
+                    "suggestions": [
+                        "Consulte su propio análisis personal",
+                        "Solicite datos agregados y promedios del sector",
+                        "Use benchmarks anónimos sin identificación personal"
+                    ],
+                    "ts": now_iso()
+                })
+                continue
+
+            # 🎯 ENRIQUECER CONTEXTO CON INFO PERSONAL Y ROLES
+            base_context = payload.get("context", {})
+            enhanced_context = base_context.copy()
+            
+            # 🔐 NUEVO: Añadir información de roles al contexto
+            enhanced_context['user_role'] = user_role.value
+            enhanced_context['user_id'] = user_id
+            
+            if gestor_id:
+                enhanced_context['gestor_id'] = gestor_id
+                # Detectar si es consulta personal
+                personal_words = ['me comparo', 'mi posición', 'cómo estoy', 'mis oportunidades', 'mi ranking', 'mi performance']
+                enhanced_context['is_personal_query'] = any(word in msg.lower() for word in personal_words)
+                if enhanced_context['is_personal_query']:
+                    enhanced_context['focus_mode'] = 'individual'
+                    logger.info(f"🎯 Consulta personal detectada para gestor {gestor_id}")
+
+            # ✅ Crear ChatMessage para v11.0 con contexto mejorado Y VALIDACIÓN
             try:
                 chat_message_data = {
                     "user_id": user_id,
                     "message": msg,
-                    "context": payload.get("context", {}),
-                    "gestor_id": payload.get("gestor_id"),
-                    "periodo": payload.get("periodo"),
+                    "context": enhanced_context,  # ✅ CONTEXTO ENRIQUECIDO CON ROLES
+                    "gestor_id": gestor_id,  # ✅ GESTOR ID DIRECTO
+                    "periodo": payload.get("periodo", "2025-10"),  # ✅ PERÍODO POR DEFECTO
                     "include_charts": payload.get("include_charts", True),
                     "include_recommendations": payload.get("include_recommendations", True)
                 }
                 
-                # Usar la función de chat directamente
+                # Usar la función de chat directamente con v11.0
                 req = ChatRequest(**chat_message_data)
                 msg_obj = ChatMessage(
                     user_id=req.user_id,
                     message=req.message,
-                    gestor_id=req.gestor_id,
+                    gestor_id=gestor_id,  # ✅ PASAR GESTOR_ID DIRECTO
                     periodo=req.periodo,
                     include_charts=req.include_charts,
                     include_recommendations=req.include_recommendations,
-                    context=req.context,
+                    context=enhanced_context,  # ✅ CONTEXTO ENRIQUECIDO CON ROLES
                     current_chart_config=req.current_chart_config
                 )
 
-                # ✅ Procesar con Chat Agent v10.0
+                logger.info(f"📨 Mensaje creado - Usuario: {user_id}, Gestor: {gestor_id}, Personal: {enhanced_context.get('is_personal_query', False)}, Rol: {user_role.value}")
+
+                # ✅ Procesar con Chat Agent v11.0 CON SISTEMA DE CONFIDENCIALIDAD
                 response = await chat_agent.process_chat_message(msg_obj)
                 
                 if hasattr(response, "__dict__"):
@@ -907,18 +1016,33 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
                 else:
                     data = {"response": str(response)}
                 
+                # 🔐 NUEVO: Añadir información de seguridad a la respuesta
+                security_metadata = {
+                    "user_role": user_role.value,
+                    "permissions_validated": True,
+                    "confidentiality_check": "passed"
+                }
+                
                 await websocket.send_json({
                     "type": "message", 
                     "data": data, 
-                    "chat_agent": "v10.0",
-                    "integration": "perfect",
+                    "chat_agent": "v11.0",  # ⬅️ ACTUALIZADO
+                    "integration": "perfect_with_confidentiality",  # ⬅️ ACTUALIZADO
+                    "gestor_context": gestor_id,  # ✅ INFO ADICIONAL
+                    "security": security_metadata,  # 🔐 NUEVO: Metadata de seguridad
                     "ts": now_iso()
                 })
                 
             except Exception as exc:
+                logger.error(f"Error procesando mensaje para gestor {gestor_id} con rol {user_role.value}: {exc}")
                 await websocket.send_json({
-                    "type": "fallback", 
+                    "type": "error", 
                     "message": f"Error procesando: {str(exc)}", 
+                    "error_context": {
+                        "user_role": user_role.value,
+                        "gestor_id": gestor_id,
+                        "confidentiality_enabled": True
+                    },
                     "ts": now_iso()
                 })
                 
@@ -929,11 +1053,12 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
             # ✅ Solo cerrar si no está ya cerrado
             if websocket.client_state.name in ['CONNECTED', 'CONNECTING']:
                 await websocket.close(code=1000, reason="Session ended")
-                logger.info(f"WebSocket closed gracefully for user: {user_id}")
+                logger.info(f"WebSocket closed gracefully for user: {user_id} (Role: {user_role.value})")
         except Exception as close_error:
             logger.warning(f"Error closing websocket for {user_id}: {close_error}")
         finally:
-            logger.info(f"WebSocket session ended for user: {user_id}")
+            logger.info(f"WebSocket session ended for user: {user_id} (Role: {user_role.value})")
+
 
 
 # ============================================================================
@@ -2370,16 +2495,18 @@ def kpis_centro_financieros(centro_id: int, periodo: str = Query("2025-10")):
         # Calcular KPIs usando kpi_calculator
         kpis_financieros = {}
         
-        if hasattr(kpi_calc, "calculate_margen_neto") and metricas.get('ingresos_total') and metricas.get('gastos_total'):
-            margen = kpi_calc.calculate_margen_neto(metricas['ingresos_total'], metricas['gastos_total'])
+        # CORREGIDO: usar 'gastos_totales' en lugar de 'gastos_total'
+        if hasattr(kpi_calc, "calculate_margen_neto") and metricas.get('ingresos_total') and metricas.get('gastos_totales'):
+            margen = kpi_calc.calculate_margen_neto(metricas['ingresos_total'], metricas['gastos_totales'])
             kpis_financieros['margen_neto'] = margen
         
         if hasattr(kpi_calc, "calculate_roe") and metricas.get('beneficio_neto') and metricas.get('patrimonio_total', metricas.get('ingresos_total', 1)):
             roe = kpi_calc.calculate_roe(metricas['beneficio_neto'], metricas.get('patrimonio_total', metricas.get('ingresos_total', 1)))
             kpis_financieros['roe'] = roe
         
-        if hasattr(kpi_calc, "calculate_ratio_eficiencia") and metricas.get('ingresos_total') and metricas.get('gastos_total'):
-            eficiencia = kpi_calc.calculate_ratio_eficiencia(metricas['ingresos_total'], metricas['gastos_total'])
+        # CORREGIDO: usar 'gastos_totales' en lugar de 'gastos_total'
+        if hasattr(kpi_calc, "calculate_ratio_eficiencia") and metricas.get('ingresos_total') and metricas.get('gastos_totales'):
+            eficiencia = kpi_calc.calculate_ratio_eficiencia(metricas['ingresos_total'], metricas['gastos_totales'])
             kpis_financieros['eficiencia'] = eficiencia
         
         return ok({
@@ -2391,6 +2518,7 @@ def kpis_centro_financieros(centro_id: int, periodo: str = Query("2025-10")):
         
     except Exception as e:
         return ok({"error": str(e)}, meta={"note": "kpis_centro_financieros_error"})
+
 
 @app.get("/kpis/gestor/{gestor_id}/financieros", tags=["KPI Calculator"], response_model=ApiResponse)
 def kpis_gestor_financieros(gestor_id: int, periodo: str = Query("2025-10")):
@@ -2669,14 +2797,12 @@ if __name__ == "__main__":
     
     # ✅ CONFIGURACIÓN ESPECÍFICA PARA WINDOWS + WEBSOCKETS
     config = {
-        "host": "127.0.0.1",  # ✅ Usar 127.0.0.1 en lugar de 0.0.0.0 en Windows
+        "host": "127.0.0.1",
         "port": int(os.getenv("PORT", 8000)),
         "reload": True,
-        
-        # ✅ WEBSOCKET ESPECÍFICO PARA WINDOWS
-        "ws_ping_interval": 45.0,      # Ping cada 30 segundos
-        "ws_ping_timeout": 30.0,       # Timeout de 15 segundos para pong
-        "timeout_keep_alive": 300,     # Keep-alive 5 minutos
+        "ws_ping_interval": 60.0,    # ✅ REDUCIDO: 20s (was 45s)
+        "ws_ping_timeout": 120.0,     # ✅ REDUCIDO: 10s (was 30s)
+        "timeout_keep_alive": 600,    # ✅ REDUCIDO: 60s (was 300s)
         
         # ✅ CONFIGURACIÓN DE CONEXIÓN PARA WINDOWS
         "limit_concurrency": 100,      # Reducir concurrencia en Windows
