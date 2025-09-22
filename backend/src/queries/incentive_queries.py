@@ -61,14 +61,13 @@ class IncentiveQueries:
         self.kpi_calc = kpi_calculator     # ✅ INSTANCIA KPI_CALCULATOR
 
     # =================================================================
-    # 1. DETECCIÓN DE HIGH PERFORMERS (MEJORADAS CON KPI)
+    # 1. DETECCIÓN DE HIGH PERFORMERS (MEJORADAS CON KPI) - ✅ CORREGIDAS
     # =================================================================
 
     def calculate_incentivo_cumplimiento_objetivos_enhanced(self, periodo: str = "2025-10", umbral_cumplimiento: float = 100.0) -> QueryResult:
         """
         ✅ CORREGIDO - Calcula incentivos basados en cumplimiento de objetivos con análisis KPI mejorado.
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Una sola conexión a contratos para evitar duplicaciones
         """
         try:
             periodo_str = str(periodo)
@@ -198,9 +197,7 @@ class IncentiveQueries:
 
     def calculate_incentivo_cumplimiento_objetivos(self, periodo: str = "2025-10", umbral_cumplimiento: float = 100.0) -> QueryResult:
         """
-        ✅ CORREGIDO - FUNCIÓN ORIGINAL CORREGIDA
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO - FUNCIÓN ORIGINAL CORREGIDA - Una sola conexión a contratos
         """
         try:
             periodo_str = str(periodo)
@@ -315,9 +312,7 @@ class IncentiveQueries:
 
     def analyze_bonus_margen_neto_enhanced(self, periodo: str = "2025-10", umbral_margen: float = 15.0) -> QueryResult:
         """
-        ✅ CORREGIDO - Analiza gestores elegibles para bonus por margen neto con análisis KPI mejorado.
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO - Una sola conexión a contratos para evitar duplicaciones
         """
         try:
             periodo_str = str(periodo)
@@ -407,9 +402,7 @@ class IncentiveQueries:
 
     def analyze_bonus_margen_neto(self, periodo: str = "2025-10", umbral_margen: float = 15.0) -> QueryResult:
         """
-        ✅ CORREGIDO - FUNCIÓN ORIGINAL CORREGIDA
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO - FUNCIÓN ORIGINAL CORREGIDA - Una sola conexión a contratos
         """
         try:
             periodo_str = str(periodo)
@@ -509,9 +502,7 @@ class IncentiveQueries:
 
     def calculate_ranking_bonus_pool_enhanced(self, periodo: str = "2025-10", pool_total: float = 50000.0) -> QueryResult:
         """
-        ✅ CORREGIDO - Calcula distribución del pool de incentivos entre top performers con análisis KPI mejorado.
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO - Una sola conexión a contratos para evitar duplicaciones
         """
         try:
             periodo_str = str(periodo)
@@ -539,7 +530,7 @@ class IncentiveQueries:
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
                                                       AND mc.PRODUCTO_ID = p.PRODUCTO_ID
                                                       AND p.FECHA_CALCULO = ?
@@ -623,9 +614,7 @@ class IncentiveQueries:
 
     def calculate_ranking_bonus_pool(self, periodo: str = "2025-10", pool_total: float = 50000.0) -> QueryResult:
         """
-        ✅ CORREGIDO - FUNCIÓN ORIGINAL CORREGIDA
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO - FUNCIÓN ORIGINAL CORREGIDA - Una sola conexión a contratos
         """
         try:
             periodo_str = str(periodo)
@@ -658,7 +647,7 @@ class IncentiveQueries:
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
                                                       AND mc.PRODUCTO_ID = p.PRODUCTO_ID
                                                       AND p.FECHA_CALCULO = ?
@@ -991,8 +980,7 @@ class IncentiveQueries:
     def get_incentivos_por_centro(self, periodo: str = "2025-10") -> QueryResult:
         """
         ✅ CORREGIDO - Análisis de incentivos agregado por centro
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Una sola conexión a contratos
         """
         # Convertir periodo a formato FECHA_CALCULO
         fecha_calculo = f"{periodo}-01"
@@ -1004,28 +992,18 @@ class IncentiveQueries:
                 c.DESC_CENTRO,
                 COUNT(DISTINCT g.GESTOR_ID) as total_gestores,
                 COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
-                AVG(CASE WHEN ingresos > 0 THEN (ingresos - gastos) / ingresos * 100 ELSE 0 END) as margen_promedio_centro,
-                SUM(ingresos) as ingresos_centro,
-                SUM(gastos) as gastos_centro
+                -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_centro,
+                -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
+                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_centro
             FROM MAESTRO_CENTROS c
             JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
-            LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-            LEFT JOIN (
-                SELECT
-                    cont.GESTOR_ID,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
-                FROM MAESTRO_CONTRATOS cont
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON cont.PRODUCTO_ID = p.PRODUCTO_ID 
-                                                      AND p.FECHA_CALCULO = ?
-                LEFT JOIN MAESTRO_GESTORES gest ON cont.GESTOR_ID = gest.GESTOR_ID
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON cont.CONTRATO_ID = mov.CONTRATO_ID
-                     AND strftime('%Y-%m', mov.FECHA) = ?
-                WHERE p.SEGMENTO_ID = gest.SEGMENTO_ID
-                GROUP BY cont.GESTOR_ID
-            ) fin ON g.GESTOR_ID = fin.GESTOR_ID
+            JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                  AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                  AND p.FECHA_CALCULO = ?
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                 AND strftime('%Y-%m', mov.FECHA) = ?
             WHERE c.IND_CENTRO_FINALISTA = 1
             GROUP BY c.CENTRO_ID, c.DESC_CENTRO
         )
@@ -1034,21 +1012,25 @@ class IncentiveQueries:
             DESC_CENTRO,
             total_gestores,
             total_contratos,
-            ROUND(margen_promedio_centro, 2) as margen_promedio_centro,
             ROUND(ingresos_centro, 2) as ingresos_centro,
             ROUND(gastos_centro, 2) as gastos_centro,
             ROUND(ingresos_centro - gastos_centro, 2) as beneficio_centro,
+            ROUND(
+                CASE WHEN ingresos_centro > 0 
+                     THEN ((ingresos_centro - gastos_centro) / ingresos_centro) * 100
+                     ELSE 0 END, 2
+            ) as margen_promedio_centro,
             CASE 
-                WHEN margen_promedio_centro >= 20.0 THEN 'EXCELENTE'
-                WHEN margen_promedio_centro >= 15.0 THEN 'BUENO'
-                WHEN margen_promedio_centro >= 10.0 THEN 'ACEPTABLE'
+                WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 20.0 THEN 'EXCELENTE'
+                WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 15.0 THEN 'BUENO'
+                WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 10.0 THEN 'ACEPTABLE'
                 ELSE 'NECESITA_MEJORA'
             END as categoria_performance_centro,
             ROUND(
                 CASE 
-                    WHEN margen_promedio_centro >= 20.0 THEN total_gestores * 3000 * 1.3
-                    WHEN margen_promedio_centro >= 15.0 THEN total_gestores * 3000 * 1.1
-                    WHEN margen_promedio_centro >= 10.0 THEN total_gestores * 3000 * 0.9
+                    WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 20.0 THEN total_gestores * 3000 * 1.3
+                    WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 15.0 THEN total_gestores * 3000 * 1.1
+                    WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 10.0 THEN total_gestores * 3000 * 0.9
                     ELSE total_gestores * 3000 * 0.7
                 END, 2
             ) as pool_estimado_centro
@@ -1071,54 +1053,23 @@ class IncentiveQueries:
     def get_tendencia_incentivos(self) -> QueryResult:
         """
         ✅ CORREGIDO - Tendencia de incentivos últimos 6 meses
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Una sola conexión a contratos
         """
         query = """
         WITH incentivos_mensuales AS (
             SELECT
                 strftime('%Y-%m', mov.FECHA) as periodo,
-                COUNT(DISTINCT cont.GESTOR_ID) as gestores_activos,
+                COUNT(DISTINCT g.GESTOR_ID) as gestores_activos,
                 -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END) as ingresos_total,
-                -- ✅ GASTOS CORREGIDOS: Obtener desde precios reales por periodo
-                COALESCE(SUM(p.gastos_periodo), 0) as gastos_total,
-                AVG(CASE WHEN ingresos_gestor > 0 
-                         THEN (ingresos_gestor - gastos_gestor) / ingresos_gestor * 100 
-                         ELSE 0 END) as margen_promedio_mes
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+                -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
+                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total
             FROM MOVIMIENTOS_CONTRATOS mov
-            JOIN MAESTRO_CONTRATOS cont ON mov.CONTRATO_ID = cont.CONTRATO_ID
-            LEFT JOIN (
-                SELECT
-                    cont2.GESTOR_ID,
-                    strftime('%Y-%m', mov2.FECHA) as mes,
-                    SUM(CASE WHEN mov2.CUENTA_ID LIKE '76%' THEN mov2.IMPORTE ELSE 0 END) as ingresos_gestor,
-                    -- Gastos por gestor usando precios reales
-                    COALESCE(SUM(pr.gastos_gestor_mes), 0) as gastos_gestor
-                FROM MOVIMIENTOS_CONTRATOS mov2
-                JOIN MAESTRO_CONTRATOS cont2 ON mov2.CONTRATO_ID = cont2.CONTRATO_ID
-                LEFT JOIN (
-                    SELECT 
-                        g.GESTOR_ID,
-                        strftime('%Y-%m', p.FECHA_CALCULO) as mes,
-                        SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)) as gastos_gestor_mes
-                    FROM PRECIO_POR_PRODUCTO_REAL p
-                    JOIN MAESTRO_CONTRATOS mc ON p.PRODUCTO_ID = mc.PRODUCTO_ID
-                    JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
-                         AND p.SEGMENTO_ID = g.SEGMENTO_ID
-                    GROUP BY g.GESTOR_ID, strftime('%Y-%m', p.FECHA_CALCULO)
-                ) pr ON cont2.GESTOR_ID = pr.GESTOR_ID 
-                     AND strftime('%Y-%m', mov2.FECHA) = pr.mes
-                GROUP BY cont2.GESTOR_ID, strftime('%Y-%m', mov2.FECHA)
-            ) gestores ON cont.GESTOR_ID = gestores.GESTOR_ID 
-                        AND strftime('%Y-%m', mov.FECHA) = gestores.mes
-            LEFT JOIN (
-                SELECT 
-                    strftime('%Y-%m', p.FECHA_CALCULO) as mes,
-                    SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)) as gastos_periodo
-                FROM PRECIO_POR_PRODUCTO_REAL p
-                GROUP BY strftime('%Y-%m', p.FECHA_CALCULO)
-            ) p ON strftime('%Y-%m', mov.FECHA) = p.mes
+            JOIN MAESTRO_CONTRATOS mc ON mov.CONTRATO_ID = mc.CONTRATO_ID
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                  AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                  AND substr(p.FECHA_CALCULO, 1, 7) = strftime('%Y-%m', mov.FECHA)
             WHERE strftime('%Y-%m', mov.FECHA) >= '2025-05'
               AND strftime('%Y-%m', mov.FECHA) <= '2025-10'
             GROUP BY strftime('%Y-%m', mov.FECHA)
@@ -1129,12 +1080,16 @@ class IncentiveQueries:
             ROUND(ingresos_total, 2) as ingresos_total,
             ROUND(gastos_total, 2) as gastos_total,
             ROUND(ingresos_total - gastos_total, 2) as beneficio_total,
-            ROUND(margen_promedio_mes, 2) as margen_promedio_mes,
+            ROUND(
+                CASE WHEN ingresos_total > 0 
+                     THEN ((ingresos_total - gastos_total) / ingresos_total) * 100
+                     ELSE 0 END, 2
+            ) as margen_promedio_mes,
             ROUND(
                 CASE 
-                    WHEN margen_promedio_mes >= 18.0 THEN gestores_activos * 4000
-                    WHEN margen_promedio_mes >= 15.0 THEN gestores_activos * 3500
-                    WHEN margen_promedio_mes >= 12.0 THEN gestores_activos * 3000
+                    WHEN ((ingresos_total - gastos_total) / NULLIF(ingresos_total, 0)) * 100 >= 18.0 THEN gestores_activos * 4000
+                    WHEN ((ingresos_total - gastos_total) / NULLIF(ingresos_total, 0)) * 100 >= 15.0 THEN gestores_activos * 3500
+                    WHEN ((ingresos_total - gastos_total) / NULLIF(ingresos_total, 0)) * 100 >= 12.0 THEN gestores_activos * 3000
                     ELSE gestores_activos * 2500
                 END, 2
             ) as pool_estimado_mes
@@ -1275,9 +1230,8 @@ class IncentiveQueries:
             # Remove code block markers if present in the generated SQL
             if "```" in generated_sql:
                 if "```sql" in generated_sql:
-                    generated_sql = generated_sql.split("```sql")[1].split("```")[0].strip()
-                else:
-                    generated_sql = generated_sql.split("```")[1].split("```")[0].strip()
+                    generated_sql = generated_sql.replace("```sql", "")
+                generated_sql = generated_sql.replace("```", "").strip()
 
             if not is_query_safe(generated_sql):
                 logger.error(f"❌ Consulta SQL bloqueada por seguridad: {generated_sql}")
@@ -1350,7 +1304,7 @@ class IncentiveQueries:
                 max_tokens=50
             )
 
-            predicted_query = classification_response.choices.message.content.strip()
+            predicted_query = classification_response.choices[0].message.content.strip()
             logger.info(f"🧠 Clasificación de incentivos: '{user_question}' → {predicted_query}")
 
             if predicted_query in available_queries:

@@ -253,55 +253,39 @@ class DeviationQueries:
         )
 
     # =================================================================
-    # 2. DETECCIÓN DE ANOMALÍAS DE MARGEN - ✅ CORREGIDAS CON INGRESOS 76XXXX
-    # ✅ CORREGIDAS: Aplicando lógica de gastos por GESTOR
+    # 2. DETECCIÓN DE ANOMALÍAS DE MARGEN - ✅ CORREGIDAS
     # =================================================================
 
     def analyze_margen_anomalies_enhanced(self, periodo: str = "2025-10", z_threshold: float = 2.0) -> QueryResult:
         """
         ✅ CORREGIDO - Detecta gestores con márgenes anómalos usando análisis estadístico mejorado con KPI.
-        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Lógica financiera usando una sola path de JOINs
         """
         query = """
-            WITH ingresos_gestor AS (
+            WITH datos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total
+                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+                    -- ✅ GASTOS CORREGIDOS: Una sola vez por contrato-producto
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING ingresos_total > 0
-            ),
-            gastos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
-                FROM MAESTRO_GESTORES g
-                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
-                GROUP BY g.GESTOR_ID
-            ),
-            gestor_data AS (
-                SELECT
-                    ig.*,
-                    ABS(gg.gastos_total) as gastos_total
-                FROM ingresos_gestor ig
-                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
             )
-            SELECT * FROM gestor_data
+            SELECT * FROM datos_gestor
         """
 
         start_time = datetime.now()
@@ -362,54 +346,44 @@ class DeviationQueries:
     def analyze_margen_anomalies(self, periodo: str = "2025-10", z_threshold: float = 2.0) -> QueryResult:
         """
         ✅ CORREGIDO - FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
-        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Lógica financiera usando una sola path de JOINs
         """
         query = """
-            WITH ingresos_gestor AS (
+            WITH datos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total
+                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+                    -- ✅ GASTOS CORREGIDOS: Una sola vez por contrato-producto
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING ingresos_total > 0
             ),
-            gastos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
-                FROM MAESTRO_GESTORES g
-                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
-                GROUP BY g.GESTOR_ID
-            ),
             gestor_margenes AS (
                 SELECT
-                    ig.*,
-                    ABS(gg.gastos_total) as gastos_total,
+                    *,
                     ROUND(
                         CASE 
-                            WHEN ig.ingresos_total > 0
-                            THEN (ig.ingresos_total - ABS(gg.gastos_total)) / ig.ingresos_total * 100
+                            WHEN ingresos_total > 0
+                            THEN (ingresos_total - gastos_total) / ingresos_total * 100
                             ELSE NULL
                         END, 2
                     ) AS margen_neto
-                FROM ingresos_gestor ig
-                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
-                WHERE ig.ingresos_total > 0
+                FROM datos_gestor
+                WHERE ingresos_total > 0
             ),
             estadisticas AS (
                 SELECT 
@@ -466,18 +440,16 @@ class DeviationQueries:
         )
 
     # =================================================================
-    # 3. DETECCIÓN DE OUTLIERS DE VOLUMEN - ✅ CORREGIDAS CON INGRESOS 76XXXX
-    # ✅ CORREGIDAS: Gastos por GESTOR
+    # 3. DETECCIÓN DE OUTLIERS DE VOLUMEN - ✅ CORREGIDAS
     # =================================================================
 
     def identify_volumen_outliers_enhanced(self, periodo: str = "2025-10", factor_outlier: float = 3.0) -> QueryResult:
         """
         ✅ CORREGIDO - Identifica gestores con volumen de contratos o actividad atípica con análisis contextual.
-        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Lógica financiera usando una sola path de JOINs
         """
         query = """
-            WITH ingresos_gestor AS (
+            WITH datos_gestor AS (
                 SELECT 
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
@@ -488,36 +460,22 @@ class DeviationQueries:
                                        THEN mc.CONTRATO_ID ELSE NULL END) as contratos_nuevos_periodo,
                     COALESCE(COUNT(DISTINCT mov.MOVIMIENTO_ID), 0) as total_movimientos,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_generados
+                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_generados,
+                    -- ✅ GASTOS CORREGIDOS: Una sola vez por contrato-producto
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_totales
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
-            ),
-            gastos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_totales
-                FROM MAESTRO_GESTORES g
-                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
-                GROUP BY g.GESTOR_ID
-            ),
-            actividad_gestores AS (
-                SELECT
-                    ig.*,
-                    ABS(gg.gastos_totales) as gastos_totales
-                FROM ingresos_gestor ig
-                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
             )
-            SELECT * FROM actividad_gestores
+            SELECT * FROM datos_gestor
         """
 
         start_time = datetime.now()
@@ -584,11 +542,10 @@ class DeviationQueries:
     def identify_volumen_outliers(self, periodo: str = "2025-10", factor_outlier: float = 3.0) -> QueryResult:
         """
         ✅ CORREGIDO - FUNCIÓN ORIGINAL MANTENIDA PARA COMPATIBILIDAD
-        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Lógica financiera usando una sola path de JOINs
         """
         query = """
-            WITH ingresos_gestor AS (
+            WITH datos_gestor AS (
                 SELECT 
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
@@ -599,34 +556,20 @@ class DeviationQueries:
                                        THEN mc.CONTRATO_ID ELSE NULL END) as contratos_nuevos_periodo,
                     COALESCE(COUNT(DISTINCT mov.MOVIMIENTO_ID), 0) as total_movimientos,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_generados
+                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_generados,
+                    -- ✅ GASTOS CORREGIDOS: Una sola vez por contrato-producto
+                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_totales
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                      AND p.FECHA_CALCULO = '2025-10-01'
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
-            ),
-            gastos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_totales
-                FROM MAESTRO_GESTORES g
-                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
-                GROUP BY g.GESTOR_ID
-            ),
-            actividad_gestores AS (
-                SELECT
-                    ig.*,
-                    ABS(gg.gastos_totales) as gastos_totales
-                FROM ingresos_gestor ig
-                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
             ),
             medias AS (
                 SELECT 
@@ -634,38 +577,38 @@ class DeviationQueries:
                     AVG(contratos_nuevos_periodo) as media_nuevos,
                     AVG(total_movimientos) as media_movimientos,
                     AVG(ingresos_generados) as media_ingresos
-                FROM actividad_gestores
+                FROM datos_gestor
             )
             SELECT 
-                ag.GESTOR_ID,
-                ag.DESC_GESTOR,
-                ag.DESC_CENTRO,
-                ag.DESC_SEGMENTO,
-                ag.total_contratos,
-                ag.contratos_nuevos_periodo,
-                ag.total_movimientos,
-                ag.ingresos_generados,
-                ag.gastos_totales,
+                dg.GESTOR_ID,
+                dg.DESC_GESTOR,
+                dg.DESC_CENTRO,
+                dg.DESC_SEGMENTO,
+                dg.total_contratos,
+                dg.contratos_nuevos_periodo,
+                dg.total_movimientos,
+                dg.ingresos_generados,
+                dg.gastos_totales,
                 ROUND(m.media_contratos, 1) as media_contratos,
                 ROUND(m.media_nuevos, 1) as media_nuevos,
                 ROUND(m.media_movimientos, 1) as media_movimientos,
                 ROUND(m.media_ingresos, 2) as media_ingresos,
-                ROUND(ag.total_contratos / NULLIF(m.media_contratos, 0), 2) as ratio_contratos_vs_media,
-                ROUND(ag.contratos_nuevos_periodo / NULLIF(m.media_nuevos, 0), 2) as ratio_nuevos_vs_media,
+                ROUND(dg.total_contratos / NULLIF(m.media_contratos, 0), 2) as ratio_contratos_vs_media,
+                ROUND(dg.contratos_nuevos_periodo / NULLIF(m.media_nuevos, 0), 2) as ratio_nuevos_vs_media,
                 CASE 
-                    WHEN ag.total_contratos >= m.media_contratos * ? THEN 'HIPERACTIVIDAD'
-                    WHEN ag.total_contratos <= m.media_contratos / ? THEN 'BAJA_ACTIVIDAD'
-                    WHEN ag.contratos_nuevos_periodo >= m.media_nuevos * ? THEN 'PICO_COMERCIAL'
-                    WHEN ag.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0 THEN 'SIN_ACTIVIDAD'
+                    WHEN dg.total_contratos >= m.media_contratos * ? THEN 'HIPERACTIVIDAD'
+                    WHEN dg.total_contratos <= m.media_contratos / ? THEN 'BAJA_ACTIVIDAD'
+                    WHEN dg.contratos_nuevos_periodo >= m.media_nuevos * ? THEN 'PICO_COMERCIAL'
+                    WHEN dg.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0 THEN 'SIN_ACTIVIDAD'
                     ELSE 'NORMAL'
                 END as tipo_outlier
-            FROM actividad_gestores ag
+            FROM datos_gestor dg
             CROSS JOIN medias m
-            WHERE (ag.total_contratos >= m.media_contratos * ? OR 
-                   ag.total_contratos <= m.media_contratos / ? OR
-                   ag.contratos_nuevos_periodo >= m.media_nuevos * ? OR
-                   (ag.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0))
-            ORDER BY ABS(ag.total_contratos - m.media_contratos) DESC
+            WHERE (dg.total_contratos >= m.media_contratos * ? OR 
+                   dg.total_contratos <= m.media_contratos / ? OR
+                   dg.contratos_nuevos_periodo >= m.media_nuevos * ? OR
+                   (dg.contratos_nuevos_periodo = 0 AND m.media_nuevos > 0))
+            ORDER BY ABS(dg.total_contratos - m.media_contratos) DESC
         """
 
         start_time = datetime.now()
@@ -686,30 +629,27 @@ class DeviationQueries:
         )
 
     # =================================================================
-    # 4. DETECCIÓN DE PATRONES TEMPORALES - ✅ CORREGIDAS CON INGRESOS 76XXXX
-    # ✅ CORREGIDAS: Gastos por GESTOR
+    # 4. DETECCIÓN DE PATRONES TEMPORALES - ✅ CORREGIDAS
     # =================================================================
 
     def detect_patron_temporal_anomalias_enhanced(self, gestor_id: str = None, num_periods: int = 6) -> QueryResult:
         """
         ✅ CORREGIDO - Detecta patrones temporales anómalos con análisis estadístico mejorado y KPI calculator.
-        ✅ CORREGIDO: Gastos por GESTOR usando PRECIO_POR_PRODUCTO_REAL
-        ✅ CORREGIDO: Ingresos usando solo cuentas 76XXXX
+        ✅ CORREGIDO: Lógica financiera usando una sola path de JOINs
         """
         query = """
-            WITH base_ingresos AS (
+            WITH base_temporal AS (
                 SELECT 
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
                     strftime('%Y-%m', mov.FECHA) as periodo,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_periodo,
-                    COUNT(DISTINCT mov.CONTRATO_ID) as contratos_activos,
+                    COUNT(DISTINCT mc.CONTRATO_ID) as contratos_activos,
                     COUNT(DISTINCT mov.MOVIMIENTO_ID) as num_transacciones
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 WHERE c.IND_CENTRO_FINALISTA = 1
                   AND (g.GESTOR_ID = ? OR ? IS NULL)
@@ -720,7 +660,7 @@ class DeviationQueries:
                 SELECT 
                     *,
                     LAG(ingresos_periodo, 1) OVER (PARTITION BY GESTOR_ID ORDER BY periodo) as ingresos_anterior
-                FROM base_ingresos
+                FROM base_temporal
                 ORDER BY GESTOR_ID, periodo DESC
                 LIMIT ?
             )
@@ -797,12 +737,11 @@ class DeviationQueries:
                     strftime('%Y-%m', mov.FECHA) as periodo,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_mes,
-                    COUNT(DISTINCT mov.CONTRATO_ID) as contratos_activos,
+                    COUNT(DISTINCT mc.CONTRATO_ID) as contratos_activos,
                     COUNT(DISTINCT mov.MOVIMIENTO_ID) as num_transacciones
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
+                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 {where_clause}
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, strftime('%Y-%m', mov.FECHA)
@@ -1067,10 +1006,10 @@ class DeviationQueries:
 
             generated_sql = response.choices[0].message.content.strip()
 
-            if "``````" in generated_sql:
-                generated_sql = generated_sql.split("``````")[0].strip()
+            if "```sql" in generated_sql and "```" in generated_sql:
+                generated_sql = generated_sql.split("```sql")[1].split("```")[0].strip()
             elif "```" in generated_sql:
-                generated_sql = generated_sql.split("```")[1].strip()
+                generated_sql = generated_sql.split("```")[1].split("```")[0].strip()
 
             if not is_query_safe(generated_sql):
                 logger.error(f"❌ Consulta SQL bloqueada por seguridad: {generated_sql}")
