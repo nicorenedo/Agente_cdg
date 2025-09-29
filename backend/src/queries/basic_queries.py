@@ -865,56 +865,72 @@ class BasicQueries:
         return {}
 
     def get_gestor_clientes_con_metricas(self, gestor_id: int, periodo: str = None) -> List[Dict[str, Any]]:
-        """✅ CORREGIDO DEFINITIVAMENTE - Lógica consistente entre ingresos y gastos"""
-        periodo_clause_mov = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        """✅ CORREGIDO DEFINITIVAMENTE - Sin multiplicación de gastos"""
+        periodo_clause_mov = "AND strftime('%Y-%m', mov.FECHA) <= ?" if periodo else ""
         fecha_calculo = f"{periodo}-01" if periodo else "2025-10-01"
     
-        # ✅ Query UNIFICADA - Ingresos y gastos con la MISMA lógica
-        query = f"""
+        # ✅ SEPARAR INGRESOS Y GASTOS PARA EVITAR MULTIPLICACIONES
+        query_ingresos = f"""
         SELECT 
             cl.CLIENTE_ID,
             cl.NOMBRE_CLIENTE,
             COUNT(DISTINCT co.CONTRATO_ID) as num_contratos,
-            -- ✅ INGRESOS: Solo cuentas 76XXXX de contratos del gestor
+            -- ✅ INGRESOS: Solo cuentas 76XXXX HASTA el período
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_cliente,
-            -- ✅ GASTOS: De los MISMOS contratos del gestor
-            COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_cliente,
             MIN(co.FECHA_ALTA) as fecha_alta_primer_contrato,
             MAX(co.FECHA_ALTA) as fecha_alta_ultimo_contrato,
             COUNT(DISTINCT co.PRODUCTO_ID) as productos_diferentes
         FROM MAESTRO_CLIENTES cl
         JOIN MAESTRO_CONTRATOS co ON cl.CLIENTE_ID = co.CLIENTE_ID 
-        JOIN MAESTRO_GESTORES g ON co.GESTOR_ID = g.GESTOR_ID  -- ✅ USAR GESTOR DEL CONTRATO
-        LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                              AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                              AND p.FECHA_CALCULO = ?
         LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
             {periodo_clause_mov}
-        WHERE co.GESTOR_ID = ?  -- ✅ FILTRAR POR GESTOR DEL CONTRATO
+        WHERE co.GESTOR_ID = ?
         GROUP BY cl.CLIENTE_ID, cl.NOMBRE_CLIENTE
         ORDER BY ingresos_cliente DESC
         """
     
-        # Ejecutar query unificada
-        if periodo:
-            results = self.query_executor.execute_query(query, (fecha_calculo, periodo, gestor_id))
-        else:
-            results = self.query_executor.execute_query(query, (fecha_calculo, gestor_id))
+        # ✅ QUERY SEPARADA PARA GASTOS - Sin duplicaciones
+        query_gastos = """
+        SELECT 
+            cl.CLIENTE_ID,
+            COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_cliente
+        FROM MAESTRO_CLIENTES cl
+        JOIN MAESTRO_CONTRATOS co ON cl.CLIENTE_ID = co.CLIENTE_ID 
+        JOIN MAESTRO_GESTORES g ON co.GESTOR_ID = g.GESTOR_ID
+        LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                              AND co.PRODUCTO_ID = p.PRODUCTO_ID
+                                              AND p.FECHA_CALCULO = ?
+        WHERE co.GESTOR_ID = ?
+        GROUP BY cl.CLIENTE_ID
+        """
     
-        # Calcular métricas derivadas
-        for row in results:
+        # Ejecutar queries por separado
+        if periodo:
+            results_ingresos = self.query_executor.execute_query(query_ingresos, (periodo, gestor_id))
+        else:
+            results_ingresos = self.query_executor.execute_query(query_ingresos, (gestor_id,))
+        
+        results_gastos = self.query_executor.execute_query(query_gastos, (fecha_calculo, gestor_id))
+        
+        # ✅ COMBINAR RESULTADOS SIN DUPLICACIONES
+        gastos_dict = {row['CLIENTE_ID']: row['gastos_cliente'] for row in results_gastos}
+    
+        for row in results_ingresos:
             ingresos = row['ingresos_cliente'] or 0
-            gastos = row['gastos_cliente'] or 0
-            beneficio = ingresos - abs(gastos)
+            gastos = gastos_dict.get(row['CLIENTE_ID'], 0)
+            beneficio = ingresos - gastos
     
             row.update({
+                'gastos_cliente': gastos,
                 'beneficio_neto': beneficio,
                 'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
                 'ingresos_por_contrato': round(ingresos / max(row['num_contratos'], 1), 2)
             })
     
-        return results
+        return results_ingresos
     
+
+
 
 
     # =====================================

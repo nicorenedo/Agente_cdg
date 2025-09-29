@@ -201,31 +201,80 @@ class PermissionManager:
 
         return None
 
-    @staticmethod 
-    def determine_user_role(user_id: str) -> UserRole:
-        """🔍 Determina rol basado en user_id CON LÓGICA MEJORADA"""
-        user_lower = user_id.lower()
-        
-        # 🎯 PATRONES ESPECÍFICOS PARA CONTROL DE GESTIÓN
-        control_patterns = [
-            "direccion-", "control-gestion", "cdg-admin", "supervisor-", "manager-"
-        ]
-        
-        # 🎯 PATRONES ESPECÍFICOS PARA GESTOR (MÁS ESPECÍFICO)
-        gestor_patterns = [
-            "gestor-", "-gestor-", "chat-v", "dashboard-gestor"
-        ]
-        
-        # Primero verificar si es gestor (más específico)
-        if any(pattern in user_lower for pattern in gestor_patterns):
+    @staticmethod
+    def determine_user_role(user_id: str, context: Dict = None) -> UserRole:
+        """
+        🔐 DETERMINA ROL DEL USUARIO - VERSIÓN ROBUSTA v3
+        """
+        try:
+            # 🎯 PRIORIDAD ABSOLUTA: CONTEXTO (múltiples fuentes)
+            if context:
+                # 🔧 BUSCAR EN DIFERENTES UBICACIONES DEL CONTEXTO
+                user_role_context = ''
+                scope_context = ''
+                
+                # Opción 1: Contexto directo
+                if 'user_role' in context:
+                    user_role_context = str(context.get('user_role', '')).lower().strip()
+                if 'scope' in context:
+                    scope_context = str(context.get('scope', '')).lower().strip()
+                
+                # Opción 2: Contexto anidado (si existe)
+                nested_context = context.get('context', {})
+                if nested_context and not user_role_context:
+                    user_role_context = str(nested_context.get('user_role', '')).lower().strip()
+                    scope_context = str(nested_context.get('scope', '')).lower().strip()
+                
+                # 🔧 DEDUCIR DESDE GESTOR_ID si existe
+                gestor_id = context.get('gestor_id') or nested_context.get('gestor_id')
+                
+                logger.info(f"🔍 DEBUGGING contexto ROBUSTO: user_role='{user_role_context}', scope='{scope_context}', gestor_id={gestor_id}, user_id='{user_id}'")
+                
+                # ✅ SI CONTEXTO DICE 'gestor' → ES GESTOR
+                if user_role_context == 'gestor' or scope_context == 'gestor':
+                    logger.info(f"👤 ROL GESTOR confirmado desde contexto explícito")
+                    return UserRole.GESTOR
+                
+                # ✅ SI TIENE GESTOR_ID específico → probablemente ES GESTOR
+                if gestor_id and str(gestor_id).isdigit():
+                    logger.info(f"👤 ROL GESTOR deducido desde gestor_id={gestor_id}")
+                    return UserRole.GESTOR
+                
+                # ✅ SI CONTEXTO DICE 'direccion' → ES CONTROL_GESTION
+                if user_role_context in ['direccion', 'control_gestion', 'control-gestion', 'corporativo'] or \
+                   scope_context in ['direccion', 'control_gestion', 'corporate', 'corporativo']:
+                    logger.info(f"🏢 ROL CONTROL_GESTION confirmado desde contexto explícito")
+                    return UserRole.CONTROL_GESTION
+            
+            # 🎯 FALLBACK: Análisis del user_id
+            logger.warning(f"⚠️ Contexto no definitivo, analizando user_id como fallback")
+            
+            if user_id:
+                user_id_lower = user_id.lower()
+                
+                # Patrones para Gestores (MÁS ESPECÍFICO)
+                if any(pattern in user_id_lower for pattern in [
+                    'gestor-', '-gestor', 'commercial', 'comercial'
+                ]):
+                    logger.info(f"👤 ROL GESTOR desde user_id (fallback): {user_id}")
+                    return UserRole.GESTOR
+                
+                # Patrones para Control de Gestión (MENOS ESPECÍFICO)
+                if any(pattern in user_id_lower for pattern in [
+                    'direccion', 'control', 'corporativ', 'executive', 'admin'
+                ]) and 'gestor' not in user_id_lower:
+                    logger.info(f"🏢 ROL CONTROL_GESTION desde user_id (fallback): {user_id}")
+                    return UserRole.CONTROL_GESTION
+            
+            # 🎯 FALLBACK FINAL: Por defecto GESTOR (más restrictivo)
+            logger.warning(f"⚠️ No se pudo determinar rol específico. Usando GESTOR por defecto para seguridad.")
             return UserRole.GESTOR
-        
-        # Luego verificar si es control de gestión
-        if any(pattern in user_lower for pattern in control_patterns):
-            return UserRole.CONTROL_GESTION
-        
-        # Por defecto: GESTOR (más restrictivo)
-        return UserRole.GESTOR
+            
+        except Exception as e:
+            logger.error(f"❌ Error determinando rol de usuario: {e}")
+            return UserRole.GESTOR  # Fallback seguro
+
+
 
     
     @staticmethod
@@ -258,6 +307,104 @@ class PermissionManager:
         # Por defecto: acceso denegado
         logger.warning(f"🔐 Acceso DENEGADO - Rol {user_role.value} no reconocido")
         return False
+
+    @staticmethod
+    async def enhanced_confidentiality_check(user_message: str, context: Dict) -> Dict[str, Any]:
+        """🔐 NUEVO: Análisis completo de confidencialidad con LLM"""
+        try:
+            # Importar aquí para evitar dependencias circulares
+            try:
+                from prompts.system_prompts import CONFIDENTIALITY_DETECTION_PROMPT
+            except ImportError:
+                # Fallback si no está el prompt
+                return PermissionManager._fallback_confidentiality_check(user_message, context)
+            
+            # 🔧 CORREGIDO: Pasar context al método determine_user_role
+            user_role = PermissionManager.determine_user_role(context.get('user_id', ''), context)
+            
+            # Si es CONTROL_GESTION, acceso total sin verificación
+            if user_role == UserRole.CONTROL_GESTION:
+                logger.info(f"✅ Acceso total concedido a CONTROL_GESTION para: {user_message[:50]}...")
+                return {
+                    'access_granted': True,
+                    'reason': 'control_gestion_full_access',
+                    'confidence': 1.0
+                }
+            
+            # Para GESTORES: análisis detallado
+            confidentiality_prompt = f"""
+{CONFIDENTIALITY_DETECTION_PROMPT}
+
+CONSULTA A ANALIZAR: "{user_message}"
+
+CONTEXTO DEL USUARIO:
+- Rol: {user_role.value}
+- Gestor ID: {context.get('gestor_id')}
+- Timestamp: {datetime.now().isoformat()}
+
+EJEMPLOS DE VIOLACIONES TÍPICAS:
+- "¿Cuáles son los incentivos de todos los gestores?" (ROL GESTOR)
+- "Performance del gestor 15" (ROL GESTOR pidiendo datos de otro)
+- "Ranking completo con nombres" (ROL GESTOR)
+
+CONSULTAS PERMITIDAS:
+- "¿Cuál es mi incentivo?" (ROL GESTOR)
+- "Promedio de incentivos del sector" (ROL GESTOR)
+- "¿Cómo me comparo?" (ROL GESTOR - solo agregados)
+"""
+            
+            llm_client = iniciar_agente_llm()
+            response = llm_client.chat.completions.create(
+                model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                messages=[
+                    {"role": "system", "content": "Eres un especialista en confidencialidad bancaria."},
+                    {"role": "user", "content": confidentiality_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=300
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Parsear respuesta JSON
+            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                
+                return {
+                    'access_granted': not result.get('is_confidential', False),
+                    'violation_type': result.get('violation_type', 'unknown'),
+                    'requires_filtering': result.get('requires_filtering', False),
+                    'confidence': float(result.get('confidence', 0.8)),
+                    'explanation': result.get('explanation', ''),
+                    'analysis_method': 'llm_enhanced'
+                }
+            
+            # Fallback al método actual si falla LLM
+            return PermissionManager._fallback_confidentiality_check(user_message, context)
+            
+        except Exception as e:
+            logger.error(f"Error en análisis avanzado de confidencialidad: {e}")
+            return PermissionManager._fallback_confidentiality_check(user_message, context)
+
+    @staticmethod
+    def _fallback_confidentiality_check(user_message: str, context: Dict) -> Dict[str, Any]:
+        """Método de respaldo usando lógica actual"""
+        extracted_gestor_id = PermissionManager.extract_gestor_id_from_message(user_message, context)
+        # 🔧 CORREGIDO: Pasar context al método determine_user_role
+        user_role = PermissionManager.determine_user_role(context.get('user_id', ''), context)
+        user_gestor_id = context.get('gestor_id')
+        
+        if extracted_gestor_id is not None:
+            access_granted = PermissionManager.validate_access_permission(user_role, extracted_gestor_id, user_gestor_id)
+            return {
+                'access_granted': access_granted,
+                'reason': 'basic_pattern_detection',
+                'confidence': 0.7 if access_granted else 0.9
+            }
+        
+        return {'access_granted': True, 'reason': 'no_specific_gestor_detected', 'confidence': 0.6}
+
 
 
 # ============================================================================
@@ -297,15 +444,31 @@ class IntelligentQueryClassifier:
 
     async def classify_and_route(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
         """
-        🎯 CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE CON VALIDACIÓN DE PERMISOS
+        🎯 CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE CON VALIDACIÓN MEJORADA
         """
         try:
-            # 🔐 NUEVO: Validación de acceso temprana
+            # 🔐 NUEVO: Análisis avanzado de confidencialidad
+            confidentiality_result = await PermissionManager.enhanced_confidentiality_check(user_message, context or {})
+            
+            # 🚨 BLOQUEAR ACCESO SI ES CONFIDENCIAL
+            if not confidentiality_result['access_granted']:
+                return {    
+                    'flow_type': 'ACCESS_DENIED',
+                    'classification': {'intent': 'confidentiality_violation'},
+                    'confidence': confidentiality_result['confidence'],
+                    'access_info': {
+                        'violation_type': confidentiality_result.get('violation_type', 'unknown'),
+                        'explanation': confidentiality_result.get('explanation', ''),
+                        'requires_filtering': confidentiality_result.get('requires_filtering', False)
+                    }
+                }
+            
+            # 🔐 VALIDACIÓN DE ACCESO TEMPRANA (código original mantenido)
             extracted_gestor_id = PermissionManager.extract_gestor_id_from_message(user_message, context)
-            user_role = PermissionManager.determine_user_role(context.get('user_id', ''))
+            user_role = PermissionManager.determine_user_role(context.get('user_id', ''), context)
             user_gestor_id = context.get('gestor_id') if context else None
             
-            # 🚨 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD
+            # 🚨 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD (código original mantenido)
             if extracted_gestor_id is not None:
                 if not PermissionManager.validate_access_permission(user_role, extracted_gestor_id, user_gestor_id):
                     return {
@@ -362,6 +525,7 @@ class IntelligentQueryClassifier:
                 'classification': {'intent': 'fallback', 'requires_sql': True},
                 'confidence': 0.3
             }
+
     
     async def _classify_query_type(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
         """
@@ -374,7 +538,7 @@ class IntelligentQueryClassifier:
                 gestor_id = context.get('gestor_id')
                 periodo = context.get('periodo', '2025-10')
                 user_id = context.get('user_id', '')
-                user_role = PermissionManager.determine_user_role(user_id)
+                user_role = PermissionManager.determine_user_role(user_id, context)
 
                 if gestor_id:
                     user_context = f"\nCONTEXTO USUARIO: Gestor ID {gestor_id}, período {periodo}, rol {user_role.value}"
@@ -1600,7 +1764,7 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
 
             # 🔐 VALIDACIÓN DE CONFIDENCIALIDAD EN SQL DINÁMICO
             extracted_gestor_id = PermissionManager.extract_gestor_id_from_message(message.message, message.context)
-            user_role = PermissionManager.determine_user_role(message.user_id)
+            user_role = PermissionManager.determine_user_role(message.user_id, message.context)
             user_gestor_id = message.gestor_id
 
             if extracted_gestor_id is not None:
@@ -1652,7 +1816,10 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                 )
             
             # Ejecutar SQL
-            query_data = self._execute_query_safely(sql_result['sql'])
+            query_data = self._execute_query_safely(sql_result['sql'], {
+                'gestor_id': message.gestor_id,
+                'periodo': message.periodo
+            })
             
             # Formatear respuesta
             formatted_response = await self.formatter.format_response(
@@ -1773,7 +1940,7 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
             schema_info = self.query_builder.schema_inspector.get_database_schema()
             available_tables = list(schema_info['tables'].keys())
             total_records = schema_info['metadata']['total_records']
-            user_role = PermissionManager.determine_user_role(message.user_id)
+            user_role = PermissionManager.determine_user_role(message.user_id, message.context)
             
             contextual_prompt = f"""
             Responde esta pregunta sobre Control de Gestión bancario con contexto profesional:
@@ -1855,17 +2022,31 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                 session_id=message.user_id
             )
     
-    def _execute_query_safely(self, sql: str) -> Any:
-        """Ejecuta consulta SQL de forma segura"""
+    def _execute_query_safely(self, sql: str, params: Dict = None) -> Any:
+        """Ejecuta consulta SQL de forma segura CON PARÁMETROS"""
         try:
             if IMPORTS_SUCCESSFUL:
-                return query_executor.execute_query(sql)
+                # 🔧 NUEVO: Inyectar parámetros en SQL si existen placeholders
+                if params and '?' in sql:
+                    # Reemplazar placeholders con parámetros reales
+                    gestor_id = params.get('gestor_id')
+                    periodo = params.get('periodo', '2025-10')
+
+                    if gestor_id and 'WHERE' in sql.upper():
+                        # Inyectar gestor_id en queries que lo necesiten
+                        sql = sql.replace('?', str(gestor_id))
+                        logger.info(f"🔧 SQL con parámetros inyectados: gestor_id={gestor_id}")
+
+                    return query_executor.execute_query(sql)
+                else:
+                    return query_executor.execute_query(sql)
             else:
                 return [{"mock": "data", "message": "Modo fallback activo"}]
-                
+
         except Exception as e:
             logger.error(f"Error ejecutando SQL: {e}")
             return {"error": f"Error en consulta SQL: {str(e)}"}
+
     
     def _generate_contextual_fallback(self, user_message: str, schema_info: Dict, user_role: UserRole) -> str:
         """Genera respuesta contextual fallback CON ROLES"""

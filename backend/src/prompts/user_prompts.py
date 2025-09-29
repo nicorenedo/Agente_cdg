@@ -1,3 +1,6 @@
+from prompts.system_prompts import CONFIDENTIALITY_DETECTION_PROMPT
+
+
 BUSINESS_REVIEW_USER_PROMPT = """
 Genera un Business Review completo para el gestor {gestor_name} correspondiente al período {periodo}.
 
@@ -1039,4 +1042,31 @@ CONSIDERACIONES ESPECIALES:
 - Segmentos prioritarios: Fondos (N20301), Personal (N10104)
 
 Proporciona una explicación que un gestor comercial pueda entender y usar.
+"""
+def build_confidentiality_check_prompt(user_message: str, user_context: dict) -> str:
+    """
+    Construye prompt específico para verificar confidencialidad
+    """
+    user_role = user_context.get('user_role', 'gestor')
+    user_gestor_id = user_context.get('gestor_id', 'No especificado')
+    
+    return f"""
+{CONFIDENTIALITY_DETECTION_PROMPT}
+
+CONSULTA A ANALIZAR: "{user_message}"
+
+CONTEXTO DEL USUARIO:
+- Rol: {user_role}
+- Gestor ID: {user_gestor_id}
+- Timestamp: {user_context.get('timestamp', 'actual')}
+
+EJEMPLOS DE VIOLACIONES TÍPICAS:
+- "¿Cuáles son los incentivos de todos los gestores?" (ROL GESTOR)
+- "Performance del gestor 15" (ROL GESTOR pidiendo datos de otro)
+- "Ranking completo con nombres" (ROL GESTOR)
+
+CONSULTAS PERMITIDAS:
+- "¿Cuál es mi incentivo?" (ROL GESTOR)
+- "Promedio de incentivos del sector" (ROL GESTOR)
+- "¿Cómo me comparo?" (ROL GESTOR - solo agregados)
 """

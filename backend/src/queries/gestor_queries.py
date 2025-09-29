@@ -72,43 +72,63 @@ class GestorQueries:
 
     def get_gestor_performance_enhanced(self, gestor_id: str, periodo: str = None) -> QueryResult:
         """
-        ✅ MÉTODO CRÍTICO REQUERIDO POR CDG_AGENT.PY
-        ✅ CORREGIDO: Una sola conexión a contratos para evitar duplicaciones
-
-        Obtiene performance completo de un gestor con análisis KPI mejorado.
+        ✅ CORREGIDO DEFINITIVAMENTE - Ingresos acumulados y gastos correctos
         """
-        query = """
-            WITH datos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    g.DESC_GESTOR,
-                    c.DESC_CENTRO,
-                    s.DESC_SEGMENTO,
-                    COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
-                    COUNT(DISTINCT mc.CLIENTE_ID) as total_clientes,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as total_ingresos,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as total_gastos,
-                    SUM(mov.IMPORTE) as patrimonio_total,
-                    COALESCE(AVG(mov.IMPORTE), 0) as importe_promedio_movimiento
-                FROM MAESTRO_GESTORES g
-                JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
-                JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND (? IS NULL OR strftime('%Y-%m', mov.FECHA) = ?)
-                WHERE g.GESTOR_ID = ?
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
-            )
-            SELECT * FROM datos_gestor
+        # ✅ Período clause corregido para ACUMULADO
+        periodo_clause = f"AND strftime('%Y-%m', mov.FECHA) <= '{periodo}'" if periodo else ""
+
+        query = f"""
+        WITH datos_gestor AS (
+            SELECT
+                g.GESTOR_ID,
+                g.DESC_GESTOR,
+                c.DESC_CENTRO,
+                s.DESC_SEGMENTO,
+                COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
+                COUNT(DISTINCT mc.CLIENTE_ID) as total_clientes
+            FROM MAESTRO_GESTORES g
+            JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+            JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
+            LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+            WHERE g.GESTOR_ID = ?
+            GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
+        ),
+        ingresos_acumulados AS (
+            SELECT
+                -- ✅ INGRESOS ACUMULADOS: Solo cuentas 76XXXX hasta el período
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as total_ingresos,
+                -- ✅ PATRIMONIO: Suma total de movimientos (para ROE)
+                SUM(mov.IMPORTE) as patrimonio_total,
+                COALESCE(AVG(mov.IMPORTE), 0) as importe_promedio_movimiento
+            FROM MAESTRO_CONTRATOS mc
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                {periodo_clause}
+            WHERE mc.GESTOR_ID = ?
+        ),
+        gastos_contratos AS (
+            SELECT
+                -- ✅ GASTOS: Una vez por contrato (sin multiplicar)
+                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as total_gastos
+            FROM MAESTRO_CONTRATOS mc
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                  AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                  AND p.FECHA_CALCULO = '2025-10-01'
+            WHERE mc.GESTOR_ID = ?
+        )
+        SELECT 
+            dg.*,
+            ia.total_ingresos,
+            ia.patrimonio_total,
+            ia.importe_promedio_movimiento,
+            gc.total_gastos
+        FROM datos_gestor dg
+        CROSS JOIN ingresos_acumulados ia
+        CROSS JOIN gastos_contratos gc
         """
 
         start_time = datetime.now()
-        raw = execute_query(query, (periodo, periodo, gestor_id))
+        raw = execute_query(query, (gestor_id, gestor_id, gestor_id))
 
         if not raw:
             return QueryResult(
@@ -121,18 +141,14 @@ class GestorQueries:
 
         r = raw[0]
 
-        margen = self.kpi_calc.calculate_margen_neto(
-            ingresos=r['total_ingresos'] or 0,
-            gastos=abs(r['total_gastos'] or 0)
-        )
-        roe = self.kpi_calc.calculate_roe(
-            beneficio_neto=margen['beneficio_neto'],
-            patrimonio=(r['patrimonio_total'] or 1)
-        )
-        eficiencia = self.kpi_calc.calculate_ratio_eficiencia(
-            ingresos=r['total_ingresos'] or 0,
-            gastos=abs(r['total_gastos'] or 0)
-        )
+        # ✅ Cálculos KPI con datos correctos
+        ingresos = r['total_ingresos'] or 0
+        gastos = r['total_gastos'] or 0
+        patrimonio = r['patrimonio_total'] or 1
+
+        margen = self.kpi_calc.calculate_margen_neto(ingresos, gastos)
+        roe = self.kpi_calc.calculate_roe(margen['beneficio_neto'], patrimonio)
+        eficiencia = self.kpi_calc.calculate_ratio_eficiencia(ingresos, gastos)
 
         enhanced = {
             'gestor_id': r['GESTOR_ID'],
@@ -141,11 +157,11 @@ class GestorQueries:
             'desc_segmento': r['DESC_SEGMENTO'],
             'total_contratos': r['total_contratos'],
             'total_clientes': r['total_clientes'],
-            'total_ingresos': r['total_ingresos'] or 0,
-            'total_gastos': r['total_gastos'] or 0,
-            'patrimonio_total': r['patrimonio_total'] or 0,
+            'total_ingresos': ingresos,
+            'total_gastos': gastos,
+            'patrimonio_total': patrimonio,
 
-            # KPIs
+            # KPIs corregidos
             'margen_neto': margen['margen_neto_pct'],
             'beneficio_neto': margen['beneficio_neto'],
             'clasificacion_margen': margen['clasificacion'],
@@ -172,6 +188,8 @@ class GestorQueries:
             row_count=1,
             query_sql=query
         )
+
+
 
     def get_all_gestores_enhanced(self) -> QueryResult:
         """
@@ -519,41 +537,55 @@ class GestorQueries:
 
     def calculate_roe_gestor_enhanced(self, gestor_id: str, periodo: str = "2025-10") -> QueryResult:
         """
-        ✅ CORREGIDO - Una sola conexión a contratos para evitar duplicaciones
-        ROE del gestor (beneficio neto / patrimonio) con clasificación.
+        ✅ CORREGIDO DEFINITIVAMENTE - ROE con ingresos acumulados y gastos sin multiplicar
         """
-        query = """
-            WITH datos_roe AS (
-                SELECT
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos,
-                    SUM(mov.IMPORTE) as patrimonio_total
-                FROM MAESTRO_GESTORES g
-                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                WHERE g.GESTOR_ID = ?
-                  AND (? IS NULL OR strftime('%Y-%m', mov.FECHA) = ?)
-            )
-            SELECT * FROM datos_roe
+        # ✅ INGRESOS ACUMULADOS hasta el período
+        query_ingresos = """
+            SELECT
+                -- ✅ INGRESOS ACUMULADOS: Solo cuentas 76XXXX hasta el período
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
+                SUM(mov.IMPORTE) as patrimonio_total
+            FROM MAESTRO_CONTRATOS mc
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                AND strftime('%Y-%m', mov.FECHA) <= ?
+            WHERE mc.GESTOR_ID = ?
+        """
+        
+        # ✅ GASTOS SIN MULTIPLICAR: Una vez por contrato
+        query_gastos = """
+            SELECT
+                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos
+            FROM MAESTRO_CONTRATOS mc
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
+                                                  AND mc.PRODUCTO_ID = p.PRODUCTO_ID
+                                                  AND p.FECHA_CALCULO = '2025-10-01'
+            WHERE mc.GESTOR_ID = ?
         """
         
         start = datetime.now()
-        raw = execute_query(query, (gestor_id, periodo, periodo))
-        r = raw[0] if raw else {'ingresos': 0, 'gastos': 0, 'patrimonio_total': 0}
         
-        margen = self.kpi_calc.calculate_margen_neto(r['ingresos'] or 0, r['gastos'] or 0)
-        roe = self.kpi_calc.calculate_roe(margen['beneficio_neto'], r['patrimonio_total'] or 1)
-
+        # ✅ Ejecutar queries por separado
+        ingresos_data = execute_query(query_ingresos, (periodo, gestor_id))
+        gastos_data = execute_query(query_gastos, (gestor_id,))
+        
+        # ✅ Extraer datos
+        ingresos_row = ingresos_data[0] if ingresos_data else {'ingresos': 0, 'patrimonio_total': 0}
+        gastos_row = gastos_data[0] if gastos_data else {'gastos': 0}
+        
+        ingresos = ingresos_row['ingresos'] or 0
+        gastos = gastos_row['gastos'] or 0
+        patrimonio = ingresos_row['patrimonio_total'] or 1
+        
+        # ✅ Cálculos KPI con datos correctos
+        margen = self.kpi_calc.calculate_margen_neto(ingresos, gastos)
+        roe = self.kpi_calc.calculate_roe(margen['beneficio_neto'], patrimonio)
+    
         out = {
-            'ingresos': r['ingresos'] or 0,
-            'gastos': r['gastos'] or 0,
+            'ingresos': ingresos,
+            'gastos': gastos,
             'beneficio_neto': margen['beneficio_neto'],
-            'patrimonio_total': r['patrimonio_total'] or 0,
+            'patrimonio_total': patrimonio,
             'roe_pct': roe['roe_pct'],
             'clasificacion_roe': roe['clasificacion'],
             'contexto': self._get_roe_context(roe['clasificacion']),
@@ -562,13 +594,21 @@ class GestorQueries:
         }
         
         exec_time = (datetime.now() - start).total_seconds()
+        
+        # ✅ Query combinada para logs (solo para mostrar)
+        combined_query = f"""
+        -- QUERY INGRESOS: {query_ingresos}
+        -- QUERY GASTOS: {query_gastos}
+        """
+        
         return QueryResult(
             data=[out],
             query_type="roe_enhanced",
             execution_time=exec_time,
             row_count=1,
-            query_sql=query
+            query_sql=combined_query
         )
+    
 
     def calculate_roe_gestor(self, gestor_id: str, periodo: str = "2025-10") -> QueryResult:
         """
