@@ -2,17 +2,19 @@
 /* eslint-disable no-console */
 
 /**
- * CDG Frontend API Client v12.0 (Chat Agent v11.0 + CDG Agent v6.1)
- * --------------------------------------------------------------------
- * - Perfect Integration con backend main.py v12.0
- * - Chat Agent v11.0: Sistema de confidencialidad bancaria
+ * CDG Frontend API Client v13.1 (Chat Agent v11.0 + CDG Agent v6.1 + Charts V4.4)
+ * ---------------------------------------------------------------------------------
+ * - Perfect Integration con backend main.py v11.0
+ * - Chat Agent v11.0: Sistema de confidencialidad bancaria  
  * - CDG Agent v6.1: Análisis especializados con validación de permisos
+ * - Charts V4.4: Gráficos dinámicos con IA + roles + confidencialidad
+ * - Admin V4.4: Validación de Chart Generator
  * - Desenvelope automático: devuelve { data, meta, ts } por defecto
  * - Retries con backoff para 429/502/503/504
  * - Cancelación de requests (AbortController)
- * - WebSocket optimizado para Chat Agent v10.0
+ * - WebSocket optimizado para Chat Agent v11.0
  * - SDK completo con TODOS los endpoints del backend
- * - ✅ ACTUALIZADO: +40 nuevos endpoints añadidos
+ * - ✅ ACTUALIZADO v13.1: Corregido charts.pivot para main.py v11.0
  */
 
 import axios from "axios";
@@ -158,7 +160,6 @@ instance.interceptors.response.use(
       console.log('🔍 [API] CONVERTED ARRAY MESSAGE:', messageFromBackend);
     }
 
-
     // ✅ DEBUG: Error final que se va a lanzar
     console.error('🔍 [API] THROWING ERROR:', {
       message: messageFromBackend,
@@ -174,8 +175,6 @@ instance.interceptors.response.use(
     });
   }
 );
-
-
 
 /* ============================
  * Core HTTP helpers
@@ -215,7 +214,7 @@ const toQueryBody = (obj) =>
   );
 
 /* ============================
- * WebSocket optimizado para Chat Agent v10.0
+ * WebSocket optimizado para Chat Agent v11.0
  * ============================ */
 
 const makeWsUrl = (path) => {
@@ -224,27 +223,27 @@ const makeWsUrl = (path) => {
 };
 
 /**
- * ✅ WebSocket optimizado para Chat Agent v10.0 con Perfect Integration
+ * ✅ WebSocket optimizado para Chat Agent v11.0 con Perfect Integration
  * Heartbeat compatible con configuración del servidor (30s ping, 15s timeout)
  */
 const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) => {
   if (!userId) throw new Error("userId requerido para WS");
   const url = makeWsUrl(`/ws/chat/${encodeURIComponent(userId)}`);
   
-  console.log(`[WS] 🔌 Conectando a Chat Agent v10.0: ${url}`);
+  console.log(`[WS] 🔌 Conectando a Chat Agent v11.0: ${url}`);
   const socket = new WebSocket(url);
   
   let heartbeatInterval;
   let isAlive = false;
 
   socket.onopen = (evt) => {
-    console.log('[WS] ✅ Chat Agent v10.0 conectado exitosamente');
+    console.log('[WS] ✅ Chat Agent v11.0 conectado exitosamente');
     isAlive = true;
 
     // ✅ Heartbeat cada 18s (sincronizado con backend 20s)
     heartbeatInterval = setInterval(() => {
       if (socket.readyState === WebSocket.OPEN) {
-        console.log('[WS] 💓 Enviando ping a Chat Agent v10.0');
+        console.log('[WS] 💓 Enviando ping a Chat Agent v11.0');
         try {
           socket.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
         } catch (error) {
@@ -285,11 +284,10 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
         if (onError) onError({ type: 'access_denied', ...msg });
         return;
       }
-
       
       // Manejar pong del servidor
       if (msg.type === 'pong') {
-        console.log('[WS] 💚 Pong recibido de Chat Agent v10.0');
+        console.log('[WS] 💚 Pong recibido de Chat Agent v11.0');
         isAlive = true;
         return;
       }
@@ -301,12 +299,12 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
   };
   
   socket.onerror = (evt) => {
-    console.error('[WS] ❌ Error en Chat Agent v10.0:', evt);
+    console.error('[WS] ❌ Error en Chat Agent v11.0:', evt);
     onError && onError(evt);
   };
   
   socket.onclose = (evt) => {
-    console.log(`[WS] 🔌 Chat Agent v10.0 cerrado: ${evt.code} - ${evt.reason || 'Sin razón'}`);
+    console.log(`[WS] 🔌 Chat Agent v11.0 cerrado: ${evt.code} - ${evt.reason || 'Sin razón'}`);
     
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
@@ -369,9 +367,9 @@ const basic = {
   centros: (cfg) => unwrap(http.get("/basic/centros", cfg)),
   productos: (cfg) => unwrap(http.get("/basic/productos", cfg)),
   
-  // ✅ NUEVOS: Gastos
+  // ✅ AÑADIDO: Gastos por fecha (faltaba este)
   gastosByFecha: (fecha, cfg) =>
-    unwrap(http.get("/basic/gastos/by-fecha", { params: { fecha }, ...cfg })),
+    unwrap(http.get("/basic/gastos-by-fecha", { params: { fecha }, ...cfg })),
 
   // ✅ NUEVOS: Contratos extendidos
   allContracts: (cfg) => unwrap(http.get("/basic/contracts", cfg)),
@@ -413,20 +411,20 @@ const basic = {
   productosTop: (cfg) => unwrap(http.get("/basic/productos/top", cfg)),
 
   // ✅ NUEVOS: Precios completos
-  preciosStd: (cfg) => unwrap(http.get("/basic/precios/std", cfg)),
+  preciosStd: (cfg) => unwrap(http.get("/basic/precios-std", cfg)),
   preciosStdBySegmento: (segmentoId, cfg) =>
-    unwrap(http.get(`/basic/precios/std/by-segmento/${encodeURIComponent(segmentoId)}`, cfg)),
+    unwrap(http.get(`/basic/precios-std-by-segmento/${encodeURIComponent(segmentoId)}`, cfg)),
   precioStdBySP: (segmentoId, productoId, cfg) =>
     unwrap(
       http.get(
-        `/basic/precios/std/by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
+        `/basic/precios-std-by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
         cfg
       )
     ),
-  preciosReal: (cfg) => unwrap(http.get("/basic/precios/real", cfg)),
+  preciosReal: (cfg) => unwrap(http.get("/basic/precios-real", cfg)),
   preciosRealByFecha: (fechaCalculo, cfg) =>
     unwrap(
-      http.get("/basic/precios/real/by-fecha", {
+      http.get("/basic/precios-real-by-fecha", {
         params: { fecha_calculo: fechaCalculo },
         ...cfg,
       })
@@ -434,32 +432,32 @@ const basic = {
   preciosRealBySP: (segmentoId, productoId, cfg) =>
     unwrap(
       http.get(
-        `/basic/precios/real/by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
+        `/basic/precios-real-by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
         cfg
       )
     ),
   preciosCompare: (fechaCalculo, cfg) =>
     unwrap(
-      http.get("/basic/precios/compare", {
+      http.get("/basic/precios-compare", {
         params: { fecha_calculo: fechaCalculo || undefined },
         ...cfg,
       })
     ),
 
   // ✅ NUEVOS: CDR y cuentas
-  cdrLineas: (cfg) => unwrap(http.get("/basic/cdr/lineas", cfg)),
-  cdrLineasCount: (cfg) => unwrap(http.get("/basic/cdr/lineas/count", cfg)),
+  cdrLineas: (cfg) => unwrap(http.get("/basic/cdr-lineas", cfg)),
+  cdrLineasCount: (cfg) => unwrap(http.get("/basic/cdr-lineas-count", cfg)),
   cuentas: (cfg) => unwrap(http.get("/basic/cuentas", cfg)),
   cuentasByLinea: (lineaCdr, cfg) =>
-    unwrap(http.get(`/basic/cuentas/by-linea/${encodeURIComponent(lineaCdr)}`, cfg)),
+    unwrap(http.get(`/basic/cuentas-by-linea/${encodeURIComponent(lineaCdr)}`, cfg)),
 
   // ✅ NUEVOS: Conteos adicionales
   countContractsByCentro: (cfg) =>
-    unwrap(http.get("/basic/contracts/count-by-centro", cfg)),
+    unwrap(http.get("/basic/contracts-count-by-centro", cfg)),
   countContractsByProducto: (cfg) =>
-    unwrap(http.get("/basic/contracts/count-by-producto", cfg)),
+    unwrap(http.get("/basic/contracts-count-by-producto", cfg)),
   countContractsByGestor: (cfg) =>
-    unwrap(http.get("/basic/contracts/count-by-gestor", cfg)),
+    unwrap(http.get("/basic/contracts-count-by-gestor", cfg)),
 };
 
 // ✅ Analytics - COMPLETAMENTE NUEVO MÓDULO CON MÉTRICAS FINANCIERAS
@@ -612,33 +610,50 @@ const kpis = {
     unwrap(http.get(`/kpis/centro/${centroId}/bonus-total`, { params: { periodo }, ...cfg })),
 };
 
-// ✅ Charts - ACTUALIZADO CON NUEVOS MÉTODOS
+// ✅ Charts V4.4 - CORREGIDO PIVOT + NUEVOS ENDPOINTS + CONFIDENCIALIDAD
 const charts = {
   fromData: (data, config = {}, cfg) =>
     unwrap(http.post("/charts/from-data", { data, config }, cfg)),
-  pivot: ({ userId, message, currentChartConfig, chartInteractionType = "pivot" }, cfg) =>
+  
+  // 🔧 CORREGIDO v13.1: Pivot V4.4 con nombres de campos exactos de main.py
+  pivot: ({ userId, userRole = "GESTOR", message, currentChartConfig, gestorId, centroId }, cfg) =>
     unwrap(
       http.post("/charts/pivot", {
-        user_id: userId,
-        message,
-        current_chart_config: currentChartConfig || {},
-        chart_interaction_type: chartInteractionType,
+        userid: userId,                                    // ✅ CORRECTO: userid
+        user_role: userRole,                               // ✅ CORRECTO: user_role
+        message: message,                                  // ✅ CORRECTO: message
+        current_chart_config: currentChartConfig || {},    // ✅ CORREGIDO: current_chart_config
+        chart_interaction_type: "pivot",                   // ✅ AÑADIDO: chart_interaction_type
+        gestor_id: gestorId || null,                       // ✅ AÑADIDO: gestor_id
+        centro_id: centroId || null                        // ✅ AÑADIDO: centro_id
       }, cfg)
     ),
+    
   quick: ({ queryMethod, chartType = "bar", kwargs = {} }, cfg) =>
     unwrap(http.post("/charts/quick", { query_method: queryMethod, chart_type: chartType, kwargs }, cfg)),
+    
+  // ✅ AÑADIDOS: Nuevos endpoints V4.4
+  meta: (params = {}, cfg) =>
+    unwrap(http.get("/charts/meta", { params: toQueryBody(params), ...cfg })),
+  options: (userRole, cfg) =>
+    unwrap(http.get(`/charts/options/${encodeURIComponent(userRole)}`, cfg)),
+  validateConfig: (config, cfg) =>
+    unwrap(http.post("/charts/validate-config", config, cfg)),
+  createSecure: (payload, cfg) =>
+    unwrap(http.post("/charts/create-secure", toQueryBody(payload), cfg)),
+    
+  // Endpoints existentes mantenidos
   supportedTypes: (cfg) => unwrap(http.get("/charts/supported-types", cfg)),
   validate: (cfg) => unwrap(http.get("/charts/validate", cfg)),
   availableQueries: (cfg) => unwrap(http.get("/charts/available-queries", cfg)),
   availableTypes: (cfg) => unwrap(http.get("/charts/available-types", cfg)),
-  meta: (cfg) => unwrap(http.get("/charts/meta", cfg)),
   summaryDashboard: (cfg) => unwrap(http.get("/charts/summary-dashboard", cfg)),
-  gestoresRanking: ({ metric = "CONTRATOS", chartType = "horizontal_bar" } = {}, cfg) =>
-    unwrap(http.get("/charts/gestores-ranking", { params: { metric, chart_type: chartType }, ...cfg })),
-  centrosDistribution: ({ chartType = "donut" } = {}, cfg) =>
-    unwrap(http.get("/charts/centros-distribution", { params: { chart_type: chartType }, ...cfg })),
-  productosPopularity: ({ chartType = "horizontal_bar" } = {}, cfg) =>
-    unwrap(http.get("/charts/productos-popularity", { params: { chart_type: chartType }, ...cfg })),
+  gestoresRanking: ({ metric = "CONTRATOS", chartType = "horizontal_bar", periodo = "2025-10" } = {}, cfg) =>
+    unwrap(http.get("/charts/gestores-ranking", { params: { metric, chart_type: chartType, periodo }, ...cfg })),
+  centrosDistribution: ({ chartType = "donut", periodo = "2025-10" } = {}, cfg) =>
+    unwrap(http.get("/charts/centros-distribution", { params: { chart_type: chartType, periodo }, ...cfg })),
+  productosPopularity: ({ chartType = "horizontal_bar", periodo = "2025-10" } = {}, cfg) =>
+    unwrap(http.get("/charts/productos-popularity", { params: { chart_type: chartType, periodo }, ...cfg })),
   preciosComparison: ({ fechaCalculo = null, chartType = "bar" } = {}, cfg) =>
     unwrap(
       http.get("/charts/precios-comparison", {
@@ -648,6 +663,12 @@ const charts = {
     ),
   gastosByCentro: ({ fecha, chartType = "stacked_bar" }, cfg) =>
     unwrap(http.get("/charts/gastos-by-centro", { params: { fecha, chart_type: chartType }, ...cfg })),
+};
+
+// ✅ Admin V4.4 - MÓDULO COMPLETAMENTE NUEVO
+const admin = {
+  validateChartGenerator: (cfg) =>
+    unwrap(http.get("/admin/validate-chart-generator", cfg)),
 };
 
 // ✅ Dashboards - COMPLETAMENTE EXTENDIDO CON NUEVOS ENDPOINTS
@@ -752,7 +773,7 @@ const feedback = {
   process: (payload, cfg) => unwrap(http.post("/feedback/process", toQueryBody(payload), cfg)),
 };
 
-// ✅ Chat Agent v10.0 - COMPLETAMENTE ACTUALIZADO
+// ✅ Chat Agent v11.0 - COMPLETAMENTE ACTUALIZADO
 const chat = {
   message: (payload, cfg) => {
     // ✅ DEBUG: Ver payload antes de enviar
@@ -809,7 +830,7 @@ const user = {
 };
 
 /* ============================
- * Export público - COMPLETAMENTE ACTUALIZADO
+ * Export público - COMPLETAMENTE ACTUALIZADO V13.1
  * ============================ */
 
 const api = {
@@ -821,20 +842,21 @@ const api = {
   // módulos actualizados
   system,
   catalogs,               // ✅ +2 nuevos endpoints
-  basic,                  // ✅ 35+ endpoints (todos mantenidos)
+  basic,                  // ✅ 35+ endpoints (todos mantenidos) + gastosByFecha añadido
   analytics,              // ✅ +9 nuevos endpoints de métricas financieras
   kpis,                   // ✅ +6 nuevos endpoints financieros específicos
   comparatives,           // ✅ +1 endpoint
   deviations,             // ✅ +3 endpoints  
   incentives,             // ✅ +3 nuevos endpoints detallados
   dataQueries,
-  charts,                 // ✅ +1 endpoint
+  charts,                 // ✅ CORREGIDO V13.1: pivot con campos correctos
+  admin,                  // ✅ NUEVO módulo V4.4
   dashboards,             // ✅ +9 nuevos endpoints específicos
   reports,
   kpiCalc,                // ✅ corregido
   security,
   
-  // ✅ NUEVOS MÓDULOS
+  // NUEVOS MÓDULOS
   sql,                    // ✅ 2 endpoints
   gestorAnalysis,         // ✅ 1 endpoint
   reflection,             // ✅ 1 endpoint  
@@ -842,7 +864,7 @@ const api = {
   integration,            // ✅ 4 endpoints
   
   // agentes actualizados
-  chat,                   // ✅ Chat Agent v10.0
+  chat,                   // ✅ Chat Agent v11.0
   agent,                  // ✅ CDG Agent v6.0
   user,
 };
@@ -863,6 +885,7 @@ export {
   incentives,
   dataQueries,
   charts,
+  admin,                  // ✅ AÑADIDO
   dashboards,
   reports,
   kpiCalc,

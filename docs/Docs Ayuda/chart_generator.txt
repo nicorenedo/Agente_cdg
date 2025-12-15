@@ -1,4 +1,4 @@
-# chart_generator.py — V4.1 (fixes integración y passthrough)
+## chart_generator.py — V4.2 (Enhanced con Azure OpenAI para pivoteo)
 
 import json
 import logging
@@ -12,6 +12,15 @@ try:
     from queries.basic_queries import basic_queries
 except Exception:
     from ..queries.basic_queries import basic_queries  # type: ignore
+
+# 🚀 NUEVA INTEGRACIÓN: Azure OpenAI para interpretación avanzada
+try:
+    from utils.initial_agent import iniciar_agente_llm
+    from prompts.chart_prompts import CHART_PIVOT_SYSTEM_PROMPT, build_chart_pivot_prompt
+    AZURE_OPENAI_AVAILABLE = True
+except ImportError:
+    AZURE_OPENAI_AVAILABLE = False
+    logger.warning("Azure OpenAI no disponible para interpretación avanzada de gráficos")
 
 CDG_CHART_CONFIGS = {
     'colors': {
@@ -60,13 +69,15 @@ CDG_CHART_CONFIGS = {
     }
 }
 
+
 class QueryIntegratedChartGenerator:
     def __init__(self):
         self.chart_configs = CDG_CHART_CONFIGS
         self.supported_types = list(self.chart_configs['chart_types'].keys())
         self.current_charts: Dict[str, Dict[str, Any]] = {}
         self.basic_queries = basic_queries
-        logger.info("✅ QueryIntegratedChartGenerator V4.1 inicializado con Basic Queries")
+        self.azure_available = AZURE_OPENAI_AVAILABLE
+        logger.info("✅ QueryIntegratedChartGenerator V4.2 inicializado con Azure OpenAI para interpretación avanzada")
 
     # ---------- Utilidades internas ----------
     def _coerce_rows(self, query_data: Any) -> List[Dict[str, Any]]:
@@ -85,8 +96,9 @@ class QueryIntegratedChartGenerator:
         sample = rows[0]
         return isinstance(sample, dict) and 'label' in sample and 'value' in sample
 
-    # ---------- Generación principal ----------
+    # ---------- Generación principal (SIN CAMBIOS - funciona bien) ----------
     def generate_chart_from_data(self, query_data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
+        # [Mantener el método actual - funciona correctamente]
         try:
             rows = self._coerce_rows(query_data)
             if not rows:
@@ -137,6 +149,157 @@ class QueryIntegratedChartGenerator:
         except Exception as e:
             logger.exception("Error generando gráfico desde datos")
             return self._create_error_chart(str(e))
+
+    # ---------- 🚀 INTERPRETACIÓN MEJORADA CON AZURE OPENAI ----------
+    def interpret_chart_change(self, user_message: str, current_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        🚀 MEJORADO: Interpretación con Azure OpenAI + fallback al método original
+        """
+        try:
+            # 1. 🚀 NUEVA FUNCIONALIDAD: Intentar interpretación con Azure OpenAI
+            if self.azure_available:
+                azure_result = self._interpret_with_azure_openai(user_message, current_config)
+                if azure_result.get('status') == 'success':
+                    logger.info("✅ Interpretación exitosa con Azure OpenAI")
+                    return azure_result
+
+            # 2. Fallback al método original (que ya funciona bien)
+            logger.info("🔄 Usando interpretación por patrones (fallback)")
+            return self._interpret_with_patterns(user_message, current_config)
+
+        except Exception as e:
+            logger.exception("Error interpretando cambio de gráfico")
+            return {'status': 'error', 'message': f'Error procesando cambio: {str(e)}', 'new_config': current_config, 'changes_made': []}
+
+    def _interpret_with_azure_openai(self, user_message: str, current_config: Dict[str, Any]) -> Dict[str, Any]:
+        """🚀 NUEVA FUNCIÓN: Interpretación inteligente con Azure OpenAI"""
+        try:
+            client = iniciar_agente_llm()
+            
+            prompt = build_chart_pivot_prompt(user_message, current_config)
+            
+            response = client.chat.completions.create(
+                model="gpt-4.1",  # Tu deployment
+                messages=[
+                    {"role": "system", "content": CHART_PIVOT_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Instrucción: {user_message}"}
+                ],
+                temperature=0.1,
+                max_tokens=200
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Limpiar respuesta (quitar posibles `````` wrapping)
+            if result_text.startswith('```'):
+                result_text = result_text.split('\n', 1).rsplit('\n', 1)[1]
+            
+            try:
+                ai_changes = json.loads(result_text)
+            except json.JSONDecodeError:
+                logger.warning(f"Azure OpenAI devolvió JSON inválido: {result_text}")
+                return {'status': 'fallback'}
+            
+            # Aplicar cambios sugeridos por la IA
+            new_config = current_config.copy()
+            changes_made = []
+            
+            if 'chart_type' in ai_changes and ai_changes['chart_type'] in self.supported_types:
+                new_config['chart_type'] = ai_changes['chart_type']
+                type_name = self.chart_configs['chart_types'].get(ai_changes['chart_type'], ai_changes['chart_type'])
+                changes_made.append(f"Tipo de gráfico cambiado a {type_name}")
+            
+            if 'dimension' in ai_changes and ai_changes['dimension'] in self.chart_configs['dimensions']:
+                new_config['dimension'] = ai_changes['dimension']
+                dim_name = self.chart_configs['dimensions'][ai_changes['dimension']]
+                changes_made.append(f"Dimensión cambiada a {dim_name}")
+            
+            if 'metric' in ai_changes and ai_changes['metric'] in self.chart_configs['metrics']:
+                new_config['metric'] = ai_changes['metric']
+                metric_name = self.chart_configs['metrics'][ai_changes['metric']]
+                changes_made.append(f"Métrica cambiada a {metric_name}")
+            
+            return {
+                'status': 'success',
+                'new_config': new_config,
+                'changes_made': changes_made,
+                'message': '; '.join(changes_made) if changes_made else 'Configuración interpretada con IA',
+                'original_config': current_config,
+                'user_message': user_message,
+                'interpretation_method': 'azure_openai'
+            }
+        except Exception as e:
+            logger.warning(f"Error en interpretación Azure OpenAI: {e}")
+            return {'status': 'fallback'}
+
+    def _interpret_with_patterns(self, user_message: str, current_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Método original de interpretación por patrones (MANTENER COMO ESTÁ)"""
+        try:
+            message_lower = user_message.lower()
+            new_config = current_config.copy()
+            changes_made: List[str] = []
+
+            type_changes = {
+                'barras': 'bar', 'bar': 'bar',
+                'líneas': 'line', 'linea': 'line', 'line': 'line',
+                'circular': 'pie', 'pie': 'pie', 'torta': 'pie',
+                'área': 'area', 'area': 'area',
+                'dispersión': 'scatter', 'scatter': 'scatter',
+                'horizontal': 'horizontal_bar',
+                'donut': 'donut', 'rosquilla': 'donut',
+                'apiladas': 'stacked_bar', 'stacked': 'stacked_bar'
+            }
+            for keyword, ctype in type_changes.items():
+                if keyword in message_lower and ctype != current_config.get('chart_type'):
+                    new_config['chart_type'] = ctype
+                    changes_made.append(f"Tipo de gráfico cambiado a {self.chart_configs['chart_types'][ctype]}")
+                    break
+
+            dimension_changes = {
+                'gestores': 'gestor', 'gestor': 'gestor',
+                'centros': 'centro', 'centro': 'centro',
+                'segmentos': 'segmento', 'segmento': 'segmento',
+                'productos': 'producto', 'producto': 'producto',
+                'período': 'periodo', 'periodo': 'periodo', 'tiempo': 'periodo',
+                'clientes': 'cliente', 'cliente': 'cliente',
+                'contratos': 'contrato', 'contrato': 'contrato'
+            }
+            for keyword, dim in dimension_changes.items():
+                if keyword in message_lower and dim != current_config.get('dimension'):
+                    new_config['dimension'] = dim
+                    changes_made.append(f"Dimensión cambiada a {self.chart_configs['dimensions'].get(dim, dim)}")
+                    break
+
+            metric_changes = {
+                'roe': 'ROE', 'rentabilidad': 'ROE',
+                'margen': 'MARGEN_NETO',
+                'ingresos': 'INGRESOS',
+                'eficiencia': 'EFICIENCIA',
+                'contratos': 'CONTRATOS',
+                'performance': 'PERFORMANCE',
+                'precio': 'PRECIO_STD', 'precios': 'PRECIO_STD',
+                'gastos': 'GASTOS',
+                'clientes': 'CLIENTES',
+                'desviación': 'DESVIACION'
+            }
+            for keyword, m in metric_changes.items():
+                if keyword in message_lower and m != current_config.get('metric'):
+                    new_config['metric'] = m
+                    changes_made.append(f"Métrica cambiada a {self.chart_configs['metrics'].get(m, m)}")
+                    break
+
+            return {
+                'status': 'success' if changes_made else 'no_changes',
+                'new_config': new_config,
+                'changes_made': changes_made,
+                'message': '; '.join(changes_made) if changes_made else 'No se detectaron cambios específicos',
+                'original_config': current_config,
+                'user_message': user_message,
+                'interpretation_method': 'pattern_matching'
+            }
+        except Exception as e:
+            logger.exception("Error interpretando cambio de gráfico con patrones")
+            return {'status': 'error', 'message': f'Error procesando cambio: {str(e)}', 'new_config': current_config, 'changes_made': []}
 
     # ---------- Gráficos integrados con Basic Queries ----------
     def generate_gestores_ranking_chart(self, metric: str = 'CONTRATOS', chart_type: str = 'bar') -> Dict[str, Any]:
@@ -647,6 +810,51 @@ def validate_chart_generator() -> Dict[str, Any]:
         logger.exception("Error validando Chart Generator")
         return {'status': 'ERROR', 'message': str(e)}
 
+# ✅ NUEVA FUNCIÓN PARA INTEGRACIÓN CON CDG_AGENT
+def handle_chart_change_request(user_message: str, current_chart_config: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    ✅ NUEVA FUNCIÓN: Maneja cambios de gráfico con prompt integrado del sistema CDG
+    
+    Args:
+        user_message: Mensaje del usuario con la solicitud de cambio
+        current_chart_config: Configuración actual del gráfico
+        context: Contexto adicional del agente CDG
+        
+    Returns:
+        Dict con el resultado del cambio solicitado
+    """
+    try:
+        logger.info(f"🔄 Procesando cambio de gráfico con prompt CDG integrado")
+        
+        # Crear instancia del generador
+        generator = QueryIntegratedChartGenerator()
+        
+        # Usar el método de interpretación mejorado (que ya tienes)
+        result = generator.interpret_chart_change(user_message, current_chart_config)
+        
+        # Añadir contexto específico del sistema CDG si se proporciona
+        if context:
+            result['context'] = context
+            result['agente'] = context.get('agente', 'CDG')
+            result['sistema'] = 'Control de Gestión Banca March'
+        
+        # Añadir información adicional para el agente CDG
+        result['chart_change_handler'] = 'handle_chart_change_request'
+        result['integrated_with_system'] = True
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error en handle_chart_change_request: {e}")
+        return {
+            'status': 'error',
+            'message': f'Error procesando cambio de gráfico: {str(e)}',
+            'new_config': current_chart_config,
+            'changes_made': [],
+            'context': context or {}
+        }
+
 if __name__ == "__main__":
     # demo opcional: evita prints extensos en producción
     print(validate_chart_generator())
+

@@ -65,24 +65,23 @@ try:
     except Exception:
         from tools.kpi_calculator import KPICalculator as _KPICalcCls
 
-    # Chart generator actualizado con funciones de pivot mejoradas
     try:
         from tools.chart_generator import (
-            CDGDashboardGenerator,
-            QueryIntegratedChartGenerator,
-            create_chart_from_query_data,
-            create_quick_chart,
-            pivot_chart_with_query_integration,
-            handle_chart_change_request,  # ✅ Función de pivot mejorada
-            validate_chart_generator,
-            ChartFactory,
+            CDGDashboardGenerator, QueryIntegratedChartGenerator, 
+            create_chart_from_query_data, create_quick_chart, 
+            pivot_chart_with_query_integration, handle_chart_change_request,
+            validate_chart_generator, ChartFactory,
+            # 🔐 NUEVAS FUNCIONES V4.4:
+            get_chart_options_by_role, validate_chart_config_for_user,
+            create_chart_with_confidentiality, interpret_chart_change_with_context,
+            handle_chart_pivot_request, get_chart_metadata_for_frontend
         )
-        try:
-            from tools.chart_generator import CDG_CHART_CONFIGS
-        except Exception:
-            CDG_CHART_CONFIGS = {"chart_types": {}, "dimensions": {}, "metrics": {}, "colors": {}}
-    except Exception:
+        CHART_GENERATOR_AVAILABLE = True
+        # logger.info will be available after logger is defined below
+    except Exception as e:
         CHART_GENERATOR_AVAILABLE = False
+        # logger.error will be available after logger is defined below
+
         # Stubs mínimos para no romper endpoints /charts/*
         class _ChartGenStub:
             current_charts = {}
@@ -233,6 +232,12 @@ except Exception as e:
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("cdg-api-v11")
 
+# Now that logger is defined, log chart generator status if desired
+if CHART_GENERATOR_AVAILABLE:
+    logger.info("✅ Chart generator V4.4 cargado correctamente")
+else:
+    logger.error("❌ Error cargando chart generator o no disponible")
+
 # ============================================================================
 # 🎯 FUNCIONES DE RESPUESTA UNIFORME
 # ============================================================================
@@ -312,7 +317,7 @@ try:
     chat_agent = create_universal_chat_agent()  # ✅ Chat Agent v10.0
     chat_status = chat_agent.get_agent_status()
     print(f"✅ Chat Agent v10.0 inicializado:")
-    print(f"   - Modo: {chat_status.get('mode', 'Unknown')}")
+    print(f"   - Modo: {getattr(chat_agent, 'mode', 'PRODUCTION' if IMPORTS_SUCCESSFUL else 'FALLBACK')}")
     print(f"   - Catálogos: {len(chat_status.get('query_catalogs', []))}")
     print(f"   - Tablas BD: {chat_status['database_info']['tables_available'] if 'database_info' in chat_status else 'N/A'}")
 
@@ -386,11 +391,16 @@ class CDGAnalysisRequest(BaseModel):
     chart_interaction_type: Optional[str] = None
     context: Dict[str, Any] = {}
 
+# AÑADIR después de otros modelos:
 class ChartPivotRequest(BaseModel):
-    user_id: str
+    userid: str
     message: str
     current_chart_config: Optional[Dict[str, Any]] = None
-    chart_interaction_type: Optional[str] = "pivot"
+    chart_interaction_type: str = "pivot"
+    user_role: Optional[str] = "GESTOR"
+    gestor_id: Optional[str] = None
+    centro_id: Optional[str] = None
+
 
 class ReportRequest(BaseModel):
     user_id: str
@@ -472,29 +482,42 @@ def version():
 @app.post("/chat/message", tags=["Chat Agent v11.0"], response_model=ApiResponse)
 async def chat_message(req: ChatRequest):
     """
-    🎯 CHAT PRINCIPAL - Chat Agent v11.0 con sistema de confidencialidad
+    🎯 CHAT PRINCIPAL - Chat Agent v11.0 con sistema de confidencialidad MEJORADO
     """
     try:
-        # 🔐 NUEVO: Usar instancias en lugar de métodos estáticos
+        # 🔐 INSTANCIAS DE VALIDACIÓN DE CONFIDENCIALIDAD
         permission_manager = PermissionManager()
         
         extracted_gestor_id = permission_manager.extract_gestor_id_from_message(req.message, req.context)
         user_role = permission_manager.determine_user_role(req.user_id)
         
-        # 🚨 BLOQUEO POR CONFIDENCIALIDAD
-        if (extracted_gestor_id and 
-            req.gestor_id and 
-            not permission_manager.validate_access_permission(user_role, extracted_gestor_id, req.gestor_id)):
-            
-            return ok({
-                "response": "🔐 **Acceso Restringido por Confidencialidad**\\n\\nNo puede acceder a datos personales de otros gestores.",
-                "response_type": "access_denied",
-                "access_info": {
-                    "requested_gestor": extracted_gestor_id,
-                    "user_gestor": req.gestor_id,
-                    "user_role": user_role.value
-                }
-            }, meta={"source": "permission_validation", "blocked": True})
+        # 🚨 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD
+        if extracted_gestor_id is not None:
+            if not permission_manager.validate_access_permission(user_role, extracted_gestor_id, req.gestor_id):
+                # Mensaje personalizado según el tipo de violación
+                if extracted_gestor_id == -1:
+                    # Consulta confidencial genérica (ranking, comparativas, etc.)
+                    return ok({
+                        "response": "🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a información comparativa o rankings de otros gestores por motivos de confidencialidad bancaria.\n\n💡 **Alternativas disponibles:**\n- Consulte su propio análisis personal\n- Solicite datos agregados y promedios del sector\n- Use benchmarks anónimos sin identificación personal",
+                        "response_type": "access_denied",
+                        "access_info": {
+                            "restriction_type": "comparative_data",
+                            "user_role": user_role.value,
+                            "reason": "confidentiality_policy"
+                        }
+                    }, meta={"source": "permission_validation", "blocked": True})
+                else:
+                    # Solicitud de gestor específico
+                    return ok({
+                        "response": f"🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a datos personales del Gestor {extracted_gestor_id}. Solo puede consultar sus propios datos por motivos de confidencialidad bancaria.\n\n💡 **Puede consultar:**\n- Sus propias métricas y KPIs\n- Datos agregados del centro/sector\n- Promedios y benchmarks anónimos",
+                        "response_type": "access_denied",
+                        "access_info": {
+                            "requested_gestor": extracted_gestor_id,
+                            "user_gestor": req.gestor_id,
+                            "user_role": user_role.value,
+                            "reason": "cross_gestor_access_denied"
+                        }
+                    }, meta={"source": "permission_validation", "blocked": True})
         
         # Continuar con el flujo normal...
         msg = ChatMessage(
@@ -521,6 +544,7 @@ async def chat_message(req: ChatRequest):
         logger.error(f"Error en chat message: {e}")
         return ok({"error": str(e), "response": "Error procesando mensaje"}, 
                  meta={"note": "chat_agent_error"})
+
 
 
 @app.get("/chat/status", tags=["Chat Agent v10.0"], response_model=ApiResponse)
@@ -731,50 +755,54 @@ def agent_suggest_questions(user_id: Optional[str] = None):
 
 @app.post("/integration/classify-and-route", tags=["Integration"], response_model=ApiResponse)
 async def integration_classify_and_route(body: Dict[str, Any] = Body(...)):
-    """
-    🎯 ENDPOINT DE CLASIFICACIÓN PURA - Chat Agent v10.0 clasifica
-    """
+    """ENDPOINT DE CLASIFICACIÓN PURA - Chat Agent v10.0 clasifica"""
     try:
-        # ✅ NUEVO: Validación de entrada más flexible
-        user_id = body.get("user_id", "anonymous")
+        # 🔧 CORRECCIÓN: Extraer datos del request correctamente
         message = body.get("message", "")
-        context = body.get("context", {})
-        
-        if not message:
-            return ok({"error": "message requerido"}, meta={"note": "missing_message"})
-        
-        # ✅ NUEVO: Compatibilidad con diferentes formatos
+        user_role = body.get("user_role", "GESTOR")
+        user_context = body.get("user_context", {})
         gestor_id = body.get("gestorId") or body.get("gestor_id")
         periodo = body.get("periodo")
         mode = body.get("mode", "general")
         current_chart_config = body.get("currentChartConfig") or body.get("current_chart_config", {})
         
+        # 🎯 CORRECCIÓN CRÍTICA: Pasar user_role al contexto
+        context = {
+            'user_role': user_role,  # ← ESTA ERA LA LÍNEA FALTANTE
+            'user_id': body.get("user_id", "default_user"),
+            'user_context': user_context,
+            'gestor_id': gestor_id,
+            'periodo': periodo,
+            'mode': mode,
+            'current_chart_config': current_chart_config,
+            'scope': user_role.lower() if user_role else 'gestor'
+        }
+        
         if hasattr(chat_agent, 'classifier'):
+            # Usar el clasificador con el contexto corregido
             routing_result = await chat_agent.classifier.classify_and_route(
                 message,
-                {
-                    'gestor_id': gestor_id,
-                    'periodo': periodo,
-                    'mode': mode,
-                    'context': context,
-                    'current_chart_config': current_chart_config
-                }
+                context=context
             )
-            return ok(routing_result, meta={"source": "intelligent_classifier_v10"})
+            return ok(routing_result, meta={'source': 'intelligent_classifier_v10'})
         else:
-            # ✅ FALLBACK mejorado
+            # FALLBACK mejorado
             flow_type = "PIVOT" if any(word in message.lower() for word in ["cambia", "convierte", "muestra", "modifica"]) else "DYNAMIC_SQL"
             return ok({
-                "flow_type": flow_type, 
-                "confidence": 0.7,
-                "routing": {"target": "fallback"},
-                "classification": "rule_based"
-            }, meta={"note": "classifier_fallback"})
+                'flow_type': flow_type,
+                'confidence': 0.7,
+                'routing': 'target fallback',
+                'classification': 'rule-based'
+            }, meta={'note': 'classifier-fallback'})
             
     except Exception as e:
         logger.error(f"Error en classify-and-route: {e}")
-        return ok({"error": str(e), "flow_type": "DYNAMIC_SQL", "confidence": 0.1}, 
-                 meta={"note": "classification_error"})
+        return ok({
+            'error': str(e),
+            'flow_type': 'DYNAMIC_SQL',
+            'confidence': 0.1
+        }, meta={'note': 'classification-error'})
+
 
 
 @app.post("/integration/execute-predefined", tags=["Integration"], response_model=ApiResponse)
@@ -864,7 +892,7 @@ def integration_agent_coordination():
 @app.websocket("/ws/chat/{user_id}")
 async def chat_websocket(websocket: WebSocket, user_id: str):
     """
-    🎯 WebSocket optimizado para Chat Agent v11.0 CON SISTEMA DE CONFIDENCIALIDAD
+    🎯 WebSocket optimizado para Chat Agent v11.0 CON SISTEMA DE CONFIDENCIALIDAD + CHART GENERATOR V4.4
     """
     await websocket.accept()
     
@@ -872,17 +900,50 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
     permission_manager = PermissionManager()
     user_role = permission_manager.determine_user_role(user_id)
     
+    # 🔐 V4.4: Variables de contexto de confidencialidad para gráficos
+    current_gestor_id = None
+    current_centro_id = None
+    confidentiality_active = True
+    current_chart_config = {}  # 📊 NUEVO: Mantener configuración actual del gráfico
+
+    # 🔐 V4.4: Función helper para enriquecer mensajes con contexto de gráficos
+    def enrich_message_with_chart_context(message: str, context: dict) -> dict:
+        """Enriquece mensajes con contexto de confidencialidad para gráficos"""
+        try:
+            return {
+                'message': message,
+                'user_role': user_role.value,
+                'user_context': {
+                    'gestor_id': current_gestor_id,
+                    'centro_id': current_centro_id
+                },
+                'confidentiality_active': confidentiality_active,
+                'current_chart_config': current_chart_config,
+                'websocket_version': 'V4.4_with_charts'
+            }
+        except Exception:
+            return {'message': message}
+    
     await websocket.send_json({
         "type": "ready", 
         "user_id": user_id, 
         "chat_agent": "v11.0",  # ⬅️ ACTUALIZADO
         "cdg_agent": "v6.1",    # ⬅️ ACTUALIZADO
-        "integration": "perfect_with_confidentiality",  # ⬅️ NUEVO
+        "chart_generator": "v4.4",  # 📊 NUEVO: Versión de gráficos
+        "integration": "perfect_with_confidentiality_and_charts",  # ⬅️ NUEVO
         "user_role": user_role.value,  # 🔐 NUEVO: Informar rol al frontend
         "security_features": [  # 🔐 NUEVO: Lista de funcionalidades
             "role_based_access",
             "automatic_permission_validation", 
-            "confidential_data_protection"
+            "confidential_data_protection",
+            "dynamic_chart_pivot",  # 📊 NUEVO
+            "chart_confidentiality_controls"  # 📊 NUEVO
+        ],
+        "chart_features": [  # 📊 NUEVO: Capacidades de gráficos
+            "conversational_chart_changes",
+            "role_based_chart_options",
+            "confidential_data_filtering",
+            "azure_openai_interpretation"
         ],
         "ts": now_iso()
     })
@@ -905,6 +966,25 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
                 await websocket.send_json({"type": "pong", "ts": now_iso()})
                 continue
 
+            # 📊 NUEVO V4.4: Manejo específico de mensajes de gráficos
+            message_type = payload.get("type", "chat")
+            
+            if message_type == "chart_change":
+                await handle_chart_change_websocket(websocket, payload, user_role, current_gestor_id, current_centro_id)
+                continue
+            elif message_type == "chart_request":
+                await handle_chart_request_websocket(websocket, payload, user_role, current_gestor_id, current_centro_id)
+                continue
+            elif message_type == "update_chart_config":
+                # 📊 Actualizar configuración actual del gráfico
+                current_chart_config.update(payload.get("chart_config", {}))
+                await websocket.send_json({
+                    "type": "chart_config_updated",
+                    "config": current_chart_config,
+                    "ts": now_iso()
+                })
+                continue
+
             msg = payload.get("message", "").strip()
             if not msg:
                 await websocket.send_json({
@@ -919,6 +999,7 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
             if "gestor-" in user_id:
                 try:
                     gestor_id = user_id.split("gestor-")[1].split("-")[0]
+                    current_gestor_id = gestor_id  # 📊 Actualizar contexto global
                     logger.info(f"🎯 Gestor ID extraído del user_id: {gestor_id}")
                 except:
                     logger.warning("No se pudo extraer gestor_id del user_id")
@@ -958,8 +1039,17 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
             enhanced_context['user_role'] = user_role.value
             enhanced_context['user_id'] = user_id
             
+            # 📊 V4.4: Añadir contexto de gráficos
+            enhanced_context['chart_context'] = {
+                'current_config': current_chart_config,
+                'confidentiality_level': user_role.value,
+                'chart_permissions': get_chart_options_by_role(user_role.value) if CHART_GENERATOR_AVAILABLE else {}
+            }
+            
             if gestor_id:
                 enhanced_context['gestor_id'] = gestor_id
+                current_centro_id = base_context.get('centro_id')  # 📊 Actualizar contexto global
+                
                 # Detectar si es consulta personal
                 personal_words = ['me comparo', 'mi posición', 'cómo estoy', 'mis oportunidades', 'mi ranking', 'mi performance']
                 enhanced_context['is_personal_query'] = any(word in msg.lower() for word in personal_words)
@@ -972,7 +1062,7 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
                 chat_message_data = {
                     "user_id": user_id,
                     "message": msg,
-                    "context": enhanced_context,  # ✅ CONTEXTO ENRIQUECIDO CON ROLES
+                    "context": enhanced_context,  # ✅ CONTEXTO ENRIQUECIDO CON ROLES Y GRÁFICOS
                     "gestor_id": gestor_id,  # ✅ GESTOR ID DIRECTO
                     "periodo": payload.get("periodo", "2025-10"),  # ✅ PERÍODO POR DEFECTO
                     "include_charts": payload.get("include_charts", True),
@@ -988,8 +1078,8 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
                     periodo=req.periodo,
                     include_charts=req.include_charts,
                     include_recommendations=req.include_recommendations,
-                    context=enhanced_context,  # ✅ CONTEXTO ENRIQUECIDO CON ROLES
-                    current_chart_config=req.current_chart_config
+                    context=enhanced_context,  # ✅ CONTEXTO ENRIQUECIDO CON ROLES Y GRÁFICOS
+                    current_chart_config=current_chart_config  # 📊 NUEVO: Config actual
                 )
 
                 logger.info(f"📨 Mensaje creado - Usuario: {user_id}, Gestor: {gestor_id}, Personal: {enhanced_context.get('is_personal_query', False)}, Rol: {user_role.value}")
@@ -1002,20 +1092,32 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
                 else:
                     data = {"response": str(response)}
                 
+                # 📊 V4.4: Si la respuesta incluye gráficos, actualizar configuración
+                if isinstance(data, dict) and data.get('charts'):
+                    for chart in data.get('charts', []):
+                        if chart.get('config'):
+                            current_chart_config.update(chart['config'])
+                
                 # 🔐 NUEVO: Añadir información de seguridad a la respuesta
                 security_metadata = {
                     "user_role": user_role.value,
                     "permissions_validated": True,
-                    "confidentiality_check": "passed"
+                    "confidentiality_check": "passed",
+                    "chart_permissions_applied": CHART_GENERATOR_AVAILABLE  # 📊 NUEVO
                 }
                 
                 await websocket.send_json({
                     "type": "message", 
                     "data": data, 
                     "chat_agent": "v11.0",  # ⬅️ ACTUALIZADO
-                    "integration": "perfect_with_confidentiality",  # ⬅️ ACTUALIZADO
+                    "chart_generator": "v4.4",  # 📊 NUEVO
+                    "integration": "perfect_with_confidentiality_and_charts",  # ⬅️ ACTUALIZADO
                     "gestor_context": gestor_id,  # ✅ INFO ADICIONAL
                     "security": security_metadata,  # 🔐 NUEVO: Metadata de seguridad
+                    "chart_context": {  # 📊 NUEVO: Contexto de gráficos
+                        "current_config": current_chart_config,
+                        "available_options": enhanced_context.get('chart_context', {}).get('chart_permissions', {})
+                    },
                     "ts": now_iso()
                 })
                 
@@ -1027,7 +1129,8 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
                     "error_context": {
                         "user_role": user_role.value,
                         "gestor_id": gestor_id,
-                        "confidentiality_enabled": True
+                        "confidentiality_enabled": True,
+                        "chart_generator_available": CHART_GENERATOR_AVAILABLE  # 📊 NUEVO
                     },
                     "ts": now_iso()
                 })
@@ -1044,6 +1147,98 @@ async def chat_websocket(websocket: WebSocket, user_id: str):
             logger.warning(f"Error closing websocket for {user_id}: {close_error}")
         finally:
             logger.info(f"WebSocket session ended for user: {user_id} (Role: {user_role.value})")
+
+# 📊 NUEVAS FUNCIONES AUXILIARES PARA EL WEBSOCKET
+
+async def handle_chart_change_websocket(websocket: WebSocket, payload: dict, user_role, gestor_id: str, centro_id: str):
+    """
+    📊 V4.4: Maneja cambios de gráficos en tiempo real vía WebSocket
+    """
+    try:
+        if not CHART_GENERATOR_AVAILABLE:
+            await websocket.send_json({
+                "type": "chart_error",
+                "message": "Chart generator no disponible",
+                "ts": now_iso()
+            })
+            return
+        
+        user_message = payload.get("message", "")
+        current_config = payload.get("current_chart_config", {})
+        
+        # 🔐 Usar función con contexto de confidencialidad
+        result = interpret_chart_change_with_context(
+            user_message=user_message,
+            current_config=current_config,
+            user_role=user_role.value,
+            gestor_id=gestor_id,
+            centro_id=centro_id
+        )
+        
+        # Añadir contexto WebSocket
+        result['websocket_context'] = {
+            'user_role': user_role.value,
+            'gestor_id': gestor_id,
+            'centro_id': centro_id,
+            'handler': 'websocket_chart_change'
+        }
+        
+        await websocket.send_json({
+            "type": "chart_change_result",
+            "data": result,
+            "chart_generator": "v4.4",
+            "ts": now_iso()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error en chart change WebSocket V4.4: {e}")
+        await websocket.send_json({
+            "type": "chart_error",
+            "message": f"Error procesando cambio de gráfico: {str(e)}",
+            "ts": now_iso()
+        })
+
+async def handle_chart_request_websocket(websocket: WebSocket, payload: dict, user_role, gestor_id: str, centro_id: str):
+    """
+    📊 V4.4: Maneja solicitudes de creación de gráficos vía WebSocket
+    """
+    try:
+        if not CHART_GENERATOR_AVAILABLE:
+            await websocket.send_json({
+                "type": "chart_error",
+                "message": "Chart generator no disponible",
+                "ts": now_iso()
+            })
+            return
+        
+        query_data = payload.get("data", [])
+        config = payload.get("config", {})
+        
+        # 🔐 Crear gráfico con contexto de confidencialidad
+        chart = create_chart_with_confidentiality(
+            query_data=query_data,
+            config=config,
+            user_role=user_role.value,
+            gestor_id=gestor_id,
+            centro_id=centro_id
+        )
+        
+        await websocket.send_json({
+            "type": "chart_created",
+            "data": {"chart": chart},
+            "chart_generator": "v4.4",
+            "security_applied": True,
+            "ts": now_iso()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error en chart request WebSocket V4.4: {e}")
+        await websocket.send_json({
+            "type": "chart_error",
+            "message": f"Error creando gráfico: {str(e)}",
+            "ts": now_iso()
+        })
+
 
 
 
@@ -2157,20 +2352,128 @@ def charts_available_queries():
     except Exception as e:
         return ok({"error": str(e)}, meta={"note": "charts_available_queries_error"})
 
+# REEMPLAZAR TODO EL ENDPOINT POR ESTO:
 @app.get("/charts/meta", tags=["Charts"], response_model=ApiResponse)
-def charts_meta():
-    """Metaconfiguración de gráficos"""
+def charts_meta(user_role: str = Query("GESTOR", description="Rol del usuario: GESTOR o CONTROL_GESTION")):
+    """
+    🔐 METACONFIGURACIÓN V4.4 - Con opciones específicas por rol de usuario
+    """
     try:
-        meta = {
-            "chart_types": list((CDG_CHART_CONFIGS.get("chart_types") or {}).keys()) or ["bar", "line", "pie", "area", "horizontal_bar", "donut", "stacked_bar"],
-            "dimensions": CDG_CHART_CONFIGS.get("dimensions") or {"gestor": "Gestor", "centro": "Centro", "segmento": "Segmento", "producto": "Producto", "periodo": "Período", "cliente": "Cliente", "contrato": "Contrato"},
-            "metrics": CDG_CHART_CONFIGS.get("metrics") or {"CONTRATOS": "Número de Contratos"},
-            "colors": CDG_CHART_CONFIGS.get("colors") or {},
-            "supports_pivot": True
-        }
+        if not CHART_GENERATOR_AVAILABLE:
+            return ok({
+                "chart_types": ["bar", "line", "pie"],
+                "dimensions": {"gestor": "Gestor", "centro": "Centro"},
+                "metrics": {"CONTRATOS": "Contratos", "ROE": "ROE"},
+                "user_role": user_role,
+                "confidentiality_enabled": False
+            })
+        
+        # 🚀 Usar función especializada para frontend
+        meta = get_chart_metadata_for_frontend()
+        
+        # 🔐 Añadir opciones específicas por rol
+        role_options = get_chart_options_by_role(user_role)
+        
+        # Combinar metadatos generales con opciones específicas del rol
+        meta.update({
+            'user_role': user_role,
+            'available_for_role': role_options,
+            'confidentiality_rules': {
+                'GESTOR': 'Acceso limitado a datos propios y comparativas anónimas',
+                'CONTROL_GESTION': 'Acceso completo a todos los datos y métricas'
+            }
+        })
+        
         return ok(meta)
+        
     except Exception as e:
+        logger.error(f"Error en charts/meta V4.4: {e}")
         return ok({"error": str(e)}, meta={"note": "charts_meta_error"})
+
+# AÑADIR ESTOS NUEVOS ENDPOINTS:
+
+@app.get("/charts/options/{user_role}", tags=["Charts"], response_model=ApiResponse)
+def charts_options_by_role(user_role: str):
+    """
+    🔐 NUEVO V4.4: Opciones de gráficos disponibles por rol específico
+    """
+    try:
+        if not CHART_GENERATOR_AVAILABLE:
+            return ok({"options": [], "user_role": user_role, "available": False})
+        
+        options = get_chart_options_by_role(user_role)
+        return ok(options, meta={"endpoint": "charts_options_by_role", "version": "V4.4"})
+        
+    except Exception as e:
+        return ok({"error": str(e), "user_role": user_role})
+
+@app.post("/charts/validate-config", tags=["Charts"], response_model=ApiResponse)
+def charts_validate_config(body: dict = Body(...)):
+    """
+    🔐 NUEVO V4.4: Validar configuración de gráfico según permisos del usuario
+    """
+    try:
+        if not CHART_GENERATOR_AVAILABLE:
+            return ok({"valid": True, "note": "Validation skipped - chart generator not available"})
+        
+        config = body.get('config', {})
+        user_role = body.get('user_role', 'GESTOR')
+        user_context = body.get('user_context', {})
+        
+        validation = validate_chart_config_for_user(config, user_role, user_context)
+        return ok(validation, meta={"endpoint": "charts_validate_config", "version": "V4.4"})
+        
+    except Exception as e:
+        return ok({"error": str(e), "valid": False})
+
+@app.get("/admin/validate-chart-generator", tags=["Admin"], response_model=ApiResponse)
+def validate_chart_generator_endpoint():
+    """🔧 Endpoint para validar Chart Generator V4.4"""
+    try:
+        if not CHART_GENERATOR_AVAILABLE:
+            return ok({
+                "status": "ERROR",
+                "message": "Chart Generator no disponible",
+                "version": "N/A",
+                "azure_openai_available": False,
+                "confidentiality_features": False
+            })
+        
+        validation_result = validate_chart_generator()
+        return ok(validation_result, meta={"endpoint": "validate_chart_generator", "version": "V4.4"})
+        
+    except Exception as e:
+        return ok({"status": "ERROR", "message": str(e), "version": "V4.4"})
+
+
+@app.post("/charts/create-secure", tags=["Charts"], response_model=ApiResponse)
+def charts_create_secure(body: dict = Body(...)):
+    """
+    🔐 NUEVO V4.4: Crear gráfico con contexto de confidencialidad completo
+    """
+    try:
+        if not CHART_GENERATOR_AVAILABLE:
+            return ok({"chart": {"id": "mock", "type": "error", "message": "Chart generator not available"}})
+        
+        query_data = body.get('data', [])
+        config = body.get('config', {})
+        user_role = body.get('user_role', 'GESTOR')
+        gestor_id = body.get('gestor_id')
+        centro_id = body.get('centro_id')
+        
+        chart = create_chart_with_confidentiality(
+            query_data=query_data,
+            config=config,
+            user_role=user_role,
+            gestor_id=gestor_id,
+            centro_id=centro_id
+        )
+        
+        return ok({"chart": chart}, meta={"endpoint": "charts_create_secure", "version": "V4.4"})
+        
+    except Exception as e:
+        return ok({"error": str(e), "chart": None})
+
 
 @app.get("/charts/summary-dashboard", tags=["Charts"], response_model=ApiResponse)
 def charts_summary_dashboard():
@@ -2379,29 +2682,47 @@ def charts_from_data(body: Dict[str, Any]):
     except Exception as e:
         return ok({"error": str(e)}, meta={"note": "chart_from_data_error"})
 
+# REEMPLAZAR TODO EL ENDPOINT POR ESTO:
 @app.post("/charts/pivot", tags=["Charts"], response_model=ApiResponse)
 def charts_pivot(body: ChartPivotRequest):
     """
-    🎯 PIVOT DE GRÁFICOS MEJORADO - Usando handle_chart_change_request
+    🚀 PIVOT DE GRÁFICOS V4.4 - Con sistema de confidencialidad integrado
     """
     try:
         if not CHART_GENERATOR_AVAILABLE:
             return ok({"status": "mock", "message": "Chart generator no disponible"})
         
-        # Usar la función mejorada de pivot
-        result = handle_chart_change_request(
-            body.message, 
-            body.current_chart_config or {},
-            body.chart_interaction_type or "pivot"
+        # 🔐 Extraer contexto de usuario para confidencialidad
+        user_role = getattr(body, 'user_role', 'GESTOR')  # Default GESTOR por seguridad
+        gestor_id = getattr(body, 'gestor_id', None)
+        centro_id = getattr(body, 'centro_id', None)
+        
+        logger.info(f"🔄 Charts pivot V4.4 para rol {user_role}")
+        
+        # 🚀 Usar función especializada con confidencialidad
+        result = handle_chart_pivot_request(
+            user_message=body.message,
+            chart_config=body.current_chart_config or {},
+            user_role=user_role,
+            user_context={
+                'gestor_id': gestor_id,
+                'centro_id': centro_id,
+                'userid': body.userid
+            }
         )
         
-        # Fallback a función anterior si no está disponible
-        if not result or result.get("status") == "error":
-            result = pivot_chart_with_query_integration(body.message, body.current_chart_config or {})
+        # Enriquecer respuesta con información del sistema
+        if result.get('status') == 'success':
+            result['pivot_version'] = 'V4.4'
+            result['confidentiality_applied'] = True
+            result['user_role'] = user_role
+            
+        return ok(result, meta={"pivot_type": body.chart_interaction_type, "source": "chart_pivot_v4.4"})
         
-        return ok(result, meta={"pivot_type": body.chart_interaction_type, "source": "chart_pivot_enhanced"})
     except Exception as e:
-        return ok({"error": str(e)}, meta={"note": "chart_pivot_error"})
+        logger.error(f"Error en charts/pivot V4.4: {e}")
+        return ok({"status": "error", "message": str(e)}, meta={"note": "chart_pivot_error"})
+
 
 @app.get("/charts/validate", tags=["Charts"], response_model=ApiResponse)
 def charts_validate():

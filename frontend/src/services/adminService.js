@@ -99,15 +99,18 @@ const AdminService = {
       chartsValidate, 
       chatStatus, 
       agentStatus,
-      integrationCoordination
+      integrationCoordination,
+      adminValidation
     ] = await Promise.allSettled([
       AdminService.getRoot(cfg),
       AdminService.getVersion(cfg),
       AdminService.validateCharts(cfg),
       AdminService.getChatStatus(cfg),
       AdminService.getAgentStatus(cfg),
-      AdminService.getIntegrationCoordination(cfg)
+      AdminService.getIntegrationCoordination(cfg),
+      AdminService.validateChartGenerator(cfg)
     ]);
+
 
     return {
       apiBaseUrl: api.http.baseURL,
@@ -117,6 +120,7 @@ const AdminService = {
       chatAgent: chatStatus.status === 'fulfilled' ? chatStatus.value : { error: chatStatus.reason?.message },
       cdgAgent: agentStatus.status === 'fulfilled' ? agentStatus.value : { error: agentStatus.reason?.message },
       integration: integrationCoordination.status === 'fulfilled' ? integrationCoordination.value : { error: integrationCoordination.reason?.message },
+      admin: adminValidation.status === 'fulfilled' ? adminValidation.value : { error: adminValidation.reason?.message },
       buildTime: new Date().toISOString(),
     };
   },
@@ -222,6 +226,20 @@ const AdminService = {
   getSummaryDashboard: (cfg) =>
     api.charts.summaryDashboard(cfg),
 
+  /** ✅ NUEVO: Opciones de gráficos por rol */
+  getChartOptions: (userRole, cfg) =>
+    getCached(`charts:options:${userRole}`, TTL_META, async () => 
+      api.charts.options(userRole, cfg)
+    ),
+
+  /** ✅ NUEVO: Validar configuración de gráfico */
+  validateChartConfig: (config, cfg) =>
+    api.charts.validateConfig(config, cfg),
+
+  /** ✅ NUEVO: Crear gráfico con seguridad */
+  createSecureChart: (payload, cfg) =>
+    api.charts.createSecure(payload, cfg),
+
   /* -----------------------
    * Dashboards / Reports (extendido)
    * ----------------------- */
@@ -272,6 +290,15 @@ const AdminService = {
     api.feedback.process(payload, cfg),
 
   /* -----------------------
+   * ✅ Admin V4.4 (COMPLETAMENTE NUEVO)
+   * ----------------------- */
+  /** ✅ NUEVO: Validar Chart Generator */
+  validateChartGenerator: (cfg) =>
+    getCached("admin:chart-generator", TTL_FAST, async () => 
+      api.admin.validateChartGenerator(cfg)
+    ),
+
+  /* -----------------------
    * Utilidades expandidas
    * ----------------------- */
   /**
@@ -316,6 +343,13 @@ const AdminService = {
       
       // ✅ Reflection
       ["reflectionInsights", () => AdminService.getReflectionInsights(cfg)],
+
+      // ✅ Charts V4.4
+      ["chartOptions", () => AdminService.getChartOptions("CONTROL_GESTION", cfg)],
+          
+      // ✅ Admin V4.4
+      ["adminValidation", () => AdminService.validateChartGenerator(cfg)],
+
     ];
 
     const startTime = Date.now();
@@ -372,6 +406,7 @@ const AdminService = {
       ["cdgAgent", () => AdminService.getAgentStatus(cfg)],
       ["integration", () => AdminService.getIntegrationCoordination(cfg)],
       ["charts", () => AdminService.validateCharts(cfg)],
+      ["admin", () => AdminService.validateChartGenerator(cfg)],
     ];
 
     const results = await Promise.allSettled(checks.map(([, fn]) => fn()));

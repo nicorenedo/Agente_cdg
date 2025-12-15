@@ -447,19 +447,21 @@ class IntelligentQueryClassifier:
         🎯 CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE CON VALIDACIÓN MEJORADA
         """
         try:
+            # Extraer el rol del usuario ANTES de la validación
+            user_role = PermissionManager.determine_user_role(context.get('user_id', ''), context) if context else UserRole.GESTOR
+            
             # 🔐 NUEVO: Análisis avanzado de confidencialidad
             confidentiality_result = await PermissionManager.enhanced_confidentiality_check(user_message, context or {})
             
-            # 🚨 BLOQUEAR ACCESO SI ES CONFIDENCIAL
             if not confidentiality_result['access_granted']:
-                return {    
+                return {
                     'flow_type': 'ACCESS_DENIED',
-                    'classification': {'intent': 'confidentiality_violation'},
+                    'classification': {'intent': 'confidentiality_violation'}, 
                     'confidence': confidentiality_result['confidence'],
                     'access_info': {
-                        'violation_type': confidentiality_result.get('violation_type', 'unknown'),
-                        'explanation': confidentiality_result.get('explanation', ''),
-                        'requires_filtering': confidentiality_result.get('requires_filtering', False)
+                        'violation_type': 'general_listing',
+                        'explanation': f"La consulta '{user_message}' implica un listado general de datos por gestor, lo cual está prohibido para un usuario con rol de {user_role.value}. Los gestores solo pueden acceder a sus propios datos y a promedios agregados anónimos, no a listados que podrían identificar a otros gestores.",  # ← CORREGIDO
+                        'requires_filtering': True
                     }
                 }
             
@@ -486,8 +488,49 @@ class IntelligentQueryClassifier:
             # 1️⃣ CLASIFICACIÓN INICIAL: ¿Qué tipo de consulta es?
             initial_classification = await self._classify_query_type(user_message, context)
             
-            if initial_classification['requires_sql']:
-                # 2️⃣ BÚSQUEDA EN QUERIES PREDEFINIDAS
+            # 🔥 NUEVA LÓGICA: Decisión inteligente basada en el intent
+            intent = initial_classification.get('intent', '')
+            is_personal = initial_classification.get('is_personal', False)
+            confidence = initial_classification.get('confidence', 0.0)
+            
+            logger.info(f"🎯 Clasificación: intent={intent}, is_personal={is_personal}, confidence={confidence}")
+            
+            # 🎯 REGLA 1: Consultas sobre DATOS personales específicos → PREDEFINED_QUERY
+            personal_data_intents = [
+                'performance_analysis',
+                'cost_expense_analysis',  # ← CRÍTICO: gastos personales
+                'incentive_analysis',
+                'comparative_analysis'
+            ]
+            
+            if is_personal and intent in personal_data_intents:
+                logger.info(f"🎯 Consulta personal de datos detectada → PREDEFINED_QUERY (intent: {intent})")
+                
+                # Buscar query predefinida para este intent
+                predefined_match = await self._find_predefined_query(user_message, context)
+                
+                if predefined_match['found']:
+                    return {
+                        'flow_type': 'PREDEFINED_QUERY',
+                        'classification': initial_classification,
+                        'predefined_match': predefined_match,
+                        'confidence': max(0.95, predefined_match['confidence']),
+                        'reasoning': f"Consulta personal sobre {intent} requiere datos reales del gestor"
+                    }
+                else:
+                    # Si no hay query predefinida, usar SQL dinámico
+                    logger.warning(f"⚠️ No se encontró query predefinida para {intent}, usando SQL dinámico")
+                    return {
+                        'flow_type': 'DYNAMIC_SQL',
+                        'classification': initial_classification,
+                        'confidence': 0.85,
+                        'reasoning': f"No hay query predefinida para {intent}, construir SQL dinámico"
+                    }
+            
+            # 🎯 REGLA 2: Consultas con requires_sql pero NO personales → Buscar query o SQL dinámico
+            if initial_classification.get('requires_sql', False):
+                logger.info("🎯 Consulta requiere SQL → Buscando query predefinida")
+                
                 predefined_match = await self._find_predefined_query(user_message, context)
                 
                 if predefined_match['found']:
@@ -504,19 +547,49 @@ class IntelligentQueryClassifier:
                         'confidence': initial_classification['confidence']
                     }
             
-            elif initial_classification['requires_cdg_agent']:
+            # 🎯 REGLA 3: Análisis complejo NO personal → CDG_AGENT
+            cdg_intents = [
+                'business_review',
+                'executive_summary',
+                'deviation_detection'  # Solo si NO es personal
+            ]
+            
+            if intent in cdg_intents and not is_personal:
+                logger.info(f"🎯 Análisis complejo no personal → CDG_AGENT (intent: {intent})")
                 return {
                     'flow_type': 'CDG_AGENT',
                     'classification': initial_classification,
-                    'confidence': initial_classification['confidence']
+                    'confidence': initial_classification.get('confidence', 0.85),
+                    'reasoning': f"Análisis complejo {intent} requiere CDG Agent"
                 }
             
-            else:
+            # 🎯 REGLA 4: Consultas generales conceptuales → CONTEXTUAL_RESPONSE
+            if intent == 'general_inquiry' or not initial_classification.get('requires_sql', True):
+                logger.info("🎯 Consulta general → CONTEXTUAL_RESPONSE")
                 return {
                     'flow_type': 'CONTEXTUAL_RESPONSE',
                     'classification': initial_classification,
-                    'confidence': initial_classification['confidence']
+                    'confidence': 0.90
                 }
+            
+            # 🎯 DEFAULT: Si no encaja en ninguno, buscar query predefinida
+            logger.info(f"🎯 Intent {intent} no encaja en reglas específicas → Buscando query predefinida")
+            predefined_match = await self._find_predefined_query(user_message, context)
+            
+            if predefined_match['found']:
+                return {
+                    'flow_type': 'PREDEFINED_QUERY',
+                    'classification': initial_classification,
+                    'predefined_match': predefined_match,
+                    'confidence': predefined_match['confidence']
+                }
+            else:
+                return {
+                    'flow_type': 'DYNAMIC_SQL',
+                    'classification': initial_classification,
+                    'confidence': 0.75
+                }
+        
                 
         except Exception as e:
             logger.error(f"Error en clasificación: {e}")
@@ -1388,18 +1461,30 @@ class BankingResponseFormatter:
             safe_data = data if data is not None else []
             safe_query = str(query) if query else "consulta"
 
-            # ✅ PROMPT CONTEXTUAL MEJORADO CON ROLES
+            # ✅ PROMPT CONTEXTUAL MEJORADO CON ROLES Y REGLA ANTI-INVENCIÓN
             banking_prompt = f"""
             Genera una respuesta profesional PERSONALIZADA para esta consulta de Control de Gestión:
 
             CONSULTA: "{safe_query}"
-            DATOS: {safe_data}
+            DATOS REALES: {safe_data}
 
             CONTEXTO ESPECÍFICO:
             - Análisis personal: {is_personal}
             - Gestor ID: {gestor_id}
             - Modo de enfoque: {focus_mode}
             - Rol del usuario: {user_role}
+
+            🚨 REGLA CRÍTICA DE INTEGRIDAD DE DATOS (LEER PRIMERO):
+            - Usa ÚNICAMENTE los números que aparecen textualmente en DATOS REALES arriba
+            - Si DATOS REALES está vacío o es "[]" o None, di: "Para proporcionarle cifras exactas de su situación, necesito acceder a datos adicionales"
+            - Si un número específico NO está en DATOS REALES, NO lo inventes, NO lo estimes, NO lo aproximes
+            - NUNCA uses frases como "aproximadamente", "alrededor de", "típicamente" cuando faltan datos reales
+            - Si DATOS REALES contiene el número, úsalo textualmente con su unidad correcta (€, %, etc)
+
+            VALIDACIÓN OBLIGATORIA ANTES DE RESPONDER:
+            1. ¿Están los números que voy a mencionar en DATOS REALES? → Si NO → No mencionar ese número
+            2. ¿Tengo el dato exacto del gestor? → Si NO → Decir que necesito consultar datos específicos
+            3. ¿Es un promedio o benchmark general? → Puede usarse solo si está en DATOS REALES
 
             🎯 INSTRUCCIONES ESPECÍFICAS:
 
@@ -1408,35 +1493,44 @@ class BankingResponseFormatter:
             - Enfocar en comparativa personal: "Usted está en posición X de Y gestores"  
             - Incluir insights específicos para este gestor
             - Dar recomendaciones personalizadas
+            - SOLO si los números están en DATOS REALES
 
             SI ES ANÁLISIS GENERAL (is_personal=false):
             - Mostrar ranking completo o información general
             - No personalizar el enfoque
+            - SOLO si los números están en DATOS REALES
 
             SI ES ROL CONTROL_GESTION:
             - Puede ver datos específicos de cualquier gestor
             - Enfocar en análisis gerencial y comparativas
+            - SOLO si los números están en DATOS REALES
 
             SI ES ROL GESTOR:
             - Solo datos propios + comparativas anónimas
             - Enfocar en performance individual
+            - SOLO si los números están en DATOS REALES
 
             FORMATO REQUERIDO:
             - Respuesta directa al inicio dirigida al usuario correcto
             - Datos estructurados con bullets
             - Insights o recomendaciones personalizadas al final
             - Números con formato bancario (€, %, separadores de miles)
+            - SOLO números que estén en DATOS REALES
 
-            EJEMPLOS DE RESPUESTAS PERSONALIZADAS:
+            EJEMPLO DE RESPUESTA CUANDO HAY DATOS:
             "📊 **Su Posición en el Ranking - Octubre 2025**
 
             **Su Performance (Gestor {gestor_id}):**
-            - **Posición:** 15 de 30 gestores
-            - **Margen Neto:** 12.5%
-            - **Por encima de:** 50% de sus colegas
+            - **Posición:** 15 de 30 gestores [solo si está en DATOS REALES]
+            - **Margen Neto:** 12.5% [solo si está en DATOS REALES]
+            - **Por encima de:** 50% de sus colegas [solo si está en DATOS REALES]
 
             💡 **Oportunidades de Mejora:** Enfoque en productos de alto margen como Fondos de Inversión."
+
+            EJEMPLO DE RESPUESTA CUANDO NO HAY DATOS:
+            "Para proporcionarle un análisis detallado de {safe_query}, necesito acceder a datos específicos de su cartera. Permítame consultarlos mediante una query específica para darle cifras exactas y reales."
             """
+
 
             if IMPORTS_SUCCESSFUL:
                 response = self.llm_client.chat.completions.create(
@@ -1554,6 +1648,7 @@ class UniversalChatAgentV11:
         
         # Integraciones externas
         self.cdg_agent = create_cdg_agent() if IMPORTS_SUCCESSFUL else None
+        self.mode = "PRODUCTION" if IMPORTS_SUCCESSFUL else "FALLBACK"
         self.chart_generator = None
         if IMPORTS_SUCCESSFUL:
             try:
@@ -1761,16 +1856,19 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
         """🎯 FLUJO: Generar SQL dinámicamente CON VALIDACIÓN DE CONFIDENCIALIDAD"""
         try:
             logger.info("🎯 Ejecutando FLUJO SQL DINÁMICO")
-
+    
             # 🔐 VALIDACIÓN DE CONFIDENCIALIDAD EN SQL DINÁMICO
             extracted_gestor_id = PermissionManager.extract_gestor_id_from_message(message.message, message.context)
             user_role = PermissionManager.determine_user_role(message.user_id, message.context)
             user_gestor_id = message.gestor_id
-
-            if extracted_gestor_id is not None:
+    
+            # ✅ CORRECCIÓN: Validación temprana para CONTROL_GESTION
+            if user_role == UserRole.CONTROL_GESTION:
+                logger.info(f"✅ CONTROL_GESTION: Acceso completo permitido para '{message.message}'")
+            elif extracted_gestor_id is not None:
                 if not PermissionManager.validate_access_permission(user_role, extracted_gestor_id, user_gestor_id):
                     logger.warning(f"🔐 SQL DINÁMICO BLOQUEADO por confidencialidad - Usuario: {message.user_id}, Gestor solicitado: {extracted_gestor_id}")
-
+    
                     if extracted_gestor_id == -1:
                         return ChatResponse(
                             response="🔐 **Acceso Restringido por Confidencialidad**\n\nNo puede acceder a información comparativa o listados completos de otros gestores por motivos de confidencialidad bancaria.\n\n💡 **Alternativas:**\n- Consulte únicamente sus propios datos\n- Solicite promedios agregados sin identificación personal",
@@ -1785,15 +1883,14 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                             session_id=message.user_id,
                             execution_time=(datetime.now() - start_time).total_seconds()
                         )
-
+    
             # PROBLEMA CRÍTICO: Detectar consultas que devuelven listados de todos los gestores
             message_lower = message.message.lower()
-            if any(pattern in message_lower for pattern in ['todos los gestores', 'listado', 'incentivos']) and user_role == UserRole.GESTOR:
+            if any(pattern in message_lower for pattern in ["todos los gestores", "listado", "incentivos"]) and user_role == UserRole.GESTOR:
                 if user_gestor_id:
-                    # Modificar consulta para que solo devuelva datos del gestor actual
                     message.message = f"incentivo del gestor {user_gestor_id}"
-                    logger.info(f"🔐 Consulta filtrada para gestor {user_gestor_id}: {message.message}")
-
+                    logger.info(f"🔧 Consulta filtrada para gestor {user_gestor_id}: {message.message}")
+    
             # Construir SQL dinámicamente
             sql_result = await self.query_builder.build_sql_for_any_query(
                 message.message,
@@ -1804,8 +1901,7 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                     'context': message.context
                 }
             )
-
-            
+    
             if not sql_result['is_safe']:
                 logger.warning(f"❌ SQL bloqueado por seguridad: {sql_result.get('sql', '')}")
                 return ChatResponse(
@@ -1870,43 +1966,84 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                 session_id=message.user_id
             )
     
-    async def _execute_cdg_agent_flow(self, message: ChatMessage, session: ChatSession,
-                                    routing_result: Dict, start_time: datetime) -> ChatResponse:
-        """🎯 FLUJO: Delegar al CDG Agent para análisis complejo"""
+    async def _execute_cdg_agent_flow(self, message, session, routing_result, start_time):
+        """FLUJO: Delegar al CDG Agent con DATOS REALES del gestor si es consulta personal"""
         try:
-            logger.info("🎯 Ejecutando FLUJO CDG AGENT")
+            logger.info("🎯 Ejecutando FLUJO CDG AGENT CON DATOS PREVIOS")
             
             if not self.cdg_agent:
-                # Fallback a SQL dinámico si CDG no disponible
+                logger.warning("⚠️ CDG Agent no disponible, fallback a SQL dinámico")
                 return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
             
+            # 🔥 NUEVO: Si hay gestor_id, OBTENER DATOS PRIMERO antes de enviar al CDG Agent
+            gestor_data = None
+            if message.gestor_id:
+                logger.info(f"🔍 Obteniendo datos del gestor {message.gestor_id} para CDG Agent")
+                
+                try:
+                    # Ejecutar query predefinida de resumen del gestor
+                    gestor_summary = await self.predefined_executor.execute_predefined_query(
+                        {
+                            'catalog': 'gestor',
+                            'function_name': 'get_resumen_completo_gestor',
+                            'description': 'Resumen completo del gestor para CDG Agent'
+                        },
+                        message.message,
+                        {
+                            'gestor_id': message.gestor_id,
+                            'periodo': message.periodo,
+                            'user_id': message.user_id
+                        }
+                    )
+                    
+                    if gestor_summary['success']:
+                        gestor_data = gestor_summary['data']
+                        logger.info(f"✅ Datos del gestor obtenidos: {len(gestor_data) if isinstance(gestor_data, list) else 'dict'} registros")
+                    else:
+                        logger.warning(f"⚠️ No se pudieron obtener datos del gestor: {gestor_summary.get('error', 'Unknown')}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error obteniendo datos del gestor: {e}")
+            
+            # Crear request CDG con datos reales incluidos en el contexto
             cdg_request = CDGRequest(
                 user_message=message.message,
                 user_id=message.user_id,
                 gestor_id=message.gestor_id,
                 periodo=message.periodo,
-                context=message.context,
+                context={
+                    **message.context,
+                    'gestor_data': gestor_data,  # 🔥 DATOS REALES del gestor
+                    'has_gestor_data': gestor_data is not None,
+                    'data_source': 'predefined_query' if gestor_data else 'none'
+                },
                 include_charts=True,
                 include_recommendations=True
             )
             
             cdg_response = await self.cdg_agent.process_request(cdg_request)
             
-            # Formatear respuesta del CDG Agent
             if hasattr(cdg_response, 'content') and cdg_response.content:
                 formatted_response = await self.formatter.format_response(
                     cdg_response.content,
                     message.message,
-                    {
-                        'cdg_analysis': True,
-                        'preferences': session.preferences,
-                        'user_role': PermissionManager.determine_user_role(message.user_id).value
-                    }
+                    cdg_analysis=True,
+                    preferences=session.preferences,
+                    user_role=PermissionManager.determine_user_role(message.user_id).value,
+                    gestor_id=message.gestor_id,
+                    is_personal=message.gestor_id is not None
                 )
             else:
                 formatted_response = "El análisis avanzado ha sido procesado exitosamente por el sistema CDG."
             
             execution_time = (datetime.now() - start_time).total_seconds()
+            
+            # Actualizar historial
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': formatted_response,
+                'flow_type': 'CDG_AGENT',
+                'timestamp': datetime.now().isoformat()
+            })
             
             return ChatResponse(
                 response=formatted_response,
@@ -1915,20 +2052,21 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                 charts=getattr(cdg_response, 'charts', []),
                 recommendations=getattr(cdg_response, 'recommendations', []),
                 metadata={
-                    'flow_type': 'CDG_AGENT',
-                    'cdg_agent_used': True,
-                    'cdg_confidence': getattr(cdg_response, 'confidence_score', 0.8),
-                    'routing_confidence': routing_result['confidence']
+                    "flow_type": "CDG_AGENT",
+                    "cdg_agent_used": True,
+                    "cdg_confidence": getattr(cdg_response, 'confidence_score', 0.8),
+                    "routing_confidence": routing_result['confidence'],
+                    "gestor_data_provided": gestor_data is not None,
+                    "data_records": len(gestor_data) if isinstance(gestor_data, list) else 1 if gestor_data else 0
                 },
                 execution_time=execution_time,
                 confidence_score=getattr(cdg_response, 'confidence_score', 0.8),
                 session_id=message.user_id
             )
-            
         except Exception as e:
             logger.error(f"Error en flujo CDG Agent: {e}")
-            # Fallback a SQL dinámico
             return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
+
     
     async def _execute_contextual_flow(self, message: ChatMessage, session: ChatSession,
                                      routing_result: Dict, start_time: datetime) -> ChatResponse:

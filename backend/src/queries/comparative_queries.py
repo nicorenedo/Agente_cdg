@@ -10,7 +10,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-# Imports robustos (soporta proyectos con/ sin prefijo src)
+# Imports robustos (soporta proyectos con/sin prefijo src)
 try:
     from .gestor_queries import QueryResult  # dentro de paquete queries
 except Exception:
@@ -239,18 +239,19 @@ class ComparativeQueries:
         )
 
     # =================================================================
-    # 2. COMPARATIVAS DE GESTORES - ✅ CORREGIDAS CON INGRESOS 76XXXX
+    # 2. COMPARATIVAS DE GESTORES - ✅ CORREGIDAS CON INGRESOS 76XXXX + GASTOS STD
     # =================================================================
 
     def ranking_gestores_por_margen_enhanced(self, periodo: str) -> QueryResult:
         """
-        ✅ CORREGIDO - Ranking de gestores con análisis de margen y eficiencia con lógica de ingresos correcta
+        ✅ CORREGIDO - Ranking de gestores con análisis de margen y eficiencia con lógica correcta
         """
         query = """
             WITH ingresos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
+                    g.SEGMENTO_ID,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
@@ -263,22 +264,29 @@ class ComparativeQueries:
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON cont.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
+                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO, s.DESC_SEGMENTO
             ),
             gastos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
+                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                        SELECT SUM(mov.IMPORTE)
+                        FROM MAESTRO_CONTRATOS co2
+                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                        WHERE co2.GESTOR_ID = g.GESTOR_ID
+                        AND mov.FECHA < '2025-11-01'
+                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                    ), 0) as gastos_total
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
                 GROUP BY g.GESTOR_ID
             )
             SELECT 
                 ig.*,
-                ABS(gg.gastos_total) as gastos_total
+                gg.gastos_total
             FROM ingresos_gestor ig
             LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
             WHERE ig.ingresos_total > 0
@@ -356,12 +364,13 @@ class ComparativeQueries:
         )
 
     def ranking_gestores_por_margen(self, periodo: str) -> QueryResult:
-        """✅ CORREGIDO - Función original compatible SQLite con lógica de ingresos correcta"""
+        """✅ CORREGIDO - Función original compatible SQLite con lógica correcta"""
         query = """
             WITH ingresos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
+                    g.SEGMENTO_ID,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
@@ -374,26 +383,33 @@ class ComparativeQueries:
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON cont.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
+                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) > 0
             ),
             gastos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
+                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                        SELECT SUM(mov.IMPORTE)
+                        FROM MAESTRO_CONTRATOS co2
+                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                        WHERE co2.GESTOR_ID = g.GESTOR_ID
+                        AND mov.FECHA < '2025-11-01'
+                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                    ), 0) as gastos_total
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
                 GROUP BY g.GESTOR_ID
             ),
             gestor_margenes AS (
                 SELECT
                     ig.*,
-                    ABS(gg.gastos_total) as gastos_total,
+                    gg.gastos_total,
                     ROUND(
-                        (ig.ingresos_total - ABS(gg.gastos_total))
+                        (ig.ingresos_total - gg.gastos_total)
                         / NULLIF(ig.ingresos_total, 0) * 100, 2
                     ) AS margen_neto
                 FROM ingresos_gestor ig
@@ -436,12 +452,13 @@ class ComparativeQueries:
         )
 
     def compare_roe_gestores_enhanced(self, periodo: str) -> QueryResult:
-        """✅ CORREGIDO - ROE estandarizado con lógica de ingresos correcta"""
+        """✅ CORREGIDO - ROE estandarizado con lógica correcta"""
         query = """
             WITH ingresos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
+                    g.SEGMENTO_ID,
                     c.DESC_CENTRO,
                     -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos
@@ -452,23 +469,30 @@ class ComparativeQueries:
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO
+                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO
             ),
             gastos_gestor AS (
                 SELECT
                     g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                        SELECT SUM(mov.IMPORTE)
+                        FROM MAESTRO_CONTRATOS co2
+                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                        WHERE co2.GESTOR_ID = g.GESTOR_ID
+                        AND mov.FECHA < '2025-11-01'
+                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                    ), 0) as gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
                 GROUP BY g.GESTOR_ID
             ),
             patrimonio_gestor AS (
                 SELECT
                     mc.GESTOR_ID,
-                    COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as patrimonio_total
+                    COALESCE(SUM(mov.IMPORTE), 0) as patrimonio_total
                 FROM MAESTRO_CONTRATOS mc
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', COALESCE(mov.FECHA, mc.FECHA_ALTA)) <= ?
@@ -477,9 +501,9 @@ class ComparativeQueries:
             gestor_financials AS (
                 SELECT
                     ig.*,
-                    ABS(gg.gastos) as gastos,
+                    gg.gastos,
                     pg.patrimonio_total,
-                    (ig.ingresos - ABS(gg.gastos)) as beneficio_neto
+                    (ig.ingresos - gg.gastos) as beneficio_neto
                 FROM ingresos_gestor ig
                 LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
                 LEFT JOIN patrimonio_gestor pg ON ig.GESTOR_ID = pg.GESTOR_ID
@@ -544,12 +568,13 @@ class ComparativeQueries:
         )
 
     def compare_roe_gestores(self, periodo: str) -> QueryResult:
-        """✅ CORREGIDO - Función original compatible SQLite con lógica de ingresos correcta"""
+        """✅ CORREGIDO - Función original compatible SQLite con lógica correcta"""
         query = """
             WITH patrimonio_gestores AS (
                 SELECT
                     g.GESTOR_ID,
                     g.DESC_GESTOR,
+                    g.SEGMENTO_ID,
                     c.DESC_CENTRO,
                     COALESCE(SUM(mov.IMPORTE), 0) as patrimonio_total
                 FROM MAESTRO_GESTORES g
@@ -559,7 +584,7 @@ class ComparativeQueries:
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 WHERE c.IND_CENTRO_FINALISTA = 1
                     AND strftime('%Y-%m', COALESCE(mov.FECHA, mc.FECHA_ALTA)) <= ?
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO
+                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO
             ),
             ingresos_gestores AS (
                 SELECT
@@ -576,12 +601,19 @@ class ComparativeQueries:
             gastos_gestores AS (
                 SELECT
                     g.GESTOR_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                        SELECT SUM(mov.IMPORTE)
+                        FROM MAESTRO_CONTRATOS co2
+                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                        WHERE co2.GESTOR_ID = g.GESTOR_ID
+                        AND mov.FECHA < '2025-11-01'
+                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                    ), 0) as gastos
                 FROM MAESTRO_GESTORES g
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
                 GROUP BY g.GESTOR_ID
             ),
             roe_calculated AS (
@@ -590,10 +622,10 @@ class ComparativeQueries:
                     pg.DESC_GESTOR,
                     pg.DESC_CENTRO,
                     pg.patrimonio_total,
-                    (COALESCE(ig.ingresos, 0) - ABS(COALESCE(gg.gastos, 0))) as beneficio_neto,
+                    (COALESCE(ig.ingresos, 0) - COALESCE(gg.gastos, 0)) as beneficio_neto,
                     CASE
                         WHEN pg.patrimonio_total > 0
-                        THEN ROUND(((COALESCE(ig.ingresos, 0) - ABS(COALESCE(gg.gastos, 0))) / pg.patrimonio_total) * 100, 4)
+                        THEN ROUND(((COALESCE(ig.ingresos, 0) - COALESCE(gg.gastos, 0)) / pg.patrimonio_total) * 100, 4)
                         ELSE 0
                     END as roe
                 FROM patrimonio_gestores pg
@@ -632,12 +664,12 @@ class ComparativeQueries:
         )
 
     # =================================================================
-    # 3. COMPARATIVAS POR CENTRO - ✅ CORREGIDAS CON INGRESOS 76XXXX
+    # 3. COMPARATIVAS POR CENTRO - ✅ CORREGIDAS CON INGRESOS 76XXXX + GASTOS STD
     # =================================================================
 
     def compare_eficiencia_centro_enhanced(self, periodo: str) -> QueryResult:
         """
-        ✅ CORREGIDO - Ranking de centros con análisis de eficiencia y lógica de ingresos correcta
+        ✅ CORREGIDO - Ranking de centros con análisis de eficiencia y lógica correcta
         """
         query = """
             WITH ingresos_centro AS (
@@ -660,19 +692,27 @@ class ComparativeQueries:
             gastos_centro AS (
                 SELECT
                     c.CENTRO_ID as CENTRO_CONTABLE,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                        SELECT SUM(mov.IMPORTE)
+                        FROM MAESTRO_GESTORES g2
+                        JOIN MAESTRO_CONTRATOS co2 ON g2.GESTOR_ID = co2.GESTOR_ID
+                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                        WHERE g2.CENTRO = c.CENTRO_ID
+                        AND mov.FECHA < '2025-11-01'
+                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                    ), 0) as gastos
                 FROM MAESTRO_CENTROS c
                 LEFT JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY c.CENTRO_ID
             )
             SELECT 
                 ic.*,
-                ABS(gc.gastos) as gastos
+                gc.gastos
             FROM ingresos_centro ic
             LEFT JOIN gastos_centro gc ON ic.CENTRO_CONTABLE = gc.CENTRO_CONTABLE
         """
@@ -743,7 +783,7 @@ class ComparativeQueries:
 
     def compare_eficiencia_centro(self, periodo: str) -> QueryResult:
         """
-        ✅ CORREGIDO - Versión SQL pura compatible con SQLite con lógica de ingresos correcta
+        ✅ CORREGIDO - Versión SQL pura compatible con SQLite con lógica correcta
         """
         query = """
             WITH ingresos_centro AS (
@@ -766,23 +806,31 @@ class ComparativeQueries:
             gastos_centro AS (
                 SELECT
                     c.CENTRO_ID as CENTRO_CONTABLE,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                        SELECT SUM(mov.IMPORTE)
+                        FROM MAESTRO_GESTORES g2
+                        JOIN MAESTRO_CONTRATOS co2 ON g2.GESTOR_ID = co2.GESTOR_ID
+                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                        WHERE g2.CENTRO = c.CENTRO_ID
+                        AND mov.FECHA < '2025-11-01'
+                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                    ), 0) as gastos
                 FROM MAESTRO_CENTROS c
                 LEFT JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY c.CENTRO_ID
             ),
             centro_eficiencia AS (
                 SELECT
                     ic.*,
-                    ABS(gc.gastos) as gastos,
-                    CASE WHEN ABS(gc.gastos) = 0
+                    gc.gastos,
+                    CASE WHEN gc.gastos = 0
                          THEN NULL
-                         ELSE (ic.ingresos * 1.0) / (ABS(gc.gastos) * 1.0)
+                         ELSE (ic.ingresos * 1.0) / (gc.gastos * 1.0)
                     END AS ratio_eficiencia_raw
                 FROM ingresos_centro ic
                 LEFT JOIN gastos_centro gc ON ic.CENTRO_CONTABLE = gc.CENTRO_CONTABLE
@@ -797,12 +845,12 @@ class ComparativeQueries:
                 num_contratos,
                 ROUND(ingresos, 2) as ingresos,
                 ROUND(gastos, 2) as gastos,
-                ROUND(ingresos - ABS(gastos), 2) as beneficio_neto,
+                ROUND(ingresos - gastos, 2) as beneficio_neto,
                 ROUND(ratio_eficiencia_raw, 2) AS ratio_eficiencia,
                 ROUND(CASE WHEN num_contratos = 0 THEN 0
                            ELSE gastos * 1.0 / num_contratos END, 2) as gasto_por_contrato,
                 ROUND(CASE WHEN ingresos = 0 THEN 0
-                           ELSE ((ingresos - ABS(gastos)) * 100.0 / ingresos) END, 2) as margen_neto_pct
+                           ELSE ((ingresos - gastos) * 100.0 / ingresos) END, 2) as margen_neto_pct
             FROM centro_eficiencia
             ORDER BY (ratio_eficiencia_raw IS NULL), ratio_eficiencia_raw DESC
         """
@@ -879,12 +927,12 @@ class ComparativeQueries:
         )
 
     # =================================================================
-    # 4. COMPARATIVAS POR SEGMENTO - ✅ CORREGIDAS CON INGRESOS 76XXXX
+    # 4. COMPARATIVAS POR SEGMENTO - ✅ CORREGIDAS CON INGRESOS 76XXXX + GASTOS STD
     # =================================================================
 
     def compare_margen_segmento_periodos(self, segmento_id: str, periodo_ini: str, periodo_fin: str) -> QueryResult:
         """
-        ✅ CORREGIDO - Variación del margen neto de un segmento entre dos períodos con lógica de ingresos correcta
+        ✅ CORREGIDO - Variación del margen neto de un segmento entre dos períodos con lógica correcta
         """
         query = """
             WITH ingresos_periodo AS (
@@ -906,22 +954,30 @@ class ComparativeQueries:
             gastos_segmento_total AS (
                 SELECT
                     s.SEGMENTO_ID,
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
+                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                        SELECT SUM(mov.IMPORTE)
+                        FROM MAESTRO_GESTORES g2
+                        JOIN MAESTRO_CONTRATOS co2 ON g2.GESTOR_ID = co2.GESTOR_ID
+                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                        WHERE g2.SEGMENTO_ID = s.SEGMENTO_ID
+                        AND mov.FECHA < '2025-11-01'
+                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                    ), 0) as gastos_total
                 FROM MAESTRO_SEGMENTOS s
                 LEFT JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
                 LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON s.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                      AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = '2025-10-01'
+                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON s.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
                 WHERE s.SEGMENTO_ID = ?
                 GROUP BY s.SEGMENTO_ID
             ),
             margen_periodo AS (
                 SELECT
                     ip.*,
-                    ABS(gst.gastos_total) / 2 as gastos, -- Dividir entre 2 períodos
+                    gst.gastos_total / 2 as gastos, -- Dividir entre 2 períodos
                     ROUND(
-                        (ip.ingresos - (ABS(gst.gastos_total) / 2))
+                        (ip.ingresos - (gst.gastos_total / 2))
                         / NULLIF(ip.ingresos, 0) * 100, 2
                     ) AS margen_neto
                 FROM ingresos_periodo ip
@@ -1055,13 +1111,20 @@ class ComparativeQueries:
 
             Para gastos de gestores, centros o segmentos, usa esta lógica:
             
-            -- Gastos por gestor:
-            SELECT g.GESTOR_ID, COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
+            -- ✅ Gastos por gestor:
+            SELECT g.GESTOR_ID, 
+                   COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                       SELECT SUM(mov.IMPORTE)
+                       FROM MAESTRO_CONTRATOS co2
+                       JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                       WHERE co2.GESTOR_ID = g.GESTOR_ID
+                       AND mov.FECHA < '2025-11-01'
+                       AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                   ), 0) as gastos
             FROM MAESTRO_GESTORES g
             LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                  AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                  AND p.FECHA_CALCULO = '2025-10-01'
+            LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                AND co.PRODUCTO_ID = p.PRODUCTO_ID
             GROUP BY g.GESTOR_ID
 
             La consulta debe ser ejecutable directamente en SQLite y enfocarse en comparar entidades.
@@ -1074,12 +1137,33 @@ class ComparativeQueries:
                 max_tokens=1000
             )
 
-            generated_sql = response.choices[0].message.content.strip()
+            # Extract content from LLM response safely (supports different response shapes)
+            generated_sql = ""
+            try:
+                # Common ChatCompletion-like structure: choices[0].message.content
+                generated_sql = response.choices[0].message.content.strip()
+            except Exception:
+                try:
+                    # Older or alternative shapes: choices[0].text
+                    generated_sql = response.choices[0].text.strip()
+                except Exception:
+                    # Fallback to string representation
+                    generated_sql = str(response).strip()
 
-            if "``````" in generated_sql:
-                generated_sql = generated_sql.split("``````")[0].strip()
-            elif "```" in generated_sql:
-                generated_sql = generated_sql.split("```")[1].strip()
+            # Remove Markdown code fences if present, and the optional language tag (e.g. ```sql)
+            if "```" in generated_sql:
+                parts = generated_sql.split("```")
+                # Keep non-empty parts (the SQL is usually one of them)
+                candidates = [p for p in parts if p.strip()]
+                if candidates:
+                    inner = candidates[0].strip()
+                    # If the first line is a language token like "sql", drop it
+                    lines = inner.splitlines()
+                    if lines and lines[0].strip().lower().startswith("sql"):
+                        inner = "\n".join(lines[1:]).strip()
+                    generated_sql = inner
+
+            generated_sql = generated_sql.strip()
 
             if not is_query_safe(generated_sql):
                 logger.error(f"❌ Consulta SQL bloqueada por seguridad: {generated_sql}")
@@ -1215,9 +1299,9 @@ class ComparativeQueries:
                     'productos_con_desviaciones': len(productos_desv.data) if productos_desv.data else 0
                 },
                 'rankings': {
-                    'top_gestor_margen': top_margen.data[0] if top_margen.data else None,
-                    'mejor_centro': centros_comp.data[0] if centros_comp.data else None,
-                    'producto_mayor_desviacion': productos_desv.data[0] if productos_desv.data else None
+                    'top_gestor_margen': top_margen.data if top_margen.data else None,
+                    'mejor_centro': centros_comp.data if centros_comp.data else None,
+                    'producto_mayor_desviacion': productos_desv.data if productos_desv.data else None
                 },
                 'metricas_agregadas': {
                     'margen_promedio_sistema': round(sum(r.get('margen_neto', 0) for r in (top_margen.data or [])) / max(len(top_margen.data or []), 1), 2),
@@ -1248,7 +1332,7 @@ class ComparativeQueries:
 
     def get_matriz_comparativa_segmentos(self, periodo: str = "2025-10") -> QueryResult:
         """
-        ✅ CORREGIDO - Matriz comparativa de todos los segmentos con lógica de ingresos correcta
+        ✅ CORREGIDO - Matriz comparativa de todos los segmentos con lógica correcta
         """
         query = """
         WITH ingresos_segmento AS (
@@ -1270,25 +1354,33 @@ class ComparativeQueries:
         gastos_segmento AS (
             SELECT
                 s.SEGMENTO_ID,
-                COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos_total
+                -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
+                COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
+                    SELECT SUM(mov.IMPORTE)
+                    FROM MAESTRO_GESTORES g2
+                    JOIN MAESTRO_CONTRATOS co2 ON g2.GESTOR_ID = co2.GESTOR_ID
+                    JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
+                    WHERE g2.SEGMENTO_ID = s.SEGMENTO_ID
+                    AND mov.FECHA < '2025-11-01'
+                    AND mov.CUENTA_ID IN ('640001', '691001', '691002')
+                ), 0) as gastos_total
             FROM MAESTRO_SEGMENTOS s
             LEFT JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
             LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON s.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                  AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                  AND p.FECHA_CALCULO = '2025-10-01'
+            LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON s.SEGMENTO_ID = p.SEGMENTO_ID 
+                                                AND co.PRODUCTO_ID = p.PRODUCTO_ID
             GROUP BY s.SEGMENTO_ID
         ),
         segmento_metrics AS (
             SELECT
                 i_s.*,
-                ABS(g_s.gastos_total) as gastos_total,
+                g_s.gastos_total,
                 CASE WHEN i_s.ingresos_total > 0 
-                     THEN (i_s.ingresos_total - ABS(g_s.gastos_total)) / i_s.ingresos_total * 100 
+                     THEN (i_s.ingresos_total - g_s.gastos_total) / i_s.ingresos_total * 100 
                      ELSE 0 END as margen_promedio,
                 i_s.ingresos_total as ingresos_promedio,
-                CASE WHEN ABS(g_s.gastos_total) > 0 
-                     THEN i_s.ingresos_total / ABS(g_s.gastos_total) 
+                CASE WHEN g_s.gastos_total > 0 
+                     THEN i_s.ingresos_total / g_s.gastos_total 
                      ELSE 0 END as ratio_eficiencia_promedio
             FROM ingresos_segmento i_s
             LEFT JOIN gastos_segmento g_s ON i_s.SEGMENTO_ID = g_s.SEGMENTO_ID

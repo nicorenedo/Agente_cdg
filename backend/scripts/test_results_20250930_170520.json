@@ -1,0 +1,10 @@
+{
+  "health": "✅ Servidor activo y funcionando",
+  "generator_validation": "✅ Chart Generator: OK - V4.4 - Integración Completa con Confidencialidad",
+  "charts_meta": "📊 Testing /charts/meta with roles...",
+  "charts_options": "🔐 Testing /charts/options by role...",
+  "charts_pivot": "🔄 Testing /charts/pivot with confidentiality...",
+  "charts_validate": "🔍 Testing /charts/validate-config...",
+  "charts_create": "🔐 Testing /charts/create-secure...",
+  "integration": "🔀 Testing /integration/classify-and-route..."
+}

@@ -2,17 +2,19 @@
 /* eslint-disable no-console */
 
 /**
- * CDG Frontend API Client v11.0 (Chat Agent v10.0 + CDG Agent v6.0)
- * --------------------------------------------------------------------
+ * CDG Frontend API Client v13.0 (Chat Agent v11.0 + CDG Agent v6.1 + Charts V4.4)
+ * ---------------------------------------------------------------------------------
  * - Perfect Integration con backend main.py v11.0
- * - Chat Agent v10.0: Clasificación inteligente + 6 catálogos
- * - CDG Agent v6.0: Análisis complejos especializados
+ * - Chat Agent v11.0: Sistema de confidencialidad bancaria  
+ * - CDG Agent v6.1: Análisis especializados con validación de permisos
+ * - Charts V4.4: Gráficos dinámicos con IA + roles + confidencialidad
+ * - Admin V4.4: Validación de Chart Generator
  * - Desenvelope automático: devuelve { data, meta, ts } por defecto
  * - Retries con backoff para 429/502/503/504
  * - Cancelación de requests (AbortController)
- * - WebSocket optimizado para Chat Agent v10.0
+ * - WebSocket optimizado para Chat Agent v11.0
  * - SDK completo con TODOS los endpoints del backend
- * - ✅ ACTUALIZADO: +40 nuevos endpoints añadidos
+ * - ✅ ACTUALIZADO: Integración perfecta 1:1 con main.py v11.0
  */
 
 import axios from "axios";
@@ -78,6 +80,14 @@ const shouldRetry = (error) => {
 // Interceptor de respuesta: desenvelope + retry
 instance.interceptors.response.use(
   (res) => {
+    // ✅ DEBUG: Respuesta exitosa
+    console.log('🔍 [API] RESPONSE SUCCESS:', {
+      status: res.status,
+      url: res.config?.url,
+      method: res.config?.method,
+      data: res.data
+    });
+    
     const payload = res.data;
     if (payload && typeof payload === "object" && "status" in payload) {
       if (payload.status !== "success") {
@@ -97,24 +107,66 @@ instance.interceptors.response.use(
     return { data: payload, meta: null, ts: null, raw: payload };
   },
   async (error) => {
+    // ✅ DEBUG: Error detallado
+    console.error('🔍 [API] RESPONSE ERROR:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      method: error.config?.method,
+      requestData: error.config?.data,
+      responseData: error.response?.data,
+      headers: error.response?.headers,
+      fullError: error
+    });
+
+    // ✅ DEBUG ESPECÍFICO: Ver mensaje de error detallado
+    if (error.response?.data) {
+      console.error('🔍 [API] ERROR RESPONSE DETAIL:', {
+        rawData: error.response.data,
+        message: error.response.data.message,
+        messageType: typeof error.response.data.message,
+        messageArray: Array.isArray(error.response.data.message) ? error.response.data.message : 'Not array',
+        detail: error.response.data.detail,
+        errors: error.response.data.errors
+      });
+    }
+
     const config = error.config || {};
     config.__retryCount = config.__retryCount || 0;
 
     if (shouldRetry(error) && config.__retryCount < 3) {
       config.__retryCount += 1;
       const backoff = 400 * 2 ** (config.__retryCount - 1);
+      console.log(`🔍 [API] RETRYING in ${backoff}ms (attempt ${config.__retryCount}/3)`);
       await sleep(backoff);
       return instance(config);
     }
 
     const status = error.response?.status || 0;
     const backend = error.response?.data;
-    const messageFromBackend =
-      backend?.message ||
-      backend?.detail ||
-      backend?.error ||
-      error.message ||
-      "Error de red";
+
+    // ✅ FIX: Extraer mensaje del detail si es array de objetos  
+    let messageFromBackend = backend?.message || error.message || "Error de red";
+
+    if (!messageFromBackend && backend?.detail && Array.isArray(backend.detail)) {
+      // El error viene en detail como array de objetos con message
+      const errorObj = backend.detail[0];
+      messageFromBackend = errorObj?.message || errorObj?.msg || JSON.stringify(errorObj) || backend?.error || "Error de validación";
+      console.log('🔍 [API] EXTRACTED FROM DETAIL ARRAY:', messageFromBackend);
+    } else if (!messageFromBackend && backend?.detail) {
+      messageFromBackend = backend.detail;
+    } else if (Array.isArray(messageFromBackend)) {
+      messageFromBackend = messageFromBackend.join(', ');
+      console.log('🔍 [API] CONVERTED ARRAY MESSAGE:', messageFromBackend);
+    }
+
+    // ✅ DEBUG: Error final que se va a lanzar
+    console.error('🔍 [API] THROWING ERROR:', {
+      message: messageFromBackend,
+      status,
+      code: backend?.code || status,
+      detail: backend
+    });
 
     throw new ApiClientError(messageFromBackend, {
       status,
@@ -162,7 +214,7 @@ const toQueryBody = (obj) =>
   );
 
 /* ============================
- * WebSocket optimizado para Chat Agent v10.0
+ * WebSocket optimizado para Chat Agent v11.0
  * ============================ */
 
 const makeWsUrl = (path) => {
@@ -171,27 +223,27 @@ const makeWsUrl = (path) => {
 };
 
 /**
- * ✅ WebSocket optimizado para Chat Agent v10.0 con Perfect Integration
+ * ✅ WebSocket optimizado para Chat Agent v11.0 con Perfect Integration
  * Heartbeat compatible con configuración del servidor (30s ping, 15s timeout)
  */
 const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) => {
   if (!userId) throw new Error("userId requerido para WS");
   const url = makeWsUrl(`/ws/chat/${encodeURIComponent(userId)}`);
   
-  console.log(`[WS] 🔌 Conectando a Chat Agent v10.0: ${url}`);
+  console.log(`[WS] 🔌 Conectando a Chat Agent v11.0: ${url}`);
   const socket = new WebSocket(url);
   
   let heartbeatInterval;
   let isAlive = false;
 
   socket.onopen = (evt) => {
-    console.log('[WS] ✅ Chat Agent v10.0 conectado exitosamente');
+    console.log('[WS] ✅ Chat Agent v11.0 conectado exitosamente');
     isAlive = true;
 
-    // ✅ Heartbeat cada 25s (más conservador que el servidor)
+    // ✅ Heartbeat cada 18s (sincronizado con backend 20s)
     heartbeatInterval = setInterval(() => {
       if (socket.readyState === WebSocket.OPEN) {
-        console.log('[WS] 💓 Enviando ping a Chat Agent v10.0');
+        console.log('[WS] 💓 Enviando ping a Chat Agent v11.0');
         try {
           socket.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
         } catch (error) {
@@ -199,16 +251,16 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
           clearInterval(heartbeatInterval);
         }
 
-        // Timeout de 10s para recibir pong
+        // Timeout de 12s para recibir pong (vs backend 10s timeout)
         isAlive = false;
         setTimeout(() => {
           if (!isAlive && socket.readyState === WebSocket.OPEN) {
             console.log('[WS] ❌ Ping timeout, reconectando...');
             socket.close(1000, 'Ping timeout'); 
           }
-        }, 10000);
+        }, 120000); // ✅ AUMENTADO: 2 mins para OpenAI
       }
-    }, 25000);
+    }, 60000); // ✅ AUMENTADO: 60s para OpenAI
 
     onOpen && onOpen(evt);
   };
@@ -217,15 +269,25 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
     try {
       const msg = JSON.parse(evt.data);
       
-      // ✅ Manejar ready de Chat Agent v10.0 + CDG Agent v6.0
+      // ✅ Manejar ready de Chat Agent v11.0 + CDG Agent v6.1 CON ROLES
       if (msg.type === 'ready') {
         console.log(`[WS] 🎯 Ready: ${msg.chat_agent} + ${msg.cdg_agent} (${msg.integration})`);
+        console.log(`[WS] 🔐 Usuario rol: ${msg.user_role} con funcionalidades de seguridad: ${msg.security_features?.join(', ')}`);
+        // ✅ NUEVO: Guardar rol del usuario para el frontend
+        if (onOpen) onOpen({ ...msg, userRole: msg.user_role });
+        return;
+      }
+      
+      // 🚨 NUEVO: Manejar acceso denegado por confidencialidad
+      if (msg.type === 'access_denied') {
+        console.warn(`[WS] 🔐 Acceso denegado: ${msg.message}`);
+        if (onError) onError({ type: 'access_denied', ...msg });
         return;
       }
       
       // Manejar pong del servidor
       if (msg.type === 'pong') {
-        console.log('[WS] 💚 Pong recibido de Chat Agent v10.0');
+        console.log('[WS] 💚 Pong recibido de Chat Agent v11.0');
         isAlive = true;
         return;
       }
@@ -237,12 +299,12 @@ const openChatSocket = (userId, { onMessage, onOpen, onClose, onError } = {}) =>
   };
   
   socket.onerror = (evt) => {
-    console.error('[WS] ❌ Error en Chat Agent v10.0:', evt);
+    console.error('[WS] ❌ Error en Chat Agent v11.0:', evt);
     onError && onError(evt);
   };
   
   socket.onclose = (evt) => {
-    console.log(`[WS] 🔌 Chat Agent v10.0 cerrado: ${evt.code} - ${evt.reason || 'Sin razón'}`);
+    console.log(`[WS] 🔌 Chat Agent v11.0 cerrado: ${evt.code} - ${evt.reason || 'Sin razón'}`);
     
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
@@ -305,9 +367,9 @@ const basic = {
   centros: (cfg) => unwrap(http.get("/basic/centros", cfg)),
   productos: (cfg) => unwrap(http.get("/basic/productos", cfg)),
   
-  // ✅ NUEVOS: Gastos
+  // ✅ AÑADIDO: Gastos por fecha (faltaba este)
   gastosByFecha: (fecha, cfg) =>
-    unwrap(http.get("/basic/gastos/by-fecha", { params: { fecha }, ...cfg })),
+    unwrap(http.get("/basic/gastos-by-fecha", { params: { fecha }, ...cfg })),
 
   // ✅ NUEVOS: Contratos extendidos
   allContracts: (cfg) => unwrap(http.get("/basic/contracts", cfg)),
@@ -349,20 +411,20 @@ const basic = {
   productosTop: (cfg) => unwrap(http.get("/basic/productos/top", cfg)),
 
   // ✅ NUEVOS: Precios completos
-  preciosStd: (cfg) => unwrap(http.get("/basic/precios/std", cfg)),
+  preciosStd: (cfg) => unwrap(http.get("/basic/precios-std", cfg)),
   preciosStdBySegmento: (segmentoId, cfg) =>
-    unwrap(http.get(`/basic/precios/std/by-segmento/${encodeURIComponent(segmentoId)}`, cfg)),
+    unwrap(http.get(`/basic/precios-std-by-segmento/${encodeURIComponent(segmentoId)}`, cfg)),
   precioStdBySP: (segmentoId, productoId, cfg) =>
     unwrap(
       http.get(
-        `/basic/precios/std/by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
+        `/basic/precios-std-by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
         cfg
       )
     ),
-  preciosReal: (cfg) => unwrap(http.get("/basic/precios/real", cfg)),
+  preciosReal: (cfg) => unwrap(http.get("/basic/precios-real", cfg)),
   preciosRealByFecha: (fechaCalculo, cfg) =>
     unwrap(
-      http.get("/basic/precios/real/by-fecha", {
+      http.get("/basic/precios-real-by-fecha", {
         params: { fecha_calculo: fechaCalculo },
         ...cfg,
       })
@@ -370,32 +432,32 @@ const basic = {
   preciosRealBySP: (segmentoId, productoId, cfg) =>
     unwrap(
       http.get(
-        `/basic/precios/real/by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
+        `/basic/precios-real-by-sp/${encodeURIComponent(segmentoId)}/${encodeURIComponent(productoId)}`,
         cfg
       )
     ),
   preciosCompare: (fechaCalculo, cfg) =>
     unwrap(
-      http.get("/basic/precios/compare", {
+      http.get("/basic/precios-compare", {
         params: { fecha_calculo: fechaCalculo || undefined },
         ...cfg,
       })
     ),
 
   // ✅ NUEVOS: CDR y cuentas
-  cdrLineas: (cfg) => unwrap(http.get("/basic/cdr/lineas", cfg)),
-  cdrLineasCount: (cfg) => unwrap(http.get("/basic/cdr/lineas/count", cfg)),
+  cdrLineas: (cfg) => unwrap(http.get("/basic/cdr-lineas", cfg)),
+  cdrLineasCount: (cfg) => unwrap(http.get("/basic/cdr-lineas-count", cfg)),
   cuentas: (cfg) => unwrap(http.get("/basic/cuentas", cfg)),
   cuentasByLinea: (lineaCdr, cfg) =>
-    unwrap(http.get(`/basic/cuentas/by-linea/${encodeURIComponent(lineaCdr)}`, cfg)),
+    unwrap(http.get(`/basic/cuentas-by-linea/${encodeURIComponent(lineaCdr)}`, cfg)),
 
   // ✅ NUEVOS: Conteos adicionales
   countContractsByCentro: (cfg) =>
-    unwrap(http.get("/basic/contracts/count-by-centro", cfg)),
+    unwrap(http.get("/basic/contracts-count-by-centro", cfg)),
   countContractsByProducto: (cfg) =>
-    unwrap(http.get("/basic/contracts/count-by-producto", cfg)),
+    unwrap(http.get("/basic/contracts-count-by-producto", cfg)),
   countContractsByGestor: (cfg) =>
-    unwrap(http.get("/basic/contracts/count-by-gestor", cfg)),
+    unwrap(http.get("/basic/contracts-count-by-gestor", cfg)),
 };
 
 // ✅ Analytics - COMPLETAMENTE NUEVO MÓDULO CON MÉTRICAS FINANCIERAS
@@ -548,26 +610,40 @@ const kpis = {
     unwrap(http.get(`/kpis/centro/${centroId}/bonus-total`, { params: { periodo }, ...cfg })),
 };
 
-// ✅ Charts - ACTUALIZADO CON NUEVOS MÉTODOS
+// ✅ Charts V4.4 - ACTUALIZADO CON NUEVOS ENDPOINTS + CONFIDENCIALIDAD
 const charts = {
   fromData: (data, config = {}, cfg) =>
     unwrap(http.post("/charts/from-data", { data, config }, cfg)),
-  pivot: ({ userId, message, currentChartConfig, chartInteractionType = "pivot" }, cfg) =>
+  
+  // 🔧 ACTUALIZADO: Pivot V4.4 con confidencialidad y roles
+  pivot: ({ userId, userRole = "GESTOR", message, userMessage, currentConfig, currentChartConfig }, cfg) =>
     unwrap(
       http.post("/charts/pivot", {
-        user_id: userId,
-        message,
-        current_chart_config: currentChartConfig || {},
-        chart_interaction_type: chartInteractionType,
+        userid: userId,
+        user_role: userRole,
+        message: userMessage || message,
+        current_config: currentConfig || currentChartConfig || {},
       }, cfg)
     ),
+    
   quick: ({ queryMethod, chartType = "bar", kwargs = {} }, cfg) =>
     unwrap(http.post("/charts/quick", { query_method: queryMethod, chart_type: chartType, kwargs }, cfg)),
+    
+  // ✅ AÑADIDOS: Nuevos endpoints V4.4
+  meta: (params = {}, cfg) =>
+    unwrap(http.get("/charts/meta", { params: toQueryBody(params), ...cfg })),
+  options: (userRole, cfg) =>
+    unwrap(http.get(`/charts/options/${encodeURIComponent(userRole)}`, cfg)),
+  validateConfig: (config, cfg) =>
+    unwrap(http.post("/charts/validate-config", config, cfg)),
+  createSecure: (payload, cfg) =>
+    unwrap(http.post("/charts/create-secure", toQueryBody(payload), cfg)),
+    
+  // Endpoints existentes mantenidos
   supportedTypes: (cfg) => unwrap(http.get("/charts/supported-types", cfg)),
   validate: (cfg) => unwrap(http.get("/charts/validate", cfg)),
   availableQueries: (cfg) => unwrap(http.get("/charts/available-queries", cfg)),
   availableTypes: (cfg) => unwrap(http.get("/charts/available-types", cfg)),
-  meta: (cfg) => unwrap(http.get("/charts/meta", cfg)),
   summaryDashboard: (cfg) => unwrap(http.get("/charts/summary-dashboard", cfg)),
   gestoresRanking: ({ metric = "CONTRATOS", chartType = "horizontal_bar" } = {}, cfg) =>
     unwrap(http.get("/charts/gestores-ranking", { params: { metric, chart_type: chartType }, ...cfg })),
@@ -584,6 +660,12 @@ const charts = {
     ),
   gastosByCentro: ({ fecha, chartType = "stacked_bar" }, cfg) =>
     unwrap(http.get("/charts/gastos-by-centro", { params: { fecha, chart_type: chartType }, ...cfg })),
+};
+
+// ✅ Admin V4.4 - MÓDULO COMPLETAMENTE NUEVO
+const admin = {
+  validateChartGenerator: (cfg) =>
+    unwrap(http.get("/admin/validate-chart-generator", cfg)),
 };
 
 // ✅ Dashboards - COMPLETAMENTE EXTENDIDO CON NUEVOS ENDPOINTS
@@ -688,9 +770,17 @@ const feedback = {
   process: (payload, cfg) => unwrap(http.post("/feedback/process", toQueryBody(payload), cfg)),
 };
 
-// ✅ Chat Agent v10.0 - COMPLETAMENTE ACTUALIZADO
+// ✅ Chat Agent v11.0 - COMPLETAMENTE ACTUALIZADO
 const chat = {
-  message: (payload, cfg) => unwrap(http.post("/chat/message", toQueryBody(payload), cfg)),
+  message: (payload, cfg) => {
+    // ✅ DEBUG: Ver payload antes de enviar
+    const cleanPayload = toQueryBody(payload);
+    console.log('🔍 [API.CHAT] ORIGINAL PAYLOAD:', payload);
+    console.log('🔍 [API.CHAT] CLEAN PAYLOAD:', cleanPayload);
+    console.log('🔍 [API.CHAT] SENDING TO:', '/chat/message');
+    
+    return unwrap(http.post("/chat/message", cleanPayload, cfg));
+  },
   status: (cfg) => unwrap(http.get("/chat/status", cfg)),
   // ✅ NUEVO: Capabilities
   capabilities: (cfg) => unwrap(http.get("/chat/capabilities", cfg)),
@@ -737,7 +827,7 @@ const user = {
 };
 
 /* ============================
- * Export público - COMPLETAMENTE ACTUALIZADO
+ * Export público - COMPLETAMENTE ACTUALIZADO V13.0
  * ============================ */
 
 const api = {
@@ -749,20 +839,21 @@ const api = {
   // módulos actualizados
   system,
   catalogs,               // ✅ +2 nuevos endpoints
-  basic,                  // ✅ 35+ endpoints (todos mantenidos)
+  basic,                  // ✅ 35+ endpoints (todos mantenidos) + gastosByFecha añadido
   analytics,              // ✅ +9 nuevos endpoints de métricas financieras
   kpis,                   // ✅ +6 nuevos endpoints financieros específicos
   comparatives,           // ✅ +1 endpoint
   deviations,             // ✅ +3 endpoints  
   incentives,             // ✅ +3 nuevos endpoints detallados
   dataQueries,
-  charts,                 // ✅ +1 endpoint
+  charts,                 // ✅ ACTUALIZADO V4.4: +4 endpoints + pivot actualizado
+  admin,                  // ✅ NUEVO módulo V4.4
   dashboards,             // ✅ +9 nuevos endpoints específicos
   reports,
   kpiCalc,                // ✅ corregido
   security,
   
-  // ✅ NUEVOS MÓDULOS
+  // NUEVOS MÓDULOS
   sql,                    // ✅ 2 endpoints
   gestorAnalysis,         // ✅ 1 endpoint
   reflection,             // ✅ 1 endpoint  
@@ -770,7 +861,7 @@ const api = {
   integration,            // ✅ 4 endpoints
   
   // agentes actualizados
-  chat,                   // ✅ Chat Agent v10.0
+  chat,                   // ✅ Chat Agent v11.0
   agent,                  // ✅ CDG Agent v6.0
   user,
 };
@@ -791,6 +882,7 @@ export {
   incentives,
   dataQueries,
   charts,
+  admin,                  // ✅ AÑADIDO
   dashboards,
   reports,
   kpiCalc,

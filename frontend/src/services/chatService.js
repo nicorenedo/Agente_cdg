@@ -559,7 +559,13 @@ const httpChat = {
     }
     
     return suggestions;
-  }
+  },
+  
+  /** ✅ NUEVO: Opciones de gráficos por rol */
+  getChartOptions: (userRole, cfg) => chartsApi.options(userRole, cfg),
+
+  /** ✅ NUEVO: Validar configuración de gráfico */
+  validateChartConfig: (config, cfg) => chartsApi.validateConfig(config, cfg),
 };
 
 /* =========================================
@@ -1040,6 +1046,10 @@ function createChatSession(userId = uid(), options = {}) {
     getPivotConfig: () => httpChat.getPivotConfig(),
     getValidCombinations: () => httpChat.getValidCombinations(),
     getPivotSuggestions: (currentConfig) => httpChat.getPivotSuggestions(currentConfig),
+
+    // ✅ NUEVAS funciones Charts V4.4
+    getChartOptions: (userRole = 'GESTOR', cfg) => httpChat.getChartOptions(userRole, cfg),
+    validateChartConfig: (config, cfg) => httpChat.validateChartConfig(config, cfg),
 
     // ✅ WebSocket mejorado
     ws: wsClient,

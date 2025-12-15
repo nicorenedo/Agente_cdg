@@ -33,6 +33,8 @@ import api, {
   ApiClientError,
 } from "./api";
 
+import { parsePivotIntent } from "./chatService";
+
 /* =========================================
  * Constantes y utilidades de validación actualizadas
  * ========================================= */
@@ -1708,8 +1710,8 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
     console.warn(`[Analytics] ⚠️ Backend pivot failed, trying local parsing:`, backendError.message);
 
     // 2. Fallback: usar parser local desde chatService si está disponible
-    const chatService = await import('./chatService.js');
-    const parsedIntent = chatService.parsePivotIntent?.(message, currentChartConfig);
+    const parsedIntent = parsePivotIntent(message, currentChartConfig);
+
 
     if (parsedIntent && parsedIntent.intent === 'pivot') {
       console.log(`[Analytics] ✅ Local parsing successful:`, parsedIntent);

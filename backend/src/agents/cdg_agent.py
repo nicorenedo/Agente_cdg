@@ -71,25 +71,68 @@ try:
     
     # ✅ Import dinámico de chart_generator
     logger.info("🔧 Cargando chart_generator...")
-    chart_gen_path = src_dir / 'tools' / 'chart_generator.py'
-    
-    if not chart_gen_path.exists():
-        raise FileNotFoundError(f"No se encuentra chart_generator.py en {chart_gen_path}")
+    try:
+        # Import directo sin path dinámico problemático
+        from tools.chart_generator import (
+            CDGDashboardGenerator,
+            QueryIntegratedChartGenerator, 
+            create_chart_from_query_data,
+            pivot_chart_with_query_integration,
+            handle_chart_change_request,
+            validate_chart_generator,
+            # 🔐 NUEVAS FUNCIONES V4.4:
+            get_chart_options_by_role,
+            validate_chart_config_for_user,
+            create_chart_with_confidentiality,
+            interpret_chart_change_with_context,
+            handle_chart_pivot_request,
+            get_chart_metadata_for_frontend
+        )
+        CHART_GENERATOR_AVAILABLE = True
+        logger.info("✅ Chart Generator V4.4 cargado exitosamente")
+    except Exception as e:
+        logger.error(f"❌ Error importando chart generator: {e}")
+        # Fallback básico
+        class CDGDashboardGenerator:
+            def generate_gestor_dashboard(self, *args, **kwargs):
+                return {'charts': [], 'error': 'Chart generator not available'}
 
-    spec = importlib.util.spec_from_file_location("chart_generator", chart_gen_path)
-    chart_gen_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(chart_gen_module)
-    sys.modules['chart_generator'] = chart_gen_module
-    sys.modules['tools.chart_generator'] = chart_gen_module
+        class QueryIntegratedChartGenerator:
+            def generate_chart_from_data(self, *args, **kwargs):
+                return {'id': 'mock', 'type': 'error', 'message': 'Not available'}
 
-    # Importar funciones del chart generator
-    CDGDashboardGenerator = getattr(chart_gen_module, 'CDGDashboardGenerator', chart_gen_module.QueryIntegratedChartGenerator)
-    QueryIntegratedChartGenerator = chart_gen_module.QueryIntegratedChartGenerator
-    create_chart_from_query_data = chart_gen_module.create_chart_from_query_data
-    pivot_chart_with_query_integration = chart_gen_module.pivot_chart_with_query_integration
-    handle_chart_change_request = chart_gen_module.handle_chart_change_request
-    
-    logger.info("✅ Chart Generator cargado exitosamente")
+        def create_chart_from_query_data(*args, **kwargs):
+            return {'id': 'mock', 'type': 'error'}
+
+        def pivot_chart_with_query_integration(*args, **kwargs):
+            return {'status': 'mock'}
+
+        def handle_chart_change_request(*args, **kwargs):
+            return {'status': 'mock'}
+
+        def validate_chart_generator():
+            return {'status': 'ERROR', 'message': 'Chart generator not available'}
+
+        # Funciones V4.4 mock
+        def get_chart_options_by_role(*args, **kwargs):
+            return {'error': 'Not available'}
+
+        def validate_chart_config_for_user(*args, **kwargs):
+            return {'valid_config': {}, 'error': 'Not available'}
+
+        def create_chart_with_confidentiality(*args, **kwargs):
+            return {'id': 'mock', 'error': 'Not available'}
+
+        def interpret_chart_change_with_context(*args, **kwargs):
+            return {'status': 'error', 'message': 'Not available'}
+
+        def handle_chart_pivot_request(*args, **kwargs):
+            return {'status': 'error', 'message': 'Not available'}
+
+        def get_chart_metadata_for_frontend():
+            return {'error': 'Not available'}
+
+        CHART_GENERATOR_AVAILABLE = False
     
     # ✅ Import dinámico de sql_guard
     logger.info("🔧 Cargando sql_guard...")
@@ -111,7 +154,7 @@ try:
         from tools.report_generator import BusinessReportGenerator
         logger.info("✅ BusinessReportGenerator importado")
     except Exception:
-        logger.info("⚠️ Usando BusinessReportGenerator fallback")
+        logger.info("ℹ️ BusinessReportGenerator opcional - usando fallback funcional")
         class BusinessReportGenerator:
             def __init__(self):
                 pass
@@ -159,8 +202,8 @@ try:
         class DynamicBusinessConfig:
             pass
     
-    IMPORTS_SUCCESSFUL = True
-    logger.info("✅ CDG Agent v6.0: Integración completa con chat_agent v10.0")
+    IMPORTS_SUCCESSFUL = CHART_GENERATOR_AVAILABLE
+    logger.info(f"✅ CDG Agent v6.0: Integración completa con chat_agent v10.0 (Charts: {'✅' if CHART_GENERATOR_AVAILABLE else '❌'}) - Modo: {'PRODUCTION' if CHART_GENERATOR_AVAILABLE else 'FALLBACK'}")
     
 except Exception as e:
     logger.warning(f"⚠️ Modo fallback activado: {e}")
@@ -339,6 +382,7 @@ class CDGAgentV6:
         self.config_manager = DynamicBusinessConfig()
         self.conversation_context = []
         self.imports_successful = IMPORTS_SUCCESSFUL
+        self.mode = "PRODUCTION" if CHART_GENERATOR_AVAILABLE else "FALLBACK"
         
         # Cliente LLM para análisis avanzados
         try:
@@ -346,7 +390,7 @@ class CDGAgentV6:
         except:
             self.llm_client = None
         
-        mode = "PRODUCTION" if self.imports_successful else "FALLBACK"
+        mode = "PRODUCTION" if CHART_GENERATOR_AVAILABLE else "FALLBACK"
         print(f"\n{'='*60}")
         print(f"🚀 CDG AGENT v6.0 INICIALIZADO")
         print(f"   Modo: {mode}")
