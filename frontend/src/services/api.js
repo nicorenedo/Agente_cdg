@@ -763,6 +763,16 @@ const gestorAnalysis = {
     })),
 };
 
+// ✅ Gestor Copilot — Agente personal del gestor comercial
+const gestorCopilot = {
+  chat: (payload, cfg) =>
+    unwrap(http.post("/chat/gestor", toQueryBody(payload), cfg)),
+  status: (gestorId, cfg) =>
+    unwrap(http.get(`/chat/gestor/${encodeURIComponent(gestorId)}/status`, cfg)),
+  reset: (gestorId, cfg) =>
+    unwrap(http.post(`/chat/gestor/${encodeURIComponent(gestorId)}/reset`, {}, cfg)),
+};
+
 // ✅ Reflection - NUEVO MÓDULO
 const reflection = {
   insights: (cfg) => unwrap(http.get("/reflection/insights", cfg)),
@@ -859,7 +869,8 @@ const api = {
   // NUEVOS MÓDULOS
   sql,                    // ✅ 2 endpoints
   gestorAnalysis,         // ✅ 1 endpoint
-  reflection,             // ✅ 1 endpoint  
+  gestorCopilot,          // ✅ 3 endpoints (chat, status, reset)
+  reflection,             // ✅ 1 endpoint
   feedback,               // ✅ 1 endpoint
   integration,            // ✅ 4 endpoints
   
@@ -892,6 +903,7 @@ export {
   security,
   sql,
   gestorAnalysis,
+  gestorCopilot,
   reflection,
   feedback,
   integration,

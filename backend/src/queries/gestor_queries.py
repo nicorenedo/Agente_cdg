@@ -866,8 +866,8 @@ class GestorQueries:
 
     def get_alertas_criticas_gestor(self, gestor_id: str, periodo: str = "2025-10") -> QueryResult:
         """
-        ✅ CORREGIDO: Usa PRECIO_STD + gastos operativos
-        Alertas críticas para un gestor (margen bajo, desviación precio, etc.) con impacto.
+        Alertas críticas para un gestor (margen bajo) basadas en gastos operativos reales.
+        PRECIO_POR_PRODUCTO_REAL es datos CDG — no se usa aquí.
         """
         query = """
             WITH seg AS (
@@ -889,7 +889,7 @@ class GestorQueries:
                     'Revisar pricing y estructura de costos' as accion_recomendada
                 FROM MAESTRO_GESTORES g
                 JOIN (
-                    SELECT 
+                    SELECT
                         g.GESTOR_ID,
                         CASE WHEN ingresos_total > 0
                              THEN ROUND(((ingresos_total - gastos_total) / ingresos_total) * 100, 2)
@@ -921,41 +921,15 @@ class GestorQueries:
                     ) sub
                 ) datos ON g.GESTOR_ID = datos.GESTOR_ID
                 WHERE g.GESTOR_ID = ? AND datos.margen_neto_pct < 8.0
-            ),
-            alertas_precio AS (
-                SELECT
-                    'DESVIACION_PRECIO' as tipo_alerta,
-                    'Desviación de precio superior al 20%' as descripcion,
-                    'ALTA' as severidad,
-                    g.DESC_GESTOR as gestor,
-                    ABS(d.desviacion_pct) as valor_actual,
-                    20.0 as umbral_critico,
-                    'Revisar política de pricing del producto' as accion_recomendada
-                FROM MAESTRO_GESTORES g
-                JOIN (
-                    SELECT DISTINCT mc.GESTOR_ID,
-                           ROUND(((ABS(pr.PRECIO_MANTENIMIENTO_REAL) - ABS(ps.PRECIO_MANTENIMIENTO))
-                                  / ABS(ps.PRECIO_MANTENIMIENTO)) * 100, 2) as desviacion_pct
-                    FROM MAESTRO_CONTRATOS mc
-                    JOIN MAESTRO_GESTORES gg ON mc.GESTOR_ID = gg.GESTOR_ID
-                    JOIN PRECIO_POR_PRODUCTO_REAL pr ON mc.PRODUCTO_ID = pr.PRODUCTO_ID
-                         AND gg.SEGMENTO_ID = pr.SEGMENTO_ID
-                    JOIN PRECIO_POR_PRODUCTO_STD ps ON mc.PRODUCTO_ID = ps.PRODUCTO_ID
-                         AND gg.SEGMENTO_ID = ps.SEGMENTO_ID
-                    WHERE substr(pr.FECHA_CALCULO,1,7) = ?
-                ) d ON g.GESTOR_ID = d.GESTOR_ID
-                WHERE g.GESTOR_ID = ? AND ABS(d.desviacion_pct) >= 20.0
             )
             SELECT * FROM alertas_margen
-            UNION ALL
-            SELECT * FROM alertas_precio
             ORDER BY severidad ASC, valor_actual DESC
         """
-        
+
         fecha_fin = f"{periodo}-31" if periodo else "2025-11-01"
-        
+
         start = datetime.now()
-        raw = execute_query(query, (gestor_id, gestor_id, fecha_fin, fecha_fin, periodo, gestor_id, gestor_id, periodo, gestor_id))
+        raw = execute_query(query, (gestor_id, gestor_id, fecha_fin, fecha_fin, periodo, gestor_id, gestor_id))
 
         enhanced = []
         for r in raw:
@@ -1207,34 +1181,43 @@ class GestorQueries:
 
     def get_desviaciones_precio_gestor_enhanced(self, gestor_id: str, periodo: str = "2025-10", threshold: float = 15.0) -> QueryResult:
         """
-        Desviaciones de precio (real vs std) de productos en la cartera del gestor.
+        Desviaciones de coste efectivo real (MOVIMIENTOS) vs precio STD por producto.
+        PRECIO_POR_PRODUCTO_REAL es datos CDG — no se usa aquí.
+        Coste efectivo = gastos operativos (62/64/68/69) del periodo / nº contratos del producto.
         """
         query = """
             SELECT
                 mc.PRODUCTO_ID,
                 mp.DESC_PRODUCTO,
-                pr.SEGMENTO_ID,
+                g.SEGMENTO_ID,
                 ms.DESC_SEGMENTO,
-                pr.PRECIO_MANTENIMIENTO_REAL,
-                ps.PRECIO_MANTENIMIENTO,
-                pr.FECHA_CALCULO
+                COUNT(mc.CONTRATO_ID) as n_contratos,
+                COALESCE(ABS(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                                      THEN mov.IMPORTE ELSE 0 END)), 0) as gastos_directos,
+                CASE WHEN COUNT(mc.CONTRATO_ID) > 0
+                     THEN ROUND(COALESCE(ABS(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                                                      THEN mov.IMPORTE ELSE 0 END)), 0)
+                                / COUNT(mc.CONTRATO_ID), 2)
+                     ELSE 0 END as coste_efectivo_por_contrato,
+                ps.PRECIO_MANTENIMIENTO as precio_std
             FROM MAESTRO_CONTRATOS mc
             JOIN MAESTRO_PRODUCTOS mp ON mc.PRODUCTO_ID = mp.PRODUCTO_ID
             JOIN MAESTRO_GESTORES g  ON mc.GESTOR_ID = g.GESTOR_ID
             JOIN MAESTRO_SEGMENTOS ms ON g.SEGMENTO_ID = ms.SEGMENTO_ID
-            JOIN PRECIO_POR_PRODUCTO_REAL pr ON mc.PRODUCTO_ID = pr.PRODUCTO_ID AND g.SEGMENTO_ID = pr.SEGMENTO_ID
-            JOIN PRECIO_POR_PRODUCTO_STD  ps ON pr.PRODUCTO_ID = ps.PRODUCTO_ID AND pr.SEGMENTO_ID = ps.SEGMENTO_ID
+            JOIN PRECIO_POR_PRODUCTO_STD ps ON mc.PRODUCTO_ID = ps.PRODUCTO_ID
+                AND g.SEGMENTO_ID = ps.SEGMENTO_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                AND strftime('%Y-%m', mov.FECHA) = ?
             WHERE mc.GESTOR_ID = ?
-              AND substr(pr.FECHA_CALCULO,1,7) = ?
-            GROUP BY mc.PRODUCTO_ID, pr.SEGMENTO_ID
+            GROUP BY mc.PRODUCTO_ID, g.SEGMENTO_ID
         """
         start = datetime.now()
-        raw = execute_query(query, (gestor_id, periodo))
+        raw = execute_query(query, (periodo, gestor_id))
         out = []
         for r in raw:
             anal = self.kpi_calc.analyze_desviacion_presupuestaria(
-                valor_real=r['PRECIO_MANTENIMIENTO_REAL'],
-                valor_presupuestado=r['PRECIO_MANTENIMIENTO']
+                valor_real=r['coste_efectivo_por_contrato'],
+                valor_presupuestado=r['precio_std']
             )
             if abs(anal['desviacion_pct']) >= threshold:
                 out.append({

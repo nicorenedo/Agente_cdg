@@ -58,6 +58,10 @@ try:
         # 🔐 NUEVOS IMPORTS CRÍTICOS:
         PermissionManager, UserRole  # ⬅️ AÑADIR ESTOS
     )
+    from agents.gestor_agent import (
+        GestorAgent, create_gestor_agent, get_gestor_agent, process_gestor_message
+    )
+    from utils.auth import access_guard, UserRole as AuthUserRole
 
     # Tools: KPI calculator con fallback mejorado
     try:
@@ -227,6 +231,30 @@ except Exception as e:
     
     def is_query_safe(sql): return True
     def validate_query_for_cdg(sql, context="general"): return {"is_safe": True, "context": context, "warnings": [], "query_hash": hash(sql)}
+
+    # Mock fallbacks para gestor_agent y auth
+    class GestorAgent:
+        def __init__(self, gestor_id, **kw): self.gestor_id = gestor_id
+        async def process_message(self, message, **kw):
+            return {"response": f"[Mock] Gestor {self.gestor_id}: {message}", "used_tools": [], "execution_time": 0, "gestor_id": self.gestor_id}
+        def get_status(self): return {"gestor_id": self.gestor_id, "initialized": False, "fallback": True}
+        def reset_conversation(self): pass
+
+    def create_gestor_agent(gestor_id, **kw): return GestorAgent(gestor_id)
+    def get_gestor_agent(gestor_id): return None
+    async def process_gestor_message(gestor_id, message, **kw):
+        return {"response": f"[Mock] {message}", "used_tools": [], "execution_time": 0, "gestor_id": gestor_id}
+
+    class _MockAccessGuard:
+        def can_access_gestor(self, *a, **k): return True
+        def check_message_permission(self, *a, **k): return {"allowed": True, "reason": "mock"}
+        def filter_rows_confidential(self, rows, *a, **k): return rows
+        def determine_role(self, user_id=None): return "control_gestion"
+    access_guard = _MockAccessGuard()
+
+    class AuthUserRole:
+        GESTOR = "gestor"
+        CONTROL_GESTION = "control_gestion"
 
 # Logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -420,6 +448,16 @@ class DynamicQueryRequest(BaseModel):
     sql: str
     context: str = "general"
 
+class GestorChatRequest(BaseModel):
+    """Request para el copiloto personal del gestor (GestorAgent)."""
+    gestor_id: str
+    message: str
+    nombre: Optional[str] = "Gestor"
+    segmento: Optional[str] = "No especificado"
+    centro: Optional[str] = "No especificado"
+    periodo: Optional[str] = "2025-10"
+    session_id: Optional[str] = None
+
 # ============================================================================
 # 🎯 ENDPOINTS PRINCIPALES - SISTEMA
 # ============================================================================
@@ -439,7 +477,9 @@ def root():
                 "Flujo perfecto de enrutamiento",
                 "Análisis especializados avanzados",
                 "Integración perfecta entre agentes",
-                "Funcionalidad de pivot de gráficos mejorada"
+                "Funcionalidad de pivot de gráficos mejorada",
+                "GestorAgent: copiloto personal LangChain por gestor",
+                "auth.py: control de acceso centralizado por perfil",
             ],
             "modules": {
                 "basic_queries": BASIC_QUERIES_AVAILABLE,
@@ -455,13 +495,19 @@ def root():
 def health():
     chat_ok = hasattr(chat_agent, 'get_agent_status')
     cdg_ok = hasattr(cdg_agent, 'get_agent_status')
-    
+
+    try:
+        from agents.gestor_agent import LANGCHAIN_AVAILABLE as _lc_ok
+    except Exception:
+        _lc_ok = False
+
     return ok({
-        "status": "healthy", 
+        "status": "healthy",
         "imports_successful": IMPORTS_SUCCESSFUL,
         "chat_agent_v10": chat_ok,
         "cdg_agent_v6": cdg_ok,
-        "integration": "perfect" if chat_ok and cdg_ok else "limited"
+        "gestor_agent": _lc_ok,
+        "integration": "perfect" if chat_ok and cdg_ok else "limited",
     })
 
 @app.get("/version", tags=["System"], response_model=ApiResponse)
@@ -635,6 +681,66 @@ def chat_reset(user_id: str):
         return ok({"status": "reset", "user_id": user_id})
     except Exception:
         return ok({"status": "error"}, meta={"note": "fallback"})
+
+# ============================================================================
+# 🎯 GESTOR AGENT — Copiloto personal del gestor comercial
+# ============================================================================
+
+@app.post("/chat/gestor", tags=["Gestor Copilot"], response_model=ApiResponse)
+async def gestor_chat(req: GestorChatRequest):
+    """
+    Copiloto personal del Gestor Comercial (GestorAgent).
+    Solo accede a los datos del gestor_id indicado.
+    Sistema de confidencialidad bancaria integrado.
+    """
+    try:
+        # Crear o reutilizar el agente del gestor
+        agent = create_gestor_agent(
+            gestor_id=req.gestor_id,
+            nombre=req.nombre or "Gestor",
+            segmento=req.segmento or "No especificado",
+            centro=req.centro or "No especificado",
+            periodo_default=req.periodo or "2025-10",
+        )
+
+        result = await agent.process_message(
+            message=req.message,
+            session_id=req.session_id,
+        )
+
+        return ok(result, meta={
+            "agent": "gestor_agent",
+            "gestor_id": req.gestor_id,
+            "blocked": result.get("blocked", False),
+        })
+
+    except Exception as e:
+        logger.error(f"Error en /chat/gestor: {e}")
+        return ok(
+            {"response": f"Error procesando mensaje: {e}", "error": str(e)},
+            meta={"note": "gestor_chat_error"},
+        )
+
+
+@app.get("/chat/gestor/{gestor_id}/status", tags=["Gestor Copilot"], response_model=ApiResponse)
+def gestor_chat_status(gestor_id: str):
+    """Estado del GestorAgent para un gestor concreto."""
+    agent = get_gestor_agent(gestor_id)
+    if agent is None:
+        return ok(
+            {"gestor_id": gestor_id, "initialized": False, "conversation_turns": 0},
+            meta={"note": "agent_not_yet_created"},
+        )
+    return ok(agent.get_status(), meta={"gestor_id": gestor_id})
+
+
+@app.post("/chat/gestor/{gestor_id}/reset", tags=["Gestor Copilot"], response_model=ApiResponse)
+def gestor_chat_reset(gestor_id: str):
+    """Reinicia el historial de conversación del GestorAgent."""
+    agent = get_gestor_agent(gestor_id)
+    if agent:
+        agent.reset_conversation()
+    return ok({"status": "reset", "gestor_id": gestor_id})
 
 # ============================================================================
 # 🎯 ENDPOINTS ACTUALIZADOS - CDG AGENT v6.0

@@ -361,22 +361,24 @@ llm = AzureChatOpenAI(
 - Prompt en `generate_dynamic_incentive_query` corregido para no sugerir PRECIO_REAL como gastos
 - Commit: `7fb5e0f`
 
-### ⚠️ Funciones con bug pendientes de corregir (baja prioridad — no llamadas desde agentes)
-En `gestor_queries.py` quedan ~12 funciones con bug (no críticas, no llamadas desde main/agentes):
-`calculate_margen_neto_gestor_enhanced`, `calculate_margen_neto_gestor`, `calculate_eficiencia_operativa_gestor`, `calculate_roe_gestor`, `get_alertas_criticas_gestor`, `get_distribucion_productos_gestor_enhanced`, `get_gestor_dashboard_summary`, `get_gestor_evolution_trimestral`, `get_gestor_producto_breakdown`, `get_gestor_kpis_comparative`, `compare_gestor_septiembre_octubre`, `get_evolucion_temporal_gestor`
+**Corrección de `gestor_queries.py` funciones con bug (sesión 5 — completado):**
+- Revisión exhaustiva: solo 2 funciones usaban realmente PRECIO_REAL (no 12 como se estimó — resto ya usaban PRECIO_STD o MOVIMIENTOS)
+- `get_alertas_criticas_gestor`: eliminada CTE `alertas_precio` que hacía JOIN a PRECIO_POR_PRODUCTO_REAL. Ahora solo genera `alertas_margen` con gastos operativos reales. Params reducidos de 9 a 7.
+- `get_desviaciones_precio_gestor_enhanced`: reescrita para comparar coste efectivo real (gastos 62/64/68/69 de MOVIMIENTOS / nº contratos) vs PRECIO_STD. Eliminado JOIN a PRECIO_POR_PRODUCTO_REAL.
+- Commit: pendiente (incluido en este commit)
 
 **Creación de archivos nuevos (sesión 4 — completado):**
 - `backend/src/utils/auth.py` — `AccessGuard` con `UserRole`, filtrado por perfil, detección cross-gestor en texto, inyección WHERE GESTOR_ID en SQL dinámico. Instancia global `access_guard`. Commit: `83d8db3`
 - `backend/src/agents/gestor_agent.py` — `GestorAgent` con LangChain `create_tool_calling_agent` + Azure OpenAI. 6 tools (`get_mis_kpis`, `get_mi_cartera`, `get_mis_desviaciones`, `get_evolucion_sep_oct`, `get_mis_clientes`, `get_resumen_periodo`), caché por gestor_id, historial de conversación, guardia de acceso integrada. Funciones de conveniencia: `create_gestor_agent`, `process_gestor_message`. Commit: `83d8db3`
 
+**Integración en `main.py` y `api.js` (sesión 5 — completado):**
+- `backend/main.py`: imports + mock fallbacks para `gestor_agent` y `auth`; modelo `GestorChatRequest`; 3 nuevos endpoints `POST /chat/gestor`, `GET /chat/gestor/{id}/status`, `POST /chat/gestor/{id}/reset`; `/health` y `root()` actualizados
+- `frontend/src/services/api.js`: módulo `gestorCopilot` con métodos `chat`, `status`, `reset`; exportado en objeto `api` y exports individuales
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Paso 1 — Integrar `gestor_agent.py` en `main.py`:**
-- Añadir endpoint `POST /api/chat/gestor` que use `process_gestor_message(gestor_id, message, nombre, segmento, centro)`
-- El endpoint debe leer `gestor_id` del body y buscar los datos del gestor en `basic_queries.get_gestor_info(gestor_id)` para obtener nombre/segmento/centro
-
-**Paso 2 — Corregir funciones pendientes en `gestor_queries.py`** (las 12 listadas arriba, baja prioridad)
+**Único pendiente relevante:**
+- `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir
 
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
-- `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir
