@@ -77,9 +77,6 @@ class IncentiveQueries:
             logger.error(f"❌ Error validando parámetros: {e}")
             raise ValueError(f"Parámetros inválidos: periodo={periodo}, umbral={umbral_cumplimiento}")
 
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo_str}-01"
-
         query = """
             WITH objetivos_reales AS (
                 SELECT
@@ -89,17 +86,12 @@ class IncentiveQueries:
                     s.DESC_SEGMENTO,
                     COUNT(DISTINCT mc.CONTRATO_ID) as contratos_reales,
                     COUNT(DISTINCT mc.CLIENTE_ID) as clientes_reales,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_reales,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_reales
+                    COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = ?
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
@@ -109,7 +101,27 @@ class IncentiveQueries:
         """
 
         start_time = datetime.now()
-        raw_results = execute_query(query, (fecha_calculo, periodo_str))
+        raw_results = execute_query(query, (periodo_str,))
+
+        # Redistribución de gastos centrales (cuentas 62/64/68/69 sin contrato)
+        r_c = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo_str,), fetch_type="one"
+        )
+        gastos_centrales = float(r_c["t"]) if r_c else 0.0
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+
+        for row in raw_results:
+            n = row.get('contratos_reales', 0) or 0
+            row['gastos_reales'] = round(row['gastos_directos'] + round(gastos_centrales * n / total_finalistas, 2), 2)
 
         logger.info(f"🔍 Consulta ejecutada para período {periodo_str} | registros={len(raw_results)}")
 
@@ -125,7 +137,7 @@ class IncentiveQueries:
 
             margen_analysis = self.kpi_calc.calculate_margen_neto(
                 ingresos=row['ingresos_reales'],
-                gastos=row['gastos_reales']
+                gastos=abs(row['gastos_reales'])
             )
             objetivos_por_segmento[segmento]['contratos'].append(row['contratos_reales'])
             objetivos_por_segmento[segmento]['clientes'].append(row['clientes_reales'])
@@ -145,7 +157,7 @@ class IncentiveQueries:
             try:
                 margen_analysis = self.kpi_calc.calculate_margen_neto(
                     ingresos=row['ingresos_reales'],
-                    gastos=row['gastos_reales']
+                    gastos=abs(row['gastos_reales'])
                 )
                 segmento = row['DESC_SEGMENTO']
                 objetivos = objetivos_por_segmento.get(segmento, {'objetivo_contratos': 1.0, 'objetivo_clientes': 1.0, 'objetivo_margen': 1.0})
@@ -206,9 +218,6 @@ class IncentiveQueries:
             logger.error(f"❌ Error validando parámetros: {e}")
             raise ValueError(f"Parámetros inválidos: periodo={periodo}, umbral={umbral_cumplimiento}")
 
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo_str}-01"
-
         query = """
             WITH objetivos_reales AS (
                 SELECT
@@ -218,14 +227,11 @@ class IncentiveQueries:
                     s.DESC_SEGMENTO,
                     COUNT(DISTINCT mc.CONTRATO_ID) as contratos_reales,
                     COUNT(DISTINCT mc.CLIENTE_ID) as clientes_reales,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_reales,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_reales,
-                    -- MARGEN NETO CALCULADO CORRECTAMENTE
+                    COALESCE(ABS(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END)), 0) as gastos_reales,
                     ROUND(
                         (COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0)
-                        - COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0))
+                        + COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0))
                         /
                         NULLIF(COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0), 0) * 100, 2
                     ) as margen_neto_real
@@ -233,9 +239,6 @@ class IncentiveQueries:
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = ?
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
@@ -299,7 +302,7 @@ class IncentiveQueries:
         """
 
         start_time = datetime.now()
-        results = execute_query(query, (fecha_calculo, periodo_str, umbral_float))
+        results = execute_query(query, (periodo_str, umbral_float))
         execution_time = (datetime.now() - start_time).total_seconds()
 
         return QueryResult(
@@ -321,9 +324,6 @@ class IncentiveQueries:
             logger.error(f"❌ Error validando parámetros: {e}")
             raise ValueError(f"Parámetros inválidos: periodo={periodo}, umbral={umbral_margen}")
 
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo_str}-01"
-
         query = """
             WITH margen_gestores AS (
                 SELECT
@@ -331,17 +331,13 @@ class IncentiveQueries:
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
+                    COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos,
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total
+                    COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = ?
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
@@ -352,7 +348,27 @@ class IncentiveQueries:
         """
 
         start_time = datetime.now()
-        raw_results = execute_query(query, (fecha_calculo, periodo_str))
+        raw_results = execute_query(query, (periodo_str,))
+
+        # Redistribución de gastos centrales
+        r_c = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo_str,), fetch_type="one"
+        )
+        gastos_centrales = float(r_c["t"]) if r_c else 0.0
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+
+        for row in raw_results:
+            n = row.get('n_contratos', 0) or 0
+            row['gastos_total'] = round(row['gastos_directos'] + round(gastos_centrales * n / total_finalistas, 2), 2)
 
         enhanced_results = []
         margenes_para_ranking = []
@@ -360,7 +376,7 @@ class IncentiveQueries:
         for row in raw_results:
             margen_analysis = self.kpi_calc.calculate_margen_neto(
                 ingresos=row['ingresos_total'],
-                gastos=row['gastos_total']
+                gastos=abs(row['gastos_total'])
             )
             if margen_analysis['margen_neto_pct'] >= umbral_float:
                 margenes_para_ranking.append({'gestor_data': row, 'margen_analysis': margen_analysis})
@@ -411,9 +427,6 @@ class IncentiveQueries:
             logger.error(f"❌ Error validando parámetros: {e}")
             raise ValueError(f"Parámetros inválidos: periodo={periodo}, umbral={umbral_margen}")
 
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo_str}-01"
-
         query = """
             WITH margen_gestores AS (
                 SELECT
@@ -421,14 +434,11 @@ class IncentiveQueries:
                     g.DESC_GESTOR,
                     c.DESC_CENTRO,
                     s.DESC_SEGMENTO,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total,
-                    -- MARGEN NETO CALCULADO CORRECTAMENTE
+                    COALESCE(ABS(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END)), 0) as gastos_total,
                     ROUND(
                         (COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0)
-                        - COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0))
+                        + COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0))
                         /
                         NULLIF(COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0), 0) * 100, 2
                     ) as margen_neto_pct
@@ -436,9 +446,6 @@ class IncentiveQueries:
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = ?
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
@@ -489,7 +496,7 @@ class IncentiveQueries:
         """
 
         start_time = datetime.now()
-        results = execute_query(query, (fecha_calculo, periodo_str, umbral_float))
+        results = execute_query(query, (periodo_str, umbral_float))
         execution_time = (datetime.now() - start_time).total_seconds()
 
         return QueryResult(
@@ -511,9 +518,6 @@ class IncentiveQueries:
             logger.error(f"❌ Error validando parámetros: {e}")
             raise ValueError(f"Parámetros inválidos: periodo={periodo}, pool={pool_total}")
 
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo_str}-01"
-
         query = """
             WITH performance_completa AS (
                 SELECT
@@ -523,17 +527,12 @@ class IncentiveQueries:
                     s.DESC_SEGMENTO,
                     COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
                     COUNT(DISTINCT mc.CLIENTE_ID) as total_clientes,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total
+                    COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = ?
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
@@ -544,18 +543,38 @@ class IncentiveQueries:
         """
 
         start_time = datetime.now()
-        raw_results = execute_query(query, (fecha_calculo, periodo_str))
+        raw_results = execute_query(query, (periodo_str,))
+
+        # Redistribución de gastos centrales
+        r_c = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo_str,), fetch_type="one"
+        )
+        gastos_centrales = float(r_c["t"]) if r_c else 0.0
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+
+        for row in raw_results:
+            n = row.get('total_contratos', 0) or 0
+            row['gastos_total'] = round(row['gastos_directos'] + round(gastos_centrales * n / total_finalistas, 2), 2)
 
         enhanced_results = []
 
         for row in raw_results:
             margen_analysis = self.kpi_calc.calculate_margen_neto(
                 ingresos=row['ingresos_total'],
-                gastos=row['gastos_total']
+                gastos=abs(row['gastos_total'])
             )
             eficiencia_analysis = self.kpi_calc.calculate_ratio_eficiencia(
                 ingresos=row['ingresos_total'],
-                gastos=row['gastos_total']
+                gastos=abs(row['gastos_total'])
             )
             crecimiento_analysis = self.kpi_calc.calculate_crecimiento_captacion(
                 clientes_fin=row['total_clientes'],
@@ -623,9 +642,6 @@ class IncentiveQueries:
             logger.error(f"❌ Error validando parámetros: {e}")
             raise ValueError(f"Parámetros inválidos: periodo={periodo}, pool={pool_total}")
 
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo_str}-01"
-
         query = """
             WITH performance_completa AS (
                 SELECT
@@ -635,22 +651,16 @@ class IncentiveQueries:
                     s.DESC_SEGMENTO,
                     COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
                     COUNT(DISTINCT mc.CLIENTE_ID) as total_clientes,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
-                    -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                    COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total,
-                    -- BENEFICIO NETO CALCULADO CORRECTAMENTE
+                    COALESCE(ABS(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END)), 0) as gastos_total,
                     ROUND(
                         COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0)
-                        - COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0), 2
+                        + COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0), 2
                     ) as beneficio_neto
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                      AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                      AND p.FECHA_CALCULO = ?
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                     AND strftime('%Y-%m', mov.FECHA) = ?
                 WHERE c.IND_CENTRO_FINALISTA = 1
@@ -704,7 +714,7 @@ class IncentiveQueries:
         """
 
         start_time = datetime.now()
-        results = execute_query(query, (fecha_calculo, periodo_str, pool_float, pool_float))
+        results = execute_query(query, (periodo_str, pool_float, pool_float))
         execution_time = (datetime.now() - start_time).total_seconds()
 
         return QueryResult(
@@ -982,64 +992,80 @@ class IncentiveQueries:
         ✅ CORREGIDO - Análisis de incentivos agregado por centro
         ✅ CORREGIDO: Una sola conexión a contratos
         """
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo}-01"
+        periodo_str = str(periodo)
 
         query = """
-        WITH incentivos_centro AS (
-            SELECT
-                c.CENTRO_ID,
-                c.DESC_CENTRO,
-                COUNT(DISTINCT g.GESTOR_ID) as total_gestores,
-                COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
-                -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_centro,
-                -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_centro
-            FROM MAESTRO_CENTROS c
-            JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
-            JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                  AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                  AND p.FECHA_CALCULO = ?
-            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                 AND strftime('%Y-%m', mov.FECHA) = ?
-            WHERE c.IND_CENTRO_FINALISTA = 1
-            GROUP BY c.CENTRO_ID, c.DESC_CENTRO
-        )
         SELECT
-            CENTRO_ID,
-            DESC_CENTRO,
-            total_gestores,
-            total_contratos,
-            ROUND(ingresos_centro, 2) as ingresos_centro,
-            ROUND(gastos_centro, 2) as gastos_centro,
-            ROUND(ingresos_centro - gastos_centro, 2) as beneficio_centro,
-            ROUND(
-                CASE WHEN ingresos_centro > 0 
-                     THEN ((ingresos_centro - gastos_centro) / ingresos_centro) * 100
-                     ELSE 0 END, 2
-            ) as margen_promedio_centro,
-            CASE 
-                WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 20.0 THEN 'EXCELENTE'
-                WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 15.0 THEN 'BUENO'
-                WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 10.0 THEN 'ACEPTABLE'
-                ELSE 'NECESITA_MEJORA'
-            END as categoria_performance_centro,
-            ROUND(
-                CASE 
-                    WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 20.0 THEN total_gestores * 3000 * 1.3
-                    WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 15.0 THEN total_gestores * 3000 * 1.1
-                    WHEN ((ingresos_centro - gastos_centro) / NULLIF(ingresos_centro, 0)) * 100 >= 10.0 THEN total_gestores * 3000 * 0.9
-                    ELSE total_gestores * 3000 * 0.7
-                END, 2
-            ) as pool_estimado_centro
-        FROM incentivos_centro
-        ORDER BY margen_promedio_centro DESC
+            c.CENTRO_ID,
+            c.DESC_CENTRO,
+            COUNT(DISTINCT g.GESTOR_ID) as total_gestores,
+            COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
+            COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_centro,
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos
+        FROM MAESTRO_CENTROS c
+        JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
+        JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+             AND strftime('%Y-%m', mov.FECHA) = ?
+        WHERE c.IND_CENTRO_FINALISTA = 1
+        GROUP BY c.CENTRO_ID, c.DESC_CENTRO
         """
 
         start_time = datetime.now()
-        results = execute_query(query, (fecha_calculo, periodo))
+        raw_results = execute_query(query, (periodo_str,))
+
+        # Redistribución de gastos centrales por centro
+        r_c = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo_str,), fetch_type="one"
+        )
+        gastos_centrales = float(r_c["t"]) if r_c else 0.0
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+
+        results = []
+        for row in raw_results:
+            n = row.get('total_contratos', 0) or 0
+            gastos_redistribuidos = round(gastos_centrales * n / total_finalistas, 2)
+            gastos_centro = round(row['gastos_directos'] + gastos_redistribuidos, 2)  # negative
+            ingresos = round(row['ingresos_centro'], 2)
+            beneficio = round(ingresos + gastos_centro, 2)  # gastos_centro is negative
+            margen = round((beneficio / ingresos) * 100, 2) if ingresos > 0 else 0.0
+
+            if margen >= 20.0:
+                categoria = 'EXCELENTE'
+                pool_mult = 1.3
+            elif margen >= 15.0:
+                categoria = 'BUENO'
+                pool_mult = 1.1
+            elif margen >= 10.0:
+                categoria = 'ACEPTABLE'
+                pool_mult = 0.9
+            else:
+                categoria = 'NECESITA_MEJORA'
+                pool_mult = 0.7
+
+            results.append({
+                'CENTRO_ID': row['CENTRO_ID'],
+                'DESC_CENTRO': row['DESC_CENTRO'],
+                'total_gestores': row['total_gestores'],
+                'total_contratos': n,
+                'ingresos_centro': ingresos,
+                'gastos_centro': round(abs(gastos_centro), 2),
+                'beneficio_centro': beneficio,
+                'margen_promedio_centro': margen,
+                'categoria_performance_centro': categoria,
+                'pool_estimado_centro': round(row['total_gestores'] * 3000 * pool_mult, 2)
+            })
+
+        results.sort(key=lambda x: x['margen_promedio_centro'], reverse=True)
         execution_time = (datetime.now() - start_time).total_seconds()
 
         return QueryResult(
@@ -1056,49 +1082,51 @@ class IncentiveQueries:
         ✅ CORREGIDO: Una sola conexión a contratos
         """
         query = """
-        WITH incentivos_mensuales AS (
-            SELECT
-                strftime('%Y-%m', mov.FECHA) as periodo,
-                COUNT(DISTINCT g.GESTOR_ID) as gestores_activos,
-                -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
-                -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_total
-            FROM MOVIMIENTOS_CONTRATOS mov
-            JOIN MAESTRO_CONTRATOS mc ON mov.CONTRATO_ID = mc.CONTRATO_ID
-            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
-            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                  AND mc.PRODUCTO_ID = p.PRODUCTO_ID
-                                                  AND substr(p.FECHA_CALCULO, 1, 7) = strftime('%Y-%m', mov.FECHA)
-            WHERE strftime('%Y-%m', mov.FECHA) >= '2025-05'
-              AND strftime('%Y-%m', mov.FECHA) <= '2025-10'
-            GROUP BY strftime('%Y-%m', mov.FECHA)
-        )
         SELECT
-            periodo,
-            gestores_activos,
-            ROUND(ingresos_total, 2) as ingresos_total,
-            ROUND(gastos_total, 2) as gastos_total,
-            ROUND(ingresos_total - gastos_total, 2) as beneficio_total,
-            ROUND(
-                CASE WHEN ingresos_total > 0 
-                     THEN ((ingresos_total - gastos_total) / ingresos_total) * 100
-                     ELSE 0 END, 2
-            ) as margen_promedio_mes,
-            ROUND(
-                CASE 
-                    WHEN ((ingresos_total - gastos_total) / NULLIF(ingresos_total, 0)) * 100 >= 18.0 THEN gestores_activos * 4000
-                    WHEN ((ingresos_total - gastos_total) / NULLIF(ingresos_total, 0)) * 100 >= 15.0 THEN gestores_activos * 3500
-                    WHEN ((ingresos_total - gastos_total) / NULLIF(ingresos_total, 0)) * 100 >= 12.0 THEN gestores_activos * 3000
-                    ELSE gestores_activos * 2500
-                END, 2
-            ) as pool_estimado_mes
-        FROM incentivos_mensuales
+            strftime('%Y-%m', mov.FECHA) as periodo,
+            COUNT(DISTINCT g.GESTOR_ID) as gestores_activos,
+            COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NULL THEN mov.IMPORTE ELSE 0 END), 0) as gastos_centrales_periodo
+        FROM MOVIMIENTOS_CONTRATOS mov
+        LEFT JOIN MAESTRO_CONTRATOS mc ON mov.CONTRATO_ID = mc.CONTRATO_ID
+        LEFT JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+        WHERE strftime('%Y-%m', mov.FECHA) >= '2025-05'
+          AND strftime('%Y-%m', mov.FECHA) <= '2025-10'
+        GROUP BY strftime('%Y-%m', mov.FECHA)
         ORDER BY periodo
         """
 
         start_time = datetime.now()
-        results = execute_query(query)
+        raw_results = execute_query(query)
+
+        results = []
+        for row in raw_results:
+            ingresos = round(row['ingresos_total'], 2)
+            gastos_total = round(row['gastos_directos'] + row['gastos_centrales_periodo'], 2)  # both negative
+            beneficio = round(ingresos + gastos_total, 2)
+            margen = round((beneficio / ingresos) * 100, 2) if ingresos > 0 else 0.0
+            gestores = row['gestores_activos'] or 0
+
+            if margen >= 18.0:
+                pool = round(gestores * 4000, 2)
+            elif margen >= 15.0:
+                pool = round(gestores * 3500, 2)
+            elif margen >= 12.0:
+                pool = round(gestores * 3000, 2)
+            else:
+                pool = round(gestores * 2500, 2)
+
+            results.append({
+                'periodo': row['periodo'],
+                'gestores_activos': gestores,
+                'ingresos_total': ingresos,
+                'gastos_total': round(abs(gastos_total), 2),
+                'beneficio_total': beneficio,
+                'margen_promedio_mes': margen,
+                'pool_estimado_mes': pool
+            })
+
         execution_time = (datetime.now() - start_time).total_seconds()
 
         return QueryResult(
@@ -1204,16 +1232,12 @@ class IncentiveQueries:
             -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total
 
-            Para gastos de gestores, centros o segmentos, usa esta lógica:
-            
-            -- Gastos por gestor:
-            SELECT g.GESTOR_ID, COALESCE(SUM(p.PRECIO_MANTENIMIENTO_REAL), 0) as gastos
-            FROM MAESTRO_GESTORES g
-            LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                  AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                  AND p.FECHA_CALCULO = '2025-10-01'
-            GROUP BY g.GESTOR_ID
+            Para gastos directos de gestores, centros o segmentos, usa esta lógica:
+
+            -- Gastos directos por gestor (cuentas 62/64/68/69 con contrato):
+            COALESCE(ABS(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') AND mov.CONTRATO_ID IS NOT NULL THEN mov.IMPORTE ELSE 0 END)), 0) as gastos_directos
+
+            NO uses PRECIO_POR_PRODUCTO_REAL ni PRECIO_POR_PRODUCTO_STD como gastos operativos.
 
             La consulta debe enfocarse en detectar performance positiva, crecimiento, y elegibilidad para bonos.
             """
