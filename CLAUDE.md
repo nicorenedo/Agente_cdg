@@ -353,28 +353,25 @@ llm = AzureChatOpenAI(
 - `comparative_queries.py`: reescritas las 4 funciones críticas llamadas desde main.py/cdg_agent: `ranking_gestores_por_margen_enhanced`, `compare_roe_gestores_enhanced`, `compare_eficiencia_centro_enhanced`
 - `deviation_queries.py`: NO modificado — uso de PRECIO_STD/REAL es CORRECTO (análisis de desviaciones precio real vs benchmark)
 
+**Corrección de `incentive_queries.py` (sesión 4 — completado):**
+- 8 funciones corregidas: `calculate_incentivo_cumplimiento_objetivos_enhanced`, `calculate_incentivo_cumplimiento_objetivos`, `analyze_bonus_margen_neto_enhanced`, `analyze_bonus_margen_neto`, `calculate_ranking_bonus_pool_enhanced`, `calculate_ranking_bonus_pool`, `get_incentivos_por_centro`, `get_tendencia_incentivos`
+- Patrón aplicado: `_enhanced` → SQL usa gastos_directos (62/64/68/69 + CONTRATO_ID IS NOT NULL) + redistribución Python inline; funciones non-enhanced pure SQL → ABS(SUM(gastos 62/64/68/69 CONTRATO_ID IS NOT NULL))
+- `get_incentivos_por_centro` y `get_tendencia_incentivos` convertidas a patrón híbrido
+- `calculate_margen_neto` y `calculate_ratio_eficiencia` reciben `abs(gastos)` (ambas esperan valor positivo)
+- Prompt en `generate_dynamic_incentive_query` corregido para no sugerir PRECIO_REAL como gastos
+- Commit: `7fb5e0f`
+
 ### ⚠️ Funciones con bug pendientes de corregir (baja prioridad — no llamadas desde agentes)
 En `gestor_queries.py` quedan ~12 funciones con bug (no críticas, no llamadas desde main/agentes):
 `calculate_margen_neto_gestor_enhanced`, `calculate_margen_neto_gestor`, `calculate_eficiencia_operativa_gestor`, `calculate_roe_gestor`, `get_alertas_criticas_gestor`, `get_distribucion_productos_gestor_enhanced`, `get_gestor_dashboard_summary`, `get_gestor_evolution_trimestral`, `get_gestor_producto_breakdown`, `get_gestor_kpis_comparative`, `compare_gestor_septiembre_octubre`, `get_evolucion_temporal_gestor`
 
-En `incentive_queries.py`: todas las funciones tienen bug (usan `PRECIO_POR_PRODUCTO_REAL` como gastos). Funciones críticas para siguiente sesión:
-`calculate_incentivo_cumplimiento_objetivos_enhanced`, `analyze_bonus_margen_neto_enhanced`, `calculate_ranking_bonus_pool_enhanced`, `simulate_incentive_scenarios_enhanced`, `get_scorecard_detallado`, `get_incentivos_por_centro`
-
 ### ⏭️ Próximo paso exacto al retomar
 
-**Paso 1 — Corregir `incentive_queries.py`** (funciones llamadas desde main.py):
-- `analyze_bonus_margen_neto_enhanced` — 4 llamadas en main.py
-- `calculate_ranking_bonus_pool_enhanced` — 3 llamadas
-- `calculate_incentivo_cumplimiento_objetivos_enhanced` — 1 llamada
-- `get_scorecard_detallado` — 1 llamada
-- `get_incentivos_por_centro` — 1 llamada
-- Patrón de fix: igual que los demás — reemplazar PRECIO_REAL por MOVIMIENTOS 62/64/68/69xxxx + redistribución proporcional
-
-**Paso 2 — Corregir funciones pendientes en `gestor_queries.py`** (las 12 listadas arriba)
-
-**Paso 3 — Crear archivos que faltan:**
+**Paso 1 — Crear archivos que faltan:**
 - `backend/src/utils/auth.py` — guardia de acceso por perfil (no existe)
 - `backend/src/agents/gestor_agent.py` — agente LangChain + Azure OpenAI (no existe)
+
+**Paso 2 — Corregir funciones pendientes en `gestor_queries.py`** (las 12 listadas arriba, baja prioridad)
 
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
