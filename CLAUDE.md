@@ -313,3 +313,60 @@ llm = AzureChatOpenAI(
 5. **Fase 5** — Chat: integración conversacional en ambos dashboards
 6. **Fase 6** — Dinamismo: pivoteo conversacional, gráficos dinámicos
 7. **Fase 7** — Avanzado: reflection pattern, what-if, generación de reportes
+
+---
+
+## 12. ESTADO ACTUAL DEL PROYECTO
+
+> ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
+> Última actualización: 2026-03-11
+
+### ✅ Completado
+
+**Limpieza del repositorio (sesión 1):**
+- Eliminados archivos basura: `BMCONTABILIDAD_CDG.db`, `BM_CONTABILIDAD_CDG.sqbpro`, `backend/scripts/` (23 archivos), `clear_cache.py`, `debug_import.py`, `frontend/src/components/__init__.py`, `frontend/tests/`
+- Commit: `chore: limpieza pre-refactor - eliminados archivos obsoletos y basura`
+
+**Validación de la base de datos:**
+- Todas las tablas maestras verificadas y correctas contra CLAUDE.md
+- 216 contratos, 30 gestores, 2100 movimientos, 15 registros STD, 30 registros REAL — todo cuadra
+- Modelo fábrica confirmado: `760024` (banco 15%) y `760025` (gestora 85%) presentes
+- Fechas en MOVIMIENTOS_CONTRATOS: solo `2025-09-01` y `2025-10-01` (fechas exactas del 1 de cada mes)
+- Gastos centrales reales en octubre: -€45,676.97 en `MOVIMIENTOS_CONTRATOS WHERE CONTRATO_ID IS NULL` (NO en `GASTOS_CENTRO` que muestra €0 para oct)
+
+**Reescritura de `backend/src/queries/basic_queries.py` (sesión 2 — completado):**
+- Bug 1 corregido: funciones de métricas usaban `PRECIO_POR_PRODUCTO_STD` como coste operativo — **conceptualmente incorrecto** (STD es benchmark de desviaciones, no coste)
+- Bug 2 corregido: solo capturaban 3 cuentas de gasto (`640001`, `691001`, `691002`) ignorando ~76% de los gastos reales
+- Bug 3 corregido: redistribución de octubre tomaba de `GASTOS_CENTRO` (€0) en vez de `MOVIMIENTOS_CONTRATOS WHERE CONTRATO_ID IS NULL`
+- Bug 4 corregido: bloque duplicado con implementaciones incorrectas (líneas 1022-1474) eliminado del archivo
+- Funciones nuevas y validadas numéricamente:
+  - `_get_gastos_centrales_periodo(periodo)` — suma `MOVIMIENTOS_CONTRATOS WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')`
+  - `_get_total_contratos_finalistas()` — denominador = 216 (todos los contratos están en centros finalistas)
+  - `get_gestor_metricas_completas(gestor_id, periodo)` — ingresos 76xxxx + gastos directos 62/64/68/69xxxx + redistribuidos proporcionales
+  - `get_gestor_clientes_con_metricas()`, `get_cliente_metricas()`, `get_cliente_contratos_con_metricas()`, `get_contrato_detalle_completo()`
+  - `get_centro_metricas_financieras()`, `get_centro_gestores_con_metricas()`, `get_segmento_metricas_financieras()`
+- Números validados (gestor 1, oct-2025): ingresos=32,560.15 | gastos directos=-3,078.79 | redistribuidos=-2,537.61 | beneficio=26,943.75 | margen=82.75%
+
+### ⏭️ Próximo paso exacto al retomar
+
+**Paso 1 — Verificar sintaxis** (5 min):
+```bash
+cd backend
+python -c "from src.queries.basic_queries import BasicQueries; print('OK')"
+```
+Si hay error de importación, corregirlo antes de continuar.
+
+**Paso 2 — Revisar los otros 5 archivos de queries** en `backend/src/queries/`:
+- `period_queries.py` — probablemente usa `PRECIO_STD` también, hay que validar y reescribir igual que `basic_queries.py`
+- `gestor_queries.py` — ídem
+- `comparative_queries.py` — ídem
+- `deviation_queries.py` — este SÍ debe usar `PRECIO_STD` (es para análisis de desviaciones, su uso aquí es correcto)
+- `incentive_queries.py` — validar lógica de incentivos
+
+**Paso 3 — Crear archivos que faltan:**
+- `backend/src/utils/auth.py` — guardia de acceso por perfil (no existe)
+- `backend/src/agents/gestor_agent.py` — agente LangChain + Azure OpenAI (no existe)
+
+### ⚠️ Pendiente de decisión
+- `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
+- `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir
