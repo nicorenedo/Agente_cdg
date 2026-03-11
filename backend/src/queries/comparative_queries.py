@@ -244,57 +244,54 @@ class ComparativeQueries:
 
     def ranking_gestores_por_margen_enhanced(self, periodo: str) -> QueryResult:
         """
-        ✅ CORREGIDO - Ranking de gestores con análisis de margen y eficiencia con lógica correcta
+        Ranking de gestores por margen neto con KPIs bancarios.
+        Ingresos = 76xxxx | Gastos directos = 62/64/68/69xxxx | Redistribuidos proporcionales.
         """
         query = """
-            WITH ingresos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    g.DESC_GESTOR,
-                    g.SEGMENTO_ID,
-                    c.DESC_CENTRO,
-                    s.DESC_SEGMENTO,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total
-                FROM MAESTRO_GESTORES g
-                JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
-                JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS cont ON cl.CLIENTE_ID = cont.CLIENTE_ID
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON cont.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
-                WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO, s.DESC_SEGMENTO
-            ),
-            gastos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
-                        SELECT SUM(mov.IMPORTE)
-                        FROM MAESTRO_CONTRATOS co2
-                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
-                        WHERE co2.GESTOR_ID = g.GESTOR_ID
-                        AND mov.FECHA < '2025-11-01'
-                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
-                    ), 0) as gastos_total
-                FROM MAESTRO_GESTORES g
-                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                GROUP BY g.GESTOR_ID
-            )
-            SELECT 
-                ig.*,
-                gg.gastos_total
-            FROM ingresos_gestor ig
-            LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
-            WHERE ig.ingresos_total > 0
-            ORDER BY ig.ingresos_total DESC
+            SELECT
+                g.GESTOR_ID,
+                g.DESC_GESTOR,
+                g.SEGMENTO_ID,
+                c.DESC_CENTRO,
+                s.DESC_SEGMENTO,
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
+                COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                                  THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
+                COUNT(DISTINCT cont.CONTRATO_ID) as n_contratos
+            FROM MAESTRO_GESTORES g
+            JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+            JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
+            LEFT JOIN MAESTRO_CONTRATOS cont ON g.GESTOR_ID = cont.GESTOR_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON cont.CONTRATO_ID = mov.CONTRATO_ID
+                AND strftime('%Y-%m', mov.FECHA) = ?
+            WHERE c.IND_CENTRO_FINALISTA = 1
+            GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO, s.DESC_SEGMENTO
+            HAVING ingresos_total > 0
+            ORDER BY ingresos_total DESC
         """
+
+        # Gastos centrales redistribuidos
+        r_c = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo,), fetch_type="one"
+        )
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        gastos_centrales = float(r_c["t"]) if r_c else 0.0
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
 
         start_time = datetime.now()
         raw_results = execute_query(query, (periodo,))
+        for row in (raw_results or []):
+            n = row.get("n_contratos") or 0
+            row["gastos_redistribuidos"] = round(gastos_centrales * n / total_finalistas, 2)
+            row["gastos_total"] = round((row["gastos_directos"] or 0) + row["gastos_redistribuidos"], 2)
 
         enhanced_results = []
         margenes_para_media = []
@@ -452,68 +449,53 @@ class ComparativeQueries:
         )
 
     def compare_roe_gestores_enhanced(self, periodo: str) -> QueryResult:
-        """✅ CORREGIDO - ROE estandarizado con lógica correcta"""
+        """
+        ROE por gestor con KPIs bancarios.
+        Ingresos = 76xxxx | Gastos directos + redistribuidos = 62/64/68/69xxxx.
+        """
         query = """
-            WITH ingresos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    g.DESC_GESTOR,
-                    g.SEGMENTO_ID,
-                    c.DESC_CENTRO,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos
-                FROM MAESTRO_GESTORES g
-                JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
-                WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO
-            ),
-            gastos_gestor AS (
-                SELECT
-                    g.GESTOR_ID,
-                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
-                        SELECT SUM(mov.IMPORTE)
-                        FROM MAESTRO_CONTRATOS co2
-                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
-                        WHERE co2.GESTOR_ID = g.GESTOR_ID
-                        AND mov.FECHA < '2025-11-01'
-                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
-                    ), 0) as gastos
-                FROM MAESTRO_GESTORES g
-                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                GROUP BY g.GESTOR_ID
-            ),
-            patrimonio_gestor AS (
-                SELECT
-                    mc.GESTOR_ID,
-                    COALESCE(SUM(mov.IMPORTE), 0) as patrimonio_total
-                FROM MAESTRO_CONTRATOS mc
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', COALESCE(mov.FECHA, mc.FECHA_ALTA)) <= ?
-                GROUP BY mc.GESTOR_ID
-            ),
-            gestor_financials AS (
-                SELECT
-                    ig.*,
-                    gg.gastos,
-                    pg.patrimonio_total,
-                    (ig.ingresos - gg.gastos) as beneficio_neto
-                FROM ingresos_gestor ig
-                LEFT JOIN gastos_gestor gg ON ig.GESTOR_ID = gg.GESTOR_ID
-                LEFT JOIN patrimonio_gestor pg ON ig.GESTOR_ID = pg.GESTOR_ID
-                WHERE pg.patrimonio_total > 0
-            )
-            SELECT * FROM gestor_financials
+            SELECT
+                g.GESTOR_ID,
+                g.DESC_GESTOR,
+                g.SEGMENTO_ID,
+                c.DESC_CENTRO,
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
+                COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                                  THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
+                SUM(mov.IMPORTE) as patrimonio_total,
+                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
+            FROM MAESTRO_GESTORES g
+            JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+            LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                AND strftime('%Y-%m', mov.FECHA) = ?
+            WHERE c.IND_CENTRO_FINALISTA = 1
+            GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO
+            HAVING patrimonio_total IS NOT NULL AND patrimonio_total != 0
         """
 
+        r_c = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo,), fetch_type="one"
+        )
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        gastos_centrales = float(r_c["t"]) if r_c else 0.0
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+
         start_time = datetime.now()
-        raw_results = execute_query(query, (periodo, periodo))
+        raw_results = execute_query(query, (periodo,))
+        for row in (raw_results or []):
+            n = row.get("n_contratos") or 0
+            row["gastos_redistribuidos"] = round(gastos_centrales * n / total_finalistas, 2)
+            row["gastos"] = round((row["gastos_directos"] or 0) + row["gastos_redistribuidos"], 2)
+            row["beneficio_neto"] = round((row["ingresos"] or 0) + row["gastos"], 2)
 
         enhanced_results = []
         roes_para_media = []
@@ -669,56 +651,48 @@ class ComparativeQueries:
 
     def compare_eficiencia_centro_enhanced(self, periodo: str) -> QueryResult:
         """
-        ✅ CORREGIDO - Ranking de centros con análisis de eficiencia y lógica correcta
+        Ranking de centros por eficiencia operativa.
+        Ingresos = 76xxxx | Gastos directos + redistribuidos = 62/64/68/69xxxx.
         """
         query = """
-            WITH ingresos_centro AS (
-                SELECT
-                    c.CENTRO_ID as CENTRO_CONTABLE,
-                    c.DESC_CENTRO,
-                    COUNT(DISTINCT g.GESTOR_ID) as num_gestores,
-                    COUNT(DISTINCT mc.CONTRATO_ID) as num_contratos,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos
-                FROM MAESTRO_CENTROS c
-                JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
-                LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
-                LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
-                WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY c.CENTRO_ID, c.DESC_CENTRO
-            ),
-            gastos_centro AS (
-                SELECT
-                    c.CENTRO_ID as CENTRO_CONTABLE,
-                    -- ✅ GASTOS CORREGIDOS: Usa PRECIO_STD + gastos operativos
-                    COALESCE(SUM(p.PRECIO_MANTENIMIENTO), 0) + COALESCE((
-                        SELECT SUM(mov.IMPORTE)
-                        FROM MAESTRO_GESTORES g2
-                        JOIN MAESTRO_CONTRATOS co2 ON g2.GESTOR_ID = co2.GESTOR_ID
-                        JOIN MOVIMIENTOS_CONTRATOS mov ON co2.CONTRATO_ID = mov.CONTRATO_ID
-                        WHERE g2.CENTRO = c.CENTRO_ID
-                        AND mov.FECHA < '2025-11-01'
-                        AND mov.CUENTA_ID IN ('640001', '691001', '691002')
-                    ), 0) as gastos
-                FROM MAESTRO_CENTROS c
-                LEFT JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
-                LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-                LEFT JOIN PRECIO_POR_PRODUCTO_STD p ON g.SEGMENTO_ID = p.SEGMENTO_ID 
-                                                    AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                WHERE c.IND_CENTRO_FINALISTA = 1
-                GROUP BY c.CENTRO_ID
-            )
-            SELECT 
-                ic.*,
-                gc.gastos
-            FROM ingresos_centro ic
-            LEFT JOIN gastos_centro gc ON ic.CENTRO_CONTABLE = gc.CENTRO_CONTABLE
+            SELECT
+                c.CENTRO_ID as CENTRO_CONTABLE,
+                c.DESC_CENTRO,
+                COUNT(DISTINCT g.GESTOR_ID) as num_gestores,
+                COUNT(DISTINCT mc.CONTRATO_ID) as num_contratos,
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
+                COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                                  THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos
+            FROM MAESTRO_CENTROS c
+            JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
+            LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+                AND strftime('%Y-%m', mov.FECHA) = ?
+            WHERE c.IND_CENTRO_FINALISTA = 1
+            GROUP BY c.CENTRO_ID, c.DESC_CENTRO
         """
+
+        r_c = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo,), fetch_type="one"
+        )
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        gastos_centrales = float(r_c["t"]) if r_c else 0.0
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
 
         start_time = datetime.now()
         raw_results = execute_query(query, (periodo,))
+        for row in (raw_results or []):
+            n = row.get("num_contratos") or 0
+            row["gastos_redistribuidos"] = round(gastos_centrales * n / total_finalistas, 2)
+            row["gastos"] = round((row["gastos_directos"] or 0) + row["gastos_redistribuidos"], 2)
 
         enhanced_results = []
 

@@ -115,56 +115,57 @@ class PeriodQueries:
     
     def get_periodo_metricas_financieras(self, periodo: str) -> QueryResult:
         """
-        ✅ Obtiene métricas financieras agregadas para un período específico
-        ✅ CORREGIDO: Gastos calculados usando PRECIO_POR_PRODUCTO_REAL
+        Obtiene métricas financieras agregadas para un período específico.
+        Ingresos = cuentas 76xxxx | Gastos directos = cuentas 62/64/68/69xxxx con contrato |
+        Gastos centrales = cuentas 62/64/68/69xxxx con CONTRATO_ID IS NULL
         """
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo}-01"
-        
         query = """
-        SELECT 
+        SELECT
             ? as periodo,
             COUNT(DISTINCT g.GESTOR_ID) as total_gestores_activos,
             COUNT(DISTINCT co.CLIENTE_ID) as total_clientes_activos,
             COUNT(DISTINCT co.CONTRATO_ID) as total_contratos_activos,
-            -- INGRESOS: Suma de movimientos positivos
-            COALESCE(SUM(CASE WHEN mov.IMPORTE > 0 THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_periodo,
-            -- ✅ GASTOS CORREGIDOS: Usar PRECIO_POR_PRODUCTO_REAL
-            COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_periodo,
-            -- GASTOS CENTROS (mantener lógica original para gastos centrales)
-            COALESCE(SUM(gc.IMPORTE), 0) as gastos_centros_periodo,
+            COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_periodo,
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                              THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
             COUNT(DISTINCT mov.MOVIMIENTO_ID) as total_movimientos
         FROM MAESTRO_GESTORES g
         LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-        LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                              AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                              AND p.FECHA_CALCULO = ?
         LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
             AND strftime('%Y-%m', mov.FECHA) = ?
-        LEFT JOIN GASTOS_CENTRO gc ON strftime('%Y-%m', gc.FECHA) = ?
         """
-        
+
+        query_centrales = """
+        SELECT COALESCE(SUM(IMPORTE), 0) AS total
+        FROM MOVIMIENTOS_CONTRATOS
+        WHERE CONTRATO_ID IS NULL
+          AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','68','69')
+          AND strftime('%Y-%m', FECHA) = ?
+        """
+
         start_time = datetime.now()
-        result = execute_query(query, (periodo, fecha_calculo, periodo, periodo), fetch_type="one")
+        result = execute_query(query, (periodo, periodo), fetch_type="one")
+        result_c = execute_query(query_centrales, (periodo,), fetch_type="one")
         execution_time = (datetime.now() - start_time).total_seconds()
-        
+
+        gastos_centrales = float(result_c["total"]) if result_c else 0.0
+
         if result:
             ingresos = result['ingresos_periodo'] or 0
-            gastos_productos = result['gastos_periodo'] or 0  # Gastos de productos usando precios reales
-            gastos_centros = result['gastos_centros_periodo'] or 0  # Gastos centrales
-            gastos_totales = gastos_productos + gastos_centros
-            beneficio = ingresos - gastos_totales
-            
+            gastos_directos = result['gastos_directos'] or 0
+            gastos_totales = round(gastos_directos + gastos_centrales, 2)
+            beneficio = round(ingresos + gastos_totales, 2)
+
             result.update({
-                'gastos_productos': gastos_productos,
-                'gastos_centros': gastos_centros,
+                'gastos_directos': gastos_directos,
+                'gastos_centrales': gastos_centrales,
                 'gastos_totales': gastos_totales,
                 'beneficio_neto': beneficio,
                 'margen_neto_pct': round((beneficio / ingresos * 100), 2) if ingresos > 0 else 0,
                 'promedio_ingresos_por_gestor': round(ingresos / max(result['total_gestores_activos'], 1), 2),
                 'promedio_contratos_por_gestor': round(result['total_contratos_activos'] / max(result['total_gestores_activos'], 1), 1)
             })
-        
+
         return QueryResult(
             data=[result] if result else [],
             query_type="periodo_metricas_financieras",
@@ -234,109 +235,119 @@ class PeriodQueries:
 
     def get_periodo_analisis_gastos(self, periodo: str) -> QueryResult:
         """
-        ✅ NUEVO: Análisis detallado de gastos por período usando PRECIO_POR_PRODUCTO_REAL
+        Análisis de gastos por período desglosado por segmento y producto.
+        Gastos = cuentas 62/64/68/69xxxx en MOVIMIENTOS_CONTRATOS (importes negativos por convenio).
         """
-        # Convertir periodo a formato FECHA_CALCULO
-        fecha_calculo = f"{periodo}-01"
-        
-        query = """
-        WITH gastos_por_segmento AS (
-            SELECT
-                s.SEGMENTO_ID,
-                s.DESC_SEGMENTO,
-                COUNT(DISTINCT g.GESTOR_ID) as gestores_segmento,
-                COUNT(DISTINCT co.CONTRATO_ID) as contratos_segmento,
-                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_segmento
-            FROM MAESTRO_SEGMENTOS s
-            LEFT JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
-            LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
-            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON s.SEGMENTO_ID = p.SEGMENTO_ID
-                                                  AND co.PRODUCTO_ID = p.PRODUCTO_ID
-                                                  AND p.FECHA_CALCULO = ?
-            GROUP BY s.SEGMENTO_ID, s.DESC_SEGMENTO
-        ),
-        gastos_por_producto AS (
-            SELECT
-                pr.PRODUCTO_ID,
-                pr.DESC_PRODUCTO,
-                COUNT(DISTINCT co.CONTRATO_ID) as contratos_producto,
-                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_producto
-            FROM MAESTRO_PRODUCTOS pr
-            LEFT JOIN MAESTRO_CONTRATOS co ON pr.PRODUCTO_ID = co.PRODUCTO_ID
-            LEFT JOIN MAESTRO_GESTORES g ON co.GESTOR_ID = g.GESTOR_ID
-            LEFT JOIN PRECIO_POR_PRODUCTO_REAL p ON g.SEGMENTO_ID = p.SEGMENTO_ID
-                                                  AND pr.PRODUCTO_ID = p.PRODUCTO_ID
-                                                  AND p.FECHA_CALCULO = ?
-            GROUP BY pr.PRODUCTO_ID, pr.DESC_PRODUCTO
-        )
+        query_segmentos = """
         SELECT
-            ? as periodo,
-            'RESUMEN' as tipo_analisis,
-            (SELECT SUM(gastos_segmento) FROM gastos_por_segmento) as total_gastos,
-            (SELECT COUNT(*) FROM gastos_por_segmento WHERE gastos_segmento > 0) as segmentos_con_gastos,
-            (SELECT COUNT(*) FROM gastos_por_producto WHERE gastos_producto > 0) as productos_con_gastos
-        UNION ALL
-        SELECT
-            ? as periodo,
-            'SEGMENTO' as tipo_analisis,
-            gastos_segmento as total_gastos,
-            gestores_segmento as segmentos_con_gastos,
-            contratos_segmento as productos_con_gastos,
-            SEGMENTO_ID as detalle_id,
-            DESC_SEGMENTO as detalle_desc
-        FROM gastos_por_segmento
-        WHERE gastos_segmento > 0
-        ORDER BY total_gastos DESC
+            s.SEGMENTO_ID,
+            s.DESC_SEGMENTO,
+            COUNT(DISTINCT g.GESTOR_ID) as gestores_segmento,
+            COUNT(DISTINCT co.CONTRATO_ID) as contratos_segmento,
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                              THEN mov.IMPORTE ELSE 0 END), 0) as gastos_segmento,
+            COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
+                              THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_segmento
+        FROM MAESTRO_SEGMENTOS s
+        LEFT JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
+        LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            AND strftime('%Y-%m', mov.FECHA) = ?
+        GROUP BY s.SEGMENTO_ID, s.DESC_SEGMENTO
+        ORDER BY gastos_segmento ASC
         """
-        
+
+        query_productos = """
+        SELECT
+            pr.PRODUCTO_ID,
+            pr.DESC_PRODUCTO,
+            COUNT(DISTINCT co.CONTRATO_ID) as contratos_producto,
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                              THEN mov.IMPORTE ELSE 0 END), 0) as gastos_producto,
+            COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
+                              THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_producto
+        FROM MAESTRO_PRODUCTOS pr
+        LEFT JOIN MAESTRO_CONTRATOS co ON pr.PRODUCTO_ID = co.PRODUCTO_ID
+        LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+            AND strftime('%Y-%m', mov.FECHA) = ?
+        GROUP BY pr.PRODUCTO_ID, pr.DESC_PRODUCTO
+        ORDER BY gastos_producto ASC
+        """
+
+        query_centrales = """
+        SELECT COALESCE(SUM(IMPORTE), 0) AS total
+        FROM MOVIMIENTOS_CONTRATOS
+        WHERE CONTRATO_ID IS NULL
+          AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','68','69')
+          AND strftime('%Y-%m', FECHA) = ?
+        """
+
         start_time = datetime.now()
-        results = execute_query(query, (fecha_calculo, fecha_calculo, periodo, periodo))
+        seg_rows = execute_query(query_segmentos, (periodo,)) or []
+        prod_rows = execute_query(query_productos, (periodo,)) or []
+        c_row = execute_query(query_centrales, (periodo,), fetch_type="one")
         execution_time = (datetime.now() - start_time).total_seconds()
-        
+
+        gastos_centrales = float(c_row["total"]) if c_row else 0.0
+        results = [
+            {"periodo": periodo, "tipo": "CENTRALES", "gastos": gastos_centrales},
+            *[{"periodo": periodo, "tipo": "SEGMENTO", **r} for r in seg_rows],
+            *[{"periodo": periodo, "tipo": "PRODUCTO", **r} for r in prod_rows],
+        ]
+
         return QueryResult(
-            data=results or [],
+            data=results,
             query_type="periodo_analisis_gastos",
             execution_time=execution_time,
-            row_count=len(results) if results else 0,
-            query_sql=query
+            row_count=len(results),
+            query_sql=query_segmentos
         )
 
     def get_periodo_evolucion_gastos(self, periodo_inicio: str, periodo_fin: str) -> QueryResult:
         """
-        ✅ NUEVO: Evolución de gastos por rango de períodos usando PRECIO_POR_PRODUCTO_REAL
+        Evolución de gastos e ingresos por rango de períodos.
+        Fuente: MOVIMIENTOS_CONTRATOS. Gastos directos (con contrato) + centrales (sin contrato).
         """
         query = """
-        WITH gastos_mensuales AS (
+        WITH movimientos_periodo AS (
             SELECT
-                strftime('%Y-%m', p.FECHA_CALCULO) as periodo,
-                COUNT(DISTINCT co.CONTRATO_ID) as contratos_activos,
-                COALESCE(SUM(ABS(p.PRECIO_MANTENIMIENTO_REAL)), 0) as gastos_periodo
-            FROM PRECIO_POR_PRODUCTO_REAL p
-            JOIN MAESTRO_CONTRATOS co ON p.PRODUCTO_ID = co.PRODUCTO_ID
-            JOIN MAESTRO_GESTORES g ON co.GESTOR_ID = g.GESTOR_ID
-                                    AND p.SEGMENTO_ID = g.SEGMENTO_ID
-            WHERE strftime('%Y-%m', p.FECHA_CALCULO) >= ?
-              AND strftime('%Y-%m', p.FECHA_CALCULO) <= ?
-            GROUP BY strftime('%Y-%m', p.FECHA_CALCULO)
+                strftime('%Y-%m', FECHA) as periodo,
+                COUNT(DISTINCT CONTRATO_ID) as contratos_activos,
+                COALESCE(SUM(CASE WHEN CUENTA_ID LIKE '76%' THEN IMPORTE ELSE 0 END), 0) as ingresos_periodo,
+                COALESCE(SUM(CASE WHEN SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')
+                                       AND CONTRATO_ID IS NOT NULL
+                                  THEN IMPORTE ELSE 0 END), 0) as gastos_directos,
+                COALESCE(SUM(CASE WHEN SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')
+                                       AND CONTRATO_ID IS NULL
+                                  THEN IMPORTE ELSE 0 END), 0) as gastos_centrales
+            FROM MOVIMIENTOS_CONTRATOS
+            WHERE strftime('%Y-%m', FECHA) >= ?
+              AND strftime('%Y-%m', FECHA) <= ?
+            GROUP BY strftime('%Y-%m', FECHA)
         )
         SELECT
             periodo,
             contratos_activos,
-            gastos_periodo,
-            ROUND(gastos_periodo / NULLIF(contratos_activos, 0), 2) as gasto_unitario,
-            LAG(gastos_periodo) OVER (ORDER BY periodo) as gastos_periodo_anterior,
+            ingresos_periodo,
+            gastos_directos,
+            gastos_centrales,
+            ROUND(gastos_directos + gastos_centrales, 2) as gastos_totales,
+            ROUND(ingresos_periodo + gastos_directos + gastos_centrales, 2) as beneficio_neto,
+            ROUND(gastos_directos / NULLIF(contratos_activos, 0), 2) as gasto_unitario,
+            LAG(gastos_directos + gastos_centrales) OVER (ORDER BY periodo) as gastos_periodo_anterior,
             ROUND(
-                ((gastos_periodo - LAG(gastos_periodo) OVER (ORDER BY periodo)) 
-                / NULLIF(LAG(gastos_periodo) OVER (ORDER BY periodo), 0)) * 100, 2
+                ((gastos_directos + gastos_centrales
+                    - LAG(gastos_directos + gastos_centrales) OVER (ORDER BY periodo))
+                / NULLIF(ABS(LAG(gastos_directos + gastos_centrales) OVER (ORDER BY periodo)), 0)) * 100, 2
             ) as variacion_pct
-        FROM gastos_mensuales
+        FROM movimientos_periodo
         ORDER BY periodo
         """
-        
+
         start_time = datetime.now()
         results = execute_query(query, (periodo_inicio, periodo_fin))
         execution_time = (datetime.now() - start_time).total_seconds()
-        
+
         return QueryResult(
             data=results or [],
             query_type="periodo_evolucion_gastos",

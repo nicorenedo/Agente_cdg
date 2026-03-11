@@ -347,21 +347,30 @@ llm = AzureChatOpenAI(
   - `get_centro_metricas_financieras()`, `get_centro_gestores_con_metricas()`, `get_segmento_metricas_financieras()`
 - Números validados (gestor 1, oct-2025): ingresos=32,560.15 | gastos directos=-3,078.79 | redistribuidos=-2,537.61 | beneficio=26,943.75 | margen=82.75%
 
+**Corrección de queries restantes (sesión 3 — completado parcialmente):**
+- `period_queries.py`: reescritas `get_periodo_metricas_financieras`, `get_periodo_analisis_gastos`, `get_periodo_evolucion_gastos` — eliminada dependencia de `PRECIO_POR_PRODUCTO_REAL`
+- `gestor_queries.py`: añadidos helpers `_get_gastos_centrales()` + `_get_total_contratos_finalistas()`. Reescritas las 3 funciones críticas llamadas desde main.py/agentes: `get_gestor_performance_enhanced`, `calculate_eficiencia_operativa_gestor_enhanced`, `calculate_roe_gestor_enhanced`
+- `comparative_queries.py`: reescritas las 4 funciones críticas llamadas desde main.py/cdg_agent: `ranking_gestores_por_margen_enhanced`, `compare_roe_gestores_enhanced`, `compare_eficiencia_centro_enhanced`
+- `deviation_queries.py`: NO modificado — uso de PRECIO_STD/REAL es CORRECTO (análisis de desviaciones precio real vs benchmark)
+
+### ⚠️ Funciones con bug pendientes de corregir (baja prioridad — no llamadas desde agentes)
+En `gestor_queries.py` quedan ~12 funciones con bug (no críticas, no llamadas desde main/agentes):
+`calculate_margen_neto_gestor_enhanced`, `calculate_margen_neto_gestor`, `calculate_eficiencia_operativa_gestor`, `calculate_roe_gestor`, `get_alertas_criticas_gestor`, `get_distribucion_productos_gestor_enhanced`, `get_gestor_dashboard_summary`, `get_gestor_evolution_trimestral`, `get_gestor_producto_breakdown`, `get_gestor_kpis_comparative`, `compare_gestor_septiembre_octubre`, `get_evolucion_temporal_gestor`
+
+En `incentive_queries.py`: todas las funciones tienen bug (usan `PRECIO_POR_PRODUCTO_REAL` como gastos). Funciones críticas para siguiente sesión:
+`calculate_incentivo_cumplimiento_objetivos_enhanced`, `analyze_bonus_margen_neto_enhanced`, `calculate_ranking_bonus_pool_enhanced`, `simulate_incentive_scenarios_enhanced`, `get_scorecard_detallado`, `get_incentivos_por_centro`
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Paso 1 — Verificar sintaxis** (5 min):
-```bash
-cd backend
-python -c "from src.queries.basic_queries import BasicQueries; print('OK')"
-```
-Si hay error de importación, corregirlo antes de continuar.
+**Paso 1 — Corregir `incentive_queries.py`** (funciones llamadas desde main.py):
+- `analyze_bonus_margen_neto_enhanced` — 4 llamadas en main.py
+- `calculate_ranking_bonus_pool_enhanced` — 3 llamadas
+- `calculate_incentivo_cumplimiento_objetivos_enhanced` — 1 llamada
+- `get_scorecard_detallado` — 1 llamada
+- `get_incentivos_por_centro` — 1 llamada
+- Patrón de fix: igual que los demás — reemplazar PRECIO_REAL por MOVIMIENTOS 62/64/68/69xxxx + redistribución proporcional
 
-**Paso 2 — Revisar los otros 5 archivos de queries** en `backend/src/queries/`:
-- `period_queries.py` — probablemente usa `PRECIO_STD` también, hay que validar y reescribir igual que `basic_queries.py`
-- `gestor_queries.py` — ídem
-- `comparative_queries.py` — ídem
-- `deviation_queries.py` — este SÍ debe usar `PRECIO_STD` (es para análisis de desviaciones, su uso aquí es correcto)
-- `incentive_queries.py` — validar lógica de incentivos
+**Paso 2 — Corregir funciones pendientes en `gestor_queries.py`** (las 12 listadas arriba)
 
 **Paso 3 — Crear archivos que faltan:**
 - `backend/src/utils/auth.py` — guardia de acceso por perfil (no existe)
