@@ -365,11 +365,15 @@ llm = AzureChatOpenAI(
 En `gestor_queries.py` quedan ~12 funciones con bug (no críticas, no llamadas desde main/agentes):
 `calculate_margen_neto_gestor_enhanced`, `calculate_margen_neto_gestor`, `calculate_eficiencia_operativa_gestor`, `calculate_roe_gestor`, `get_alertas_criticas_gestor`, `get_distribucion_productos_gestor_enhanced`, `get_gestor_dashboard_summary`, `get_gestor_evolution_trimestral`, `get_gestor_producto_breakdown`, `get_gestor_kpis_comparative`, `compare_gestor_septiembre_octubre`, `get_evolucion_temporal_gestor`
 
+**Creación de archivos nuevos (sesión 4 — completado):**
+- `backend/src/utils/auth.py` — `AccessGuard` con `UserRole`, filtrado por perfil, detección cross-gestor en texto, inyección WHERE GESTOR_ID en SQL dinámico. Instancia global `access_guard`. Commit: `83d8db3`
+- `backend/src/agents/gestor_agent.py` — `GestorAgent` con LangChain `create_tool_calling_agent` + Azure OpenAI. 6 tools (`get_mis_kpis`, `get_mi_cartera`, `get_mis_desviaciones`, `get_evolucion_sep_oct`, `get_mis_clientes`, `get_resumen_periodo`), caché por gestor_id, historial de conversación, guardia de acceso integrada. Funciones de conveniencia: `create_gestor_agent`, `process_gestor_message`. Commit: `83d8db3`
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Paso 1 — Crear archivos que faltan:**
-- `backend/src/utils/auth.py` — guardia de acceso por perfil (no existe)
-- `backend/src/agents/gestor_agent.py` — agente LangChain + Azure OpenAI (no existe)
+**Paso 1 — Integrar `gestor_agent.py` en `main.py`:**
+- Añadir endpoint `POST /api/chat/gestor` que use `process_gestor_message(gestor_id, message, nombre, segmento, centro)`
+- El endpoint debe leer `gestor_id` del body y buscar los datos del gestor en `basic_queries.get_gestor_info(gestor_id)` para obtener nombre/segmento/centro
 
 **Paso 2 — Corregir funciones pendientes en `gestor_queries.py`** (las 12 listadas arriba, baja prioridad)
 
