@@ -113,6 +113,15 @@ MÉTRICAS CLAVE A PRIORIZAR:
 # Herramientas (Tools) — cada una filtra por gestor_id
 # ═══════════════════════════════════════════════════════════════════
 
+def _extract(result):
+    """Extrae los datos de un QueryResult, dict o list."""
+    if result is None:
+        return None
+    if hasattr(result, "data"):
+        return result.data
+    return result  # dict o list directo
+
+
 def _make_tools(gestor_id: str, periodo: str = "2025-10"):
     """Construye las herramientas del agente ya vinculadas al gestor_id."""
 
@@ -139,15 +148,16 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
     @tool
     def get_mi_cartera(periodo_consulta: str = periodo) -> str:
         """
-        Lista los contratos activos de la cartera del gestor con su resultado financiero.
-        Incluye cliente, producto, segmento y resultado por contrato.
+        Resumen de la cartera del gestor: número de contratos, clientes,
+        ingresos, gastos y margen para el período indicado.
         """
         try:
             result = basic_queries.get_gestor_metricas_completas(
                 gestor_id=str(gestor_id_int), periodo=periodo_consulta
             )
-            if result and result.data:
-                return f"Cartera del gestor {gestor_id_int} ({periodo_consulta}):\n{result.data}"
+            data = _extract(result)
+            if data:
+                return f"Resumen de cartera del gestor {gestor_id_int} ({periodo_consulta}):\n{data}"
             return "Sin datos de cartera disponibles."
         except Exception as e:
             logger.error(f"get_mi_cartera error: {e}")
@@ -156,17 +166,18 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
     @tool
     def get_mis_desviaciones(periodo_consulta: str = periodo) -> str:
         """
-        Analiza las desviaciones del gestor respecto al precio estándar (STD).
-        Identifica contratos con desviación alta (>15%), media (5-15%) y baja (<5%).
-        Devuelve semáforo: ROJO >15%, AMARILLO 5-15%, VERDE <5%.
+        Analiza las desviaciones del coste efectivo real vs precio estándar (STD)
+        por producto en la cartera del gestor.
+        Semáforo: ROJO >15%, AMARILLO 5-15%, VERDE <5%.
         """
         try:
-            result = deviation_queries.get_desviaciones_por_gestor(
+            result = gestor_queries.get_desviaciones_precio_gestor_enhanced(
                 gestor_id=str(gestor_id_int), periodo=periodo_consulta
             )
-            if result and result.data:
-                return f"Desviaciones del gestor {gestor_id_int} ({periodo_consulta}):\n{result.data}"
-            return "Sin datos de desviaciones disponibles."
+            data = _extract(result)
+            if data:
+                return f"Desviaciones del gestor {gestor_id_int} ({periodo_consulta}):\n{data}"
+            return "Sin desviaciones significativas (todas dentro del umbral del 15%)."
         except Exception as e:
             logger.error(f"get_mis_desviaciones error: {e}")
             return f"Error obteniendo desviaciones: {e}"
@@ -181,25 +192,27 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
             result = gestor_queries.compare_gestor_septiembre_octubre(
                 gestor_id=str(gestor_id_int)
             )
-            if result and result.data:
-                return f"Evolución Sep-Oct del gestor {gestor_id_int}:\n{result.data}"
-            return "Sin datos de evolución disponibles."
+            data = _extract(result)
+            if data:
+                return f"Evolucion Sep-Oct del gestor {gestor_id_int}:\n{data}"
+            return "Sin datos de evolucion disponibles."
         except Exception as e:
             logger.error(f"get_evolucion_sep_oct error: {e}")
-            return f"Error obteniendo evolución: {e}"
+            return f"Error obteniendo evolucion: {e}"
 
     @tool
     def get_mis_clientes(periodo_consulta: str = periodo) -> str:
         """
-        Lista los clientes del gestor con sus métricas financieras principales.
-        Incluye número de contratos por cliente y su resultado agregado.
+        Lista los clientes del gestor con sus métricas financieras:
+        ingresos, gastos, beneficio neto y número de contratos por cliente.
         """
         try:
             result = basic_queries.get_gestor_clientes_con_metricas(
                 gestor_id=str(gestor_id_int), periodo=periodo_consulta
             )
-            if result and result.data:
-                return f"Clientes del gestor {gestor_id_int} ({periodo_consulta}):\n{result.data}"
+            data = _extract(result)
+            if data:
+                return f"Clientes del gestor {gestor_id_int} ({periodo_consulta}):\n{data}"
             return "Sin datos de clientes disponibles."
         except Exception as e:
             logger.error(f"get_mis_clientes error: {e}")
@@ -215,16 +228,10 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
             result = period_queries.get_periodo_metricas_financieras(
                 periodo=periodo_consulta
             )
-            if result and result.data:
-                # Filtrar solo la fila del gestor si es una lista
-                data = result.data
-                if isinstance(data, list):
-                    data = [
-                        row for row in data
-                        if str(row.get("GESTOR_ID", "")) == str(gestor_id_int)
-                    ] or data[:1]  # fallback al primero si no hay match
-                return f"Resumen período {periodo_consulta}:\n{data}"
-            return f"Sin datos para el período {periodo_consulta}."
+            data = _extract(result)
+            if data:
+                return f"Resumen financiero del periodo {periodo_consulta}:\n{data}"
+            return f"Sin datos para el periodo {periodo_consulta}."
         except Exception as e:
             logger.error(f"get_resumen_periodo error: {e}")
             return f"Error obteniendo resumen: {e}"

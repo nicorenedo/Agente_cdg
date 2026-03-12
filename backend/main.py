@@ -535,7 +535,7 @@ async def chat_message(req: ChatRequest):
         permission_manager = PermissionManager()
         
         extracted_gestor_id = permission_manager.extract_gestor_id_from_message(req.message, req.context)
-        user_role = permission_manager.determine_user_role(req.user_id)
+        user_role = permission_manager.determine_user_role(req.user_id, req.context)
         
         # 🚨 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD
         if extracted_gestor_id is not None:

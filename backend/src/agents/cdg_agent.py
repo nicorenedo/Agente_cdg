@@ -458,35 +458,43 @@ class CDGAgentV6:
         🎯 DETERMINA TIPO DE ANÁLISIS ESPECIALIZADO
         """
         message_lower = user_message.lower()
-        
-        # Análisis profundo de gestor
+
+        # Detección de desviaciones (alta prioridad — incluye español)
+        if any(term in message_lower for term in [
+            'desviaci', 'anomalía', 'outlier', 'alert', 'critical',
+            'critica', 'crítica', 'precio est', 'precio std',
+        ]):
+            return AnalysisType.DEVIATION_DETECTION
+
+        # Análisis profundo de gestor específico
         if any(term in message_lower for term in ['performance completo', 'análisis profundo', 'deep dive']):
             return AnalysisType.DEEP_GESTOR_ANALYSIS
-        
+
+        # Comparativas: ranking, margen, mejor, peor, comparar gestores
+        elif any(term in message_lower for term in [
+            'benchmark', 'peer analysis', 'competitive',
+            'ranking', 'mejor gestor', 'peor gestor',
+            'qué gestor', 'que gestor', 'quien tiene', 'quién tiene',
+            'comparar gestores', 'comparativa', 'top gestor',
+        ]):
+            return AnalysisType.COMPARATIVE_PERFORMANCE
+
         # Business Intelligence avanzado
         elif any(term in message_lower for term in ['tendencias', 'proyección', 'forecasting', 'predicción']):
             return AnalysisType.PREDICTIVE_ANALYSIS
-        
+
         # Reportes ejecutivos
         elif any(term in message_lower for term in ['executive', 'c-level', 'directivo', 'board']):
             return AnalysisType.EXECUTIVE_REPORTING
-        
-        # Detección avanzada de desviaciones
-        elif any(term in message_lower for term in ['anomalía', 'outlier', 'alert', 'critical']):
-            return AnalysisType.DEVIATION_DETECTION
-        
+
         # Análisis de incentivos complejos
-        elif any(term in message_lower for term in ['incentive structure', 'bonus calculation', 'commission']):
+        elif any(term in message_lower for term in ['incentive structure', 'bonus calculation', 'commission', 'incentivo', 'incentivos']):
             return AnalysisType.INCENTIVE_CALCULATION
-        
-        # Comparativas avanzadas
-        elif any(term in message_lower for term in ['benchmark', 'peer analysis', 'competitive']):
-            return AnalysisType.COMPARATIVE_PERFORMANCE
-        
+
         # Gráficos avanzados
         elif any(term in message_lower for term in ['dashboard', 'visualization', 'interactive']):
             return AnalysisType.CHART_ADVANCED_GENERATION
-        
+
         # Por defecto: Business Intelligence
         return AnalysisType.BUSINESS_INTELLIGENCE
     
@@ -703,7 +711,43 @@ class CDGAgentV6:
     
     # 🎯 HANDLERS SIMPLIFICADOS PARA OTROS TIPOS
     async def _deviation_detection_analysis(self, request: CDGRequest) -> Dict[str, Any]:
-        return await self._business_intelligence_analysis(request)
+        """Análisis de desviaciones precio real vs estándar"""
+        try:
+            periodo = request.periodo or '2025-10'
+            results = {}
+            data_sources = []
+
+            # Desviaciones criticas (threshold 5% para ser exhaustivo)
+            try:
+                devs = deviation_queries.detect_precio_desviaciones_criticas_enhanced(periodo, 5.0)
+                if devs and hasattr(devs, 'data') and devs.data:
+                    results['critical_deviations'] = devs.data
+                    data_sources.append('deviation_criticas')
+            except Exception as e:
+                logger.warning(f"Error desviaciones criticas: {e}")
+
+            # Patron temporal de anomalías
+            try:
+                anomalias = deviation_queries.detect_patron_temporal_anomalias_enhanced()
+                if anomalias and hasattr(anomalias, 'data') and anomalias.data:
+                    results['anomalias_temporales'] = anomalias.data
+                    data_sources.append('anomalias_temporales')
+            except Exception as e:
+                logger.warning(f"Error anomalias temporales: {e}")
+
+            if not results:
+                return await self._business_intelligence_analysis(request)
+
+            return {
+                'analysis_type': 'deviation_detection',
+                'periodo': periodo,
+                'results': results,
+                'data_sources': data_sources,
+                'confidence_score': 0.85 if data_sources else 0.4,
+            }
+        except Exception as e:
+            logger.error(f"Error en deviation_detection_analysis: {e}")
+            return await self._business_intelligence_analysis(request)
     
     async def _incentive_calculation_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         return await self._business_intelligence_analysis(request)

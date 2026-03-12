@@ -1705,16 +1705,21 @@ class UniversalChatAgentV11:
                 )
             
             # 🎯 PASO 1: CLASIFICACIÓN Y ENRUTAMIENTO INTELIGENTE CON VALIDACIÓN
+            routing_context = {
+                'history': session.conversation_history[-3:],
+                'charts': session.chart_configs,
+                'preferences': session.preferences,
+                'gestor_id': message.gestor_id,
+                'periodo': message.periodo,
+                'user_id': message.user_id,
+            }
+            # Propagar user_role y scope del contexto del request
+            if message.context and isinstance(message.context, dict):
+                for key in ('user_role', 'scope'):
+                    if key in message.context:
+                        routing_context[key] = message.context[key]
             routing_result = await self.classifier.classify_and_route(
-                message.message, 
-                {
-                    'history': session.conversation_history[-3:],
-                    'charts': session.chart_configs,
-                    'preferences': session.preferences,
-                    'gestor_id': message.gestor_id,
-                    'periodo': message.periodo,
-                    'user_id': message.user_id  # 🔐 NUEVO: Para validación de roles
-                }
+                message.message, routing_context
             )
             
             flow_type = routing_result['flow_type']
