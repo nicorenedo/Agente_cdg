@@ -74,6 +74,8 @@ const GestorView = () => {
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [currentChartConfig, setCurrentChartConfig] = useState(null);
   const [pivotHistory, setPivotHistory] = useState([]);
+  // Datos del gráfico dinámico generado por ConversationalPivot → fluyen a InteractiveCharts
+  const [pivotedChartData, setPivotedChartData] = useState(null);
 
   // ✅ Estados de UI - NUEVO: gestión del chat conversacional
   const [showChat, setShowChat] = useState(false);
@@ -288,22 +290,30 @@ const GestorView = () => {
   }, [gestorId, normalizedPeriodo]);
 
   // ✅ NUEVO: Handlers del ConversationalPivot
-  const handleConversationalChartUpdate = useCallback((newChartConfig) => {
-    console.log('[GestorView] 🤖 Chart updated from ConversationalPivot:', newChartConfig);
-    
-    setCurrentChartConfig({
-      ...newChartConfig,
-      updatedAt: new Date().toISOString(),
-      source: 'conversational_pivot',
-      mode: 'gestor',
-      gestorId
-    });
-    
+  // onChartUpdate(chartData, newConfig) — chartData tiene {labels, datasets, meta}
+  const handleConversationalChartUpdate = useCallback((chartData, newConfig) => {
+    console.log('[GestorView] Chart updated from ConversationalPivot:', { chartData, newConfig });
+
+    // Pasar los datos al gráfico dinámico de InteractiveCharts
+    if (chartData?.labels) {
+      setPivotedChartData(chartData);
+    }
+    // Actualizar config actual para que ConversationalPivot sepa el estado
+    if (newConfig) {
+      setCurrentChartConfig({
+        ...newConfig,
+        updatedAt: new Date().toISOString(),
+        source: 'conversational_pivot',
+        mode: 'gestor',
+        gestorId,
+      });
+    }
+
     notification.success({
       message: 'Gráfico Actualizado',
-      description: 'El gráfico se ha modificado mediante chat conversacional',
+      description: 'El gráfico dinámico se ha actualizado mediante chat conversacional',
       duration: 2,
-      placement: 'topRight'
+      placement: 'topRight',
     });
   }, [gestorId]);
 
@@ -735,10 +745,8 @@ const GestorView = () => {
               height={480}
               onReload={handleRefreshAll}
               onSelectEntity={(entity) => handleEntitySelection(entity, 'interactive_charts')}
-              externalChartConfig={currentChartConfig}
+              externalChartData={pivotedChartData}
               onChartConfigChange={setCurrentChartConfig}
-              onChartUpdate={handleChartUpdate}
-              onChartPivot={handleChartPivot}
               key={`interactive-charts-${refreshToken}`}
             />
           </Col>

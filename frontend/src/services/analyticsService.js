@@ -1695,17 +1695,42 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
   console.log(`[Analytics] Current config:`, currentChartConfig);
 
   try {
-    // 1. Intentar usar backend para pivoteo
-    const result = await chartsAPI.pivot({ 
-      userId, 
-      message, 
-      currentChartConfig, 
-      chartInteractionType 
+    // 1. Usar backend para interpretar la intención (Azure OpenAI) → devuelve new_config
+    const result = await chartsAPI.pivot({
+      userId,
+      message,
+      currentChartConfig,
+      chartInteractionType
     }, options);
-    
-    console.log(`[Analytics] ✅ Backend pivot successful`);
-    return transformBackendChartData(result, 'pivot_result');
-    
+
+    console.log(`[Analytics] ✅ Backend pivot config received:`, result?.new_config);
+
+    // ✅ FIX: /charts/pivot solo devuelve new_config, no datos del gráfico.
+    // Extraer la configuración interpretada por Azure OpenAI y luego buscar los datos.
+    const newConfig = result?.new_config || {};
+    const metric = newConfig.metric || currentChartConfig.metric || 'CONTRATOS';
+    const dimension = newConfig.dimension || currentChartConfig.dimension || 'cliente';
+    const chartType = newConfig.chartType || currentChartConfig.chartType || 'horizontal_bar';
+
+    const chartData = await getPivotableChartData(metric, dimension, chartType, { ...options, userId });
+    chartData.meta = {
+      ...chartData.meta,
+      pivot_source: 'backend_azure_openai',
+      original_message: message,
+    };
+
+    console.log(`[Analytics] ✅ Pivot data ready: ${chartData.labels?.length} points`);
+
+    // ✅ Devolver en formato esperado por ConversationalPivot
+    return {
+      success: true,
+      data: chartData,
+      source: 'backend_azure_openai',
+      newConfig: { metric, dimension, chartType },
+      changesMade: result?.changes_made || [],
+      interpretation: result?.message || `Gráfico actualizado: ${metric} por ${dimension} (${chartType})`,
+    };
+
   } catch (backendError) {
     console.warn(`[Analytics] ⚠️ Backend pivot failed, trying local parsing:`, backendError.message);
 
@@ -1818,48 +1843,51 @@ async function getPivotableChartData(metric, dimension, chartType = 'bar', optio
     const metricConfig = PIVOTABLE_CONFIG.metrics[metric];
     const dimensionConfig = PIVOTABLE_CONFIG.dimensions[dimension];
     
-    // Determinar qué endpoint usar
-    const endpointKey = metricConfig.endpoints[dimension] || metricConfig.endpoints.ranking;
-    if (!endpointKey) {
-      throw new Error(`No endpoint available for ${metric} by ${dimension}`);
-    }
-
-    console.log(`[Analytics] Using endpoint: ${endpointKey}`);
-
-    // Llamar al endpoint correspondiente
+    // ✅ FIX: Manejo especial para dimensión 'cliente' — siempre usar clientes-con-metricas
     let rawData;
-    const endpointParts = endpointKey.split('.');
-    const apiModule = endpointParts[0]; // 'basic', 'kpis', etc.
-    const apiMethod = endpointParts[1]; // 'gestoresRanking', etc.
+    if (dimension === 'cliente' && gestorId) {
+      console.log(`[Analytics] Cliente dimension with gestorId ${gestorId} → gestorClientesMetricas`);
+      rawData = await analyticsAPI.gestorClientesMetricas(gestorId, periodo);
+    } else {
+      // Determinar qué endpoint usar por config
+      const endpointKey = metricConfig.endpoints[dimension] || metricConfig.endpoints.ranking;
+      if (!endpointKey) {
+        throw new Error(`No endpoint available for ${metric} by ${dimension}`);
+      }
 
-    // Construir parámetros dinámicamente
-    const params = { periodo };
-    if (gestorId) params.gestorId = gestorId;
-    if (centroId) params.centroId = centroId;
-    if (metric === 'CONTRATOS') params.metric = 'CONTRATOS';
+      console.log(`[Analytics] Using endpoint: ${endpointKey}`);
 
-    // Ejecutar llamada dinámica al API
-    switch (apiModule) {
-      case 'basic':
-        rawData = await basicAPI[apiMethod](gestorId || centroId, { ...params });
-        break;
-      case 'kpis':
-        rawData = await kpisAPI[apiMethod](gestorId || centroId, periodo, { ...params });
-        break;
-      case 'comparatives':
-        rawData = await comparativesAPI[apiMethod](periodo, { ...params });
-        break;
-      case 'charts':
-        rawData = await chartsAPI[apiMethod]({ ...params, chartType });
-        break;
-      case 'analytics':
-        rawData = await analyticsAPI[apiMethod](gestorId || centroId, periodo, { ...params });
-        break;
-      case 'incentives':
-        rawData = await incentivesAPI[apiMethod](gestorId || centroId, periodo, { ...params });
-        break;
-      default:
-        throw new Error(`API module '${apiModule}' not supported`);
+      const endpointParts = endpointKey.split('.');
+      const apiModule = endpointParts[0];
+      const apiMethod = endpointParts[1];
+
+      const params = { periodo };
+      if (gestorId) params.gestorId = gestorId;
+      if (centroId) params.centroId = centroId;
+      if (metric === 'CONTRATOS') params.metric = 'CONTRATOS';
+
+      switch (apiModule) {
+        case 'basic':
+          rawData = await basicAPI[apiMethod](gestorId || centroId, { ...params });
+          break;
+        case 'kpis':
+          rawData = await kpisAPI[apiMethod](gestorId || centroId, periodo, { ...params });
+          break;
+        case 'comparatives':
+          rawData = await comparativesAPI[apiMethod](periodo, { ...params });
+          break;
+        case 'charts':
+          rawData = await chartsAPI[apiMethod]({ ...params, chartType });
+          break;
+        case 'analytics':
+          rawData = await analyticsAPI[apiMethod](gestorId || centroId, periodo, { ...params });
+          break;
+        case 'incentives':
+          rawData = await incentivesAPI[apiMethod](gestorId || centroId, periodo, { ...params });
+          break;
+        default:
+          throw new Error(`API module '${apiModule}' not supported`);
+      }
     }
 
     console.log(`[Analytics] Raw data received:`, { 
@@ -1921,18 +1949,26 @@ function transformPivotableData(rawData, context) {
     labels = items.map(item => {
       // Extraer nombre usando configuración de dimensión
       const nameField = dimensionConfig.nameField;
-      return item[nameField] || 
-             item.DESC_GESTOR || item.DESC_CENTRO || item.DESC_PRODUCTO ||
+      const rawName = item[nameField] ||
+             item.NOMBRE_CLIENTE || item.nombre_cliente ||
+             item.DESC_GESTOR || item.DESC_CENTRO || item.DESC_PRODUCTO || item.DESC_SEGMENTO ||
              item.nombre_gestor || item.nombre_centro || item.nombre_producto ||
-             item.nombre || item.label || 
+             item.nombre || item.label ||
              `${dimensionConfig.label} ${item.id || '?'}`;
+      return String(rawName).split(' ').slice(0, 2).join(' ');
     });
-    
+
     values = items.map(item => {
-      // Extraer valor usando configuración de métrica
-      const value = item[metric.toLowerCase()] || 
-                   item[`${metric.toLowerCase()}_pct`] ||
-                   item.total_contratos || item.margen_neto || item.roe_pct ||
+      // Extraer valor usando configuración de métrica — incluir campos de clientes-con-metricas
+      const mLower = metric.toLowerCase();
+      const value = item[mLower] ||
+                   item[`${mLower}_pct`] ||
+                   // Campos de /analytics/gestor/{id}/clientes-con-metricas
+                   (mLower === 'ingresos' ? item.ingresos_cliente : null) ||
+                   (mLower === 'margen_neto' ? (item.beneficio_neto ?? item.margen_neto_pct) : null) ||
+                   (mLower === 'contratos' ? item.num_contratos : null) ||
+                   // Campos genéricos
+                   item.total_contratos || item.margen_neto_pct || item.roe_pct ||
                    item.value || metricConfig.defaultValue;
       return Number(value) || metricConfig.defaultValue;
     });
@@ -2595,10 +2631,11 @@ function transformTopClients(clientsData = [], options = {}) {
     return generateMockTopClients(gestorId);
   }
   
-  const withMetrics = clientsData.map((client, index) => ({
+  // ✅ FIX: usar beneficio_neto real del endpoint clientes-con-metricas
+  const withMetrics = clientsData.map((client) => ({
     ...client,
-    margen: mockMetric ? Math.floor(Math.random() * 40000) + 15000 : (client.margen || 0),
-    contratos: mockMetric ? Math.floor(Math.random() * 8) + 2 : (client.contratos || 0),
+    margen: client.beneficio_neto ?? (mockMetric ? Math.floor(Math.random() * 40000) + 15000 : 0),
+    contratos: client.num_contratos ?? (mockMetric ? Math.floor(Math.random() * 8) + 2 : 0),
   }));
 
   const sorted = withMetrics
@@ -2616,8 +2653,8 @@ function transformTopClients(clientsData = [], options = {}) {
       return name.split(' ').slice(0, 2).join(' ');
     }),
     datasets: [{
-      label: "Margen (€)",
-      data: sorted.map(c => c.margen || 0),
+      label: "Margen Neto (€)",
+      data: sorted.map(c => Math.round(c.margen || 0)),
       backgroundColor: CLIENT_COLORS.slice(0, sorted.length),
       borderRadius: 4,
     }],
@@ -2627,7 +2664,7 @@ function transformTopClients(clientsData = [], options = {}) {
       total: clientsData.length,
       showing: sorted.length,
       gestorId,
-      mockData: mockMetric
+      mockData: false
     }
   };
 }
@@ -3012,10 +3049,12 @@ async function getTopClientsChartData(gestorId, options = {}) {
       return generateMockTopClients(gestorId);
     }
 
-    const clientsData = await basicAPI.clientesByGestor(numericGestorId);
-    console.log(`[Analytics] Retrieved ${clientsData?.length || 0} clients from API`);
-    
-    const result = transformTopClients(clientsData, { ...options, gestorId });
+    // ✅ FIX: usar clientes-con-metricas para tener beneficio_neto real
+    const periodo = options.periodo || '2025-10';
+    const clientsData = await analyticsAPI.gestorClientesMetricas(numericGestorId, periodo);
+    console.log(`[Analytics] Retrieved ${clientsData?.length || 0} clients with metrics from API`);
+
+    const result = transformTopClients(clientsData, { ...options, gestorId, mockMetric: false });
     
     if (!result.meta?.mockData) {
       _setCached("top_clients", cacheKey, result, DEFAULT_TTL_MS);
@@ -3098,26 +3137,82 @@ async function getPriceComparisonChartData(params = {}, options = {}) {
       return generateMockPriceComparison(gestorId, segmentoInfo);
     }
 
-    console.log(`[Analytics] API call params:`, cleanParams);
+    // ✅ FIX: usar /deviations/pricing que sí funciona (precios STD + REAL en un solo endpoint)
+    console.log(`[Analytics] Calling deviations/pricing for period: ${periodo}`);
+    const deviationResult = await deviationsAPI.pricing(periodo, 0);
+    const rawDeviations = deviationResult?.data?.deviations || deviationResult?.deviations || [];
+    console.log('[Analytics] Deviations received:', rawDeviations.length);
 
-    // ✅ PASO 4: Llamada al API
-    const priceData = await dataQueriesAPI.pricesComparison(cleanParams);
-    console.log('[Analytics] Raw API response:', {
-      standard: priceData?.standard?.length || 0,
-      real: priceData?.real?.length || 0
-    });
+    // Filtrar por segmento del gestor si está disponible
+    let filtered = rawDeviations;
+    if (segmentoInfo?.segmentoId) {
+      filtered = rawDeviations.filter(d => d.SEGMENTO_ID === segmentoInfo.segmentoId);
+      console.log(`[Analytics] After segment filter (${segmentoInfo.segmentoId}): ${filtered.length}`);
+    }
+    // Si el filtro deja vacío, usar todos
+    if (filtered.length === 0) filtered = rawDeviations;
 
-    // ✅ PASO 5: Transformar datos (incluye filtrado automático)
-    const result = transformPriceComparison(priceData, { 
-      gestorId, 
-      segmentoInfo,
-      periodo,
-      ...options 
-    });
-    
+    // Colapsar por producto (tomar el primero de cada producto_id)
+    const byProduct = {};
+    filtered.forEach(d => { if (!byProduct[d.PRODUCTO_ID]) byProduct[d.PRODUCTO_ID] = d; });
+    const products = Object.values(byProduct);
+
+    if (products.length === 0) {
+      return generateMockPriceComparison(gestorId, segmentoInfo);
+    }
+
+    const getColor = (nivel) => {
+      if (nivel === 'ALTA') return SEMAPHORE_COLORS.Rojo || '#ef4444';
+      if (nivel === 'MEDIA') return SEMAPHORE_COLORS.Amarillo || '#f59e0b';
+      return SEMAPHORE_COLORS.Verde || '#10b981';
+    };
+
+    const result = {
+      labels: products.map(p => (p.DESC_PRODUCTO || 'Producto').substring(0, 22)),
+      datasets: [
+        {
+          label: 'Precio Estándar (€)',
+          data: products.map(p => Math.abs(p.PRECIO_MANTENIMIENTO || 0)),
+          backgroundColor: '#94a3b8',
+          borderRadius: 4,
+        },
+        {
+          label: 'Precio Real (€)',
+          data: products.map(p => Math.abs(p.PRECIO_MANTENIMIENTO_REAL || 0)),
+          backgroundColor: products.map(p => getColor(p.nivel_alerta)),
+          borderRadius: 4,
+        },
+      ],
+      table: products.map(p => ({
+        DESC_PRODUCTO: p.DESC_PRODUCTO,
+        DESC_SEGMENTO: p.DESC_SEGMENTO,
+        precio_std: Math.abs(p.PRECIO_MANTENIMIENTO || 0),
+        precio_real: Math.abs(p.PRECIO_MANTENIMIENTO_REAL || 0),
+        delta_abs: Math.abs(p.desviacion_absoluta || 0),
+        delta_pct: p.desviacion_pct || 0,
+        nivel_alerta: p.nivel_alerta,
+        semaforo: p.nivel_alerta === 'ALTA' ? 'Rojo' : p.nivel_alerta === 'MEDIA' ? 'Amarillo' : 'Verde',
+      })),
+      raw: products,
+      meta: {
+        type: 'price_comparison',
+        gestorId,
+        showing: products.length,
+        total: rawDeviations.length,
+        mockData: false,
+        segmentoId: segmentoInfo?.segmentoId,
+        segmentoNombre: segmentoInfo?.segmentoNombre,
+        periodo,
+        semaforos: {
+          Rojo: products.filter(p => p.nivel_alerta === 'ALTA').length,
+          Amarillo: products.filter(p => p.nivel_alerta === 'MEDIA').length,
+          Verde: products.filter(p => !['ALTA','MEDIA'].includes(p.nivel_alerta)).length,
+        },
+      },
+    };
+
     console.log(`[Analytics] === getPriceComparisonChartData END ===`);
-    console.log(`[Analytics] Final result meta:`, result.meta);
-    
+    console.log(`[Analytics] Products: ${products.length}, segmento: ${segmentoInfo?.segmentoId}`);
     return result;
     
   } catch (error) {
