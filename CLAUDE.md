@@ -319,7 +319,7 @@ llm = AzureChatOpenAI(
 ## 12. ESTADO ACTUAL DEL PROYECTO
 
 > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-> Última actualización: 2026-03-12
+> Última actualización: 2026-03-13
 
 ### ✅ Completado
 
@@ -395,14 +395,63 @@ llm = AzureChatOpenAI(
   - `cdg_agent.py`: `_deviation_detection_analysis` implementada con datos reales de `deviation_queries`
 - Commit: `2590270`
 
+**Diagnóstico y corrección del dashboard del gestor (sesión 8 — completado):**
+
+**Diagnóstico previo:**
+- `GET /analytics/gestor/1/clientes-con-metricas?periodo=2025-10` → array con `beneficio_neto`, `margen_neto_pct` ✓
+- `GET /analytics/gestor/1/metricas-completas?periodo=2025-10` → sumario completo del gestor ✓
+- `GET /kpis/gestor/1/roe?periodo=2025-10` → `{roe_pct: 129.49}` ✓
+- `GET /incentives/gestor/1/detalle?periodo=2025-10` → `{total_incentivos: 16406.84}` ✓
+- `GET /basic/productos/by-gestor/1` → `[{PRODUCTO_ID, DESC_PRODUCTO, num_contratos}]` ✓
+- `POST /charts/pivot` → devuelve `{new_config, changes_made}` (sin datos de gráfico — requería dos pasos)
+- `GET /prices/comparison` → **404 Not Found** (endpoint roto)
+- `GET /basic/precios-std` → **404 Not Found** (endpoint roto)
+- `GET /deviations/pricing?periodo=2025-10&umbral=0` → 15 desviaciones reales STD vs REAL ✓
+
+**Bugs encontrados y corregidos en `analyticsService.js`:**
+1. `getTopClientsChartData`: usaba `clientesByGestor` (solo nombres, sin métricas) → ahora usa `gestorClientesMetricas` (con `beneficio_neto`, `margen_neto_pct`)
+2. `transformTopClients`: usaba `mockMetric: true` (datos aleatorios) → ahora usa `beneficio_neto` real
+3. `getPriceComparisonChartData`: llamaba a `dataQueriesAPI.pricesComparison` (404) → ahora usa `deviationsAPI.pricing(periodo, 0)` con semáforo (ALTA=rojo, MEDIA=amarillo, BAJA=verde)
+4. `pivotChart`: `/charts/pivot` solo devuelve nueva config (sin datos) → ahora hace dos pasos: Azure OpenAI interpreta intención → `getPivotableChartData` busca los datos → devuelve `{success, data, newConfig, changesMade}`
+5. `getPivotableChartData`: para dimensión `cliente`, no había endpoint definido en PIVOTABLE_CONFIG → ahora detecta `dimension === 'cliente'` y llama directamente `gestorClientesMetricas`
+6. `transformPivotableData`: campos `NOMBRE_CLIENTE`, `ingresos_cliente`, `beneficio_neto`, `num_contratos` no estaban en los fallbacks → añadidos
+
+**Bug de wiring corregido en `GestorView.jsx`:**
+- `handleConversationalChartUpdate` solo aceptaba un arg y ponía el chartData en `currentChartConfig` (equivocado)
+- `InteractiveCharts` recibía `externalChartConfig` pero solo acepta `externalChartData` → el gráfico dinámico nunca se actualizaba
+- Fix: nuevo estado `pivotedChartData`; `handleConversationalChartUpdate(chartData, newConfig)` setea ambos; InteractiveCharts recibe `externalChartData={pivotedChartData}`
+
+**Endpoints y flujo de cada gráfico del gestor (después de los fixes):**
+| Gráfico | Endpoint | Datos |
+|---|---|---|
+| Top Clientes por Margen | `GET /analytics/gestor/{id}/clientes-con-metricas?periodo=` | `beneficio_neto` real por cliente |
+| Mix de Productos | `GET /basic/productos/by-gestor/{id}` | `num_contratos` por producto |
+| Comparativa de Precios | `GET /deviations/pricing?periodo=&umbral=0` | STD vs Real con nivel_alerta |
+| Gráfico Dinámico | `POST /charts/pivot` → Azure OpenAI → `getPivotableChartData` | Según combinación métrica/dimensión/tipo |
+
+**Flujo del pivoteo:**
+1. Usuario escribe en ConversationalPivot (panel derecho)
+2. `analyticsService.pivotChart(userId, mensaje, config, 'pivot', {gestorId, periodo})` → POST `/charts/pivot`
+3. Azure OpenAI interpreta la intención → devuelve `{new_config: {metric, dimension, chartType}, changes_made}`
+4. `getPivotableChartData(metric, dimension, chartType, {gestorId, periodo})` → obtiene datos reales
+5. Retorna `{success: true, data: {labels, datasets, meta}, newConfig, changesMade}`
+6. ConversationalPivot llama `onChartUpdate(chartData, newConfig)` → `handleConversationalChartUpdate`
+7. `setPivotedChartData(chartData)` → fluye a `InteractiveCharts` como `externalChartData`
+8. `InteractiveCharts` detecta el cambio → activa tab "Gráfico Dinámico" y renderiza
+
+**Commits de esta sesión:**
+- `50f92c2` — KPICards variaciones reales sep→oct + debug mode off + encoding fix
+- `1d1d63c` — analyticsService + GestorView: datos reales en todos los gráficos + pivot funcional
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Siguiente: probar el frontend end-to-end:**
-- Validar visualmente la landing page y los dashboards en el navegador
-- Probar el chat del gestor desde el frontend (ir a `/gestor-dashboard?gestor=1`)
-- Revisar y mejorar el mensaje de fallback en ChatInterface para el caso de `blocked: true`
-- Para CDG en frontend: el endpoint es `/agent/process` (POST) con `user_message` + `periodo`; pasar `user_role: "control_gestion"` en context para `/chat/message`
+**Siguiente: dashboard de Dirección (CDG)**
+- Revisar `DireccionView.jsx` y sus gráficos (gestores-ranking, centros-distribution, productos-popularity)
+- Verificar que los endpoints `GET /charts/gestores-ranking`, `GET /charts/centros-distribution`, `GET /charts/productos-popularity` devuelven datos reales
+- Confirmar que el chat de Dirección funciona end-to-end en el frontend (usa `/chat/message` con `user_role: control_gestion`)
+- Probar el pivoteo desde el dashboard de Dirección
 
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
 - `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir (no bloquea la POC)
+- `GET /basic/precios-std` y `GET /prices/comparison` — devuelven 404; no se usan en ningún flujo activo
