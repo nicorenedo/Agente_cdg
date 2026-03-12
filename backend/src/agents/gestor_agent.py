@@ -38,14 +38,13 @@ except ImportError:
 
 try:
     from langchain_openai import AzureChatOpenAI
-    from langchain.agents import AgentExecutor, create_tool_calling_agent
-    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    from langgraph.prebuilt import create_react_agent
     from langchain_core.tools import tool
-    from langchain_core.messages import HumanMessage, AIMessage
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-    logger.warning("⚠️ LangChain no disponible — GestorAgent funcionará en modo degradado")
+    logger.warning("LangChain no disponible -- GestorAgent funcionara en modo degradado")
 
 try:
     from queries.basic_queries import basic_queries
@@ -275,7 +274,7 @@ class GestorAgent:
 
     def _init_agent(self) -> None:
         if not LANGCHAIN_AVAILABLE:
-            logger.warning("LangChain no disponible — GestorAgent en modo fallback")
+            logger.warning("LangChain no disponible -- GestorAgent en modo fallback")
             return
 
         try:
@@ -289,7 +288,7 @@ class GestorAgent:
 
             tools = _make_tools(self.gestor_id, self.periodo_default)
 
-            system_prompt = _build_system_prompt(
+            self._system_prompt = _build_system_prompt(
                 gestor_id=self.gestor_id,
                 nombre=self.nombre,
                 segmento=self.segmento,
@@ -297,26 +296,17 @@ class GestorAgent:
                 periodo=self.periodo_default,
             )
 
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ])
-
-            agent = create_tool_calling_agent(llm, tools, prompt)
-            self._agent_executor = AgentExecutor(
-                agent=agent,
-                tools=tools,
-                verbose=False,
-                max_iterations=5,
-                handle_parsing_errors=True,
+            # LangChain 1.x / LangGraph API
+            self._agent_executor = create_react_agent(
+                llm,
+                tools,
+                prompt=self._system_prompt,
             )
             self._initialized = True
-            logger.info(f"✅ GestorAgent inicializado para gestor {self.gestor_id} ({self.nombre})")
+            logger.info(f"GestorAgent inicializado para gestor {self.gestor_id} ({self.nombre})")
 
         except Exception as e:
-            logger.error(f"❌ Error inicializando GestorAgent: {e}")
+            logger.error(f"Error inicializando GestorAgent: {e}")
             self._initialized = False
 
     # ── Procesamiento de mensajes ────────────────────────────────────
@@ -361,27 +351,28 @@ class GestorAgent:
                 "blocked": True,
             }
 
-        # ── LangChain path ───────────────────────────────────────────
+        # ── LangGraph path ───────────────────────────────────────────
         if self._initialized and self._agent_executor is not None:
             try:
-                # Construir historial para LangChain
-                lc_history = []
-                for turn in self.conversation_history[-10:]:  # últimos 10 turnos
+                # Construir historial: LangGraph recibe lista de mensajes
+                messages = []
+                for turn in self.conversation_history[-10:]:
                     if turn["role"] == "user":
-                        lc_history.append(HumanMessage(content=turn["content"]))
+                        messages.append(HumanMessage(content=turn["content"]))
                     else:
-                        lc_history.append(AIMessage(content=turn["content"]))
+                        messages.append(AIMessage(content=turn["content"]))
+                messages.append(HumanMessage(content=message))
 
-                result = await self._agent_executor.ainvoke({
-                    "input": message,
-                    "chat_history": lc_history,
-                })
+                result = await self._agent_executor.ainvoke({"messages": messages})
 
-                response_text = result.get("output", "No se pudo generar respuesta.")
+                # LangGraph devuelve {"messages": [...]}, último mensaje es la respuesta
+                last_msg = result["messages"][-1]
+                response_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+                # Herramientas usadas: mensajes de tipo ToolMessage
                 used_tools = [
-                    step[0].tool
-                    for step in result.get("intermediate_steps", [])
-                    if hasattr(step[0], "tool")
+                    m.name for m in result["messages"]
+                    if hasattr(m, "name") and m.name and m.__class__.__name__ == "ToolMessage"
                 ]
 
                 # Actualizar historial
@@ -397,7 +388,7 @@ class GestorAgent:
                 }
 
             except Exception as e:
-                logger.error(f"❌ GestorAgent LangChain error: {e}")
+                logger.error(f"GestorAgent LangGraph error: {e}")
                 # Fall through al modo degradado
 
         # ── Fallback sin LangChain ───────────────────────────────────

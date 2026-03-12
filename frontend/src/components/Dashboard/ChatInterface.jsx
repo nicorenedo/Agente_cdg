@@ -55,6 +55,7 @@ import PropTypes from 'prop-types';
 // ✅ Services actualizados v12.0
 import chatService from '../../services/chatService';
 import reportService from '../../services/reportService';
+import { gestorCopilot } from '../../services/api';
 import theme from '../../styles/theme';
 
 const { TextArea } = Input;
@@ -531,17 +532,19 @@ ${data.suggestions ? data.suggestions.map(s => `• ${s}`).join('\n') : '• Con
           user_role: userRole || scope
         };
 
-        console.log('🔍 [ChatInterface] PREPARANDO PAYLOAD:', {
-          scope,
-          gestorId,
-          gestorId_type: typeof gestorId,
-          gestor_id_calculated: scope === 'gestor' && gestorId ? gestorId : null,
-          gestor_id_type: typeof (scope === 'gestor' && gestorId ? gestorId : null)
-        });
-
-        console.log('🔍 [ChatInterface] PAYLOAD COMPLETO:', debugPayload);
-
-        const response = await chatService.http.sendMessage(debugPayload);
+        let response;
+        if (scope === 'gestor' && gestorId) {
+          // ── Ruta gestor: usa GestorAgent con LangChain ──────────────
+          response = await gestorCopilot.chat({
+            gestor_id: String(gestorId),
+            message: messageText,
+            periodo,
+            session_id: userId,
+          });
+        } else {
+          // ── Ruta general: chat_agent/cdg_agent ─────────────────────
+          response = await chatService.http.sendMessage(debugPayload);
+        }
 
         handleChatMessage(response);
       }

@@ -1,0 +1,21 @@
+# FastAPI & server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.6
+python-multipart>=0.0.9
+
+# Pydantic & settings
+pydantic>=2.9.2
+pydantic-settings>=2.5.2
+
+# LangChain + Azure OpenAI (Python 3.13 compatible)
+langchain>=0.3.14
+langchain-openai>=0.2.14
+langchain-core>=0.3.29
+openai>=1.54.3
+
+# Data (numpy 2.x has Python 3.13 wheels)
+numpy>=2.0.0
+pandas>=2.2.3
+
+# Utils
+python-dotenv>=1.0.1

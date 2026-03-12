@@ -278,7 +278,7 @@ ORDER BY RESULTADO_CONTRATO DESC;
 # Azure OpenAI
 AZURE_OPENAI_API_KEY=AZURE_OPENAI_API_KEY_REDACTED
 AZURE_OPENAI_ENDPOINT=https://TU_RECURSO.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT_ID=gpt-5.4
+AZURE_OPENAI_DEPLOYMENT_ID=gpt-4o
 AZURE_OPENAI_API_VERSION=2025-01-01-preview
 
 # App
@@ -374,11 +374,22 @@ llm = AzureChatOpenAI(
 **Integración en `main.py` y `api.js` (sesión 5 — completado):**
 - `backend/main.py`: imports + mock fallbacks para `gestor_agent` y `auth`; modelo `GestorChatRequest`; 3 nuevos endpoints `POST /chat/gestor`, `GET /chat/gestor/{id}/status`, `POST /chat/gestor/{id}/reset`; `/health` y `root()` actualizados
 - `frontend/src/services/api.js`: módulo `gestorCopilot` con métodos `chat`, `status`, `reset`; exportado en objeto `api` y exports individuales
+- `frontend/src/components/Dashboard/ChatInterface.jsx`: cuando `scope === 'gestor'`, usa `gestorCopilot.chat()` en lugar del chat genérico
+
+**POC funcional end-to-end (sesión 6 — completado):**
+- Creados `.env` y `requirements.txt` (Python 3.13 + numpy 2.x compatible)
+- Identificado y corregido deployment ID: `gpt-5.4` → `gpt-4o` (el que realmente existe en el Azure)
+- `gestor_agent.py` migrado de LangChain 0.3.x a LangChain 1.x (reemplazado `AgentExecutor` + `create_tool_calling_agent` por `create_react_agent` de `langgraph.prebuilt`)
+- Validado end-to-end: el agente usa `get_mis_kpis`, consulta la BD real, y responde con datos reales en ~7s
+- Frontend arrancado en localhost:3000, backend en localhost:8000
 
 ### ⏭️ Próximo paso exacto al retomar
 
-**Único pendiente relevante:**
-- `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir
+**Para continuar la POC:**
+- Validar visualmente la landing page y los dashboards en el navegador
+- Probar el chat del gestor desde el frontend (ir a `/gestor-dashboard?gestor=1`)
+- Revisar y mejorar el mensaje de fallback en ChatInterface para el caso de `blocked: true`
 
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
+- `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir
