@@ -88,7 +88,7 @@ const DeviationAnalysis = ({
   const [volumenFactor, setVolumenFactor] = useState(3.0);
   
   // Estado para debugging
-  const [useDebugMode, setUseDebugMode] = useState(true);
+  const [useDebugMode, setUseDebugMode] = useState(false);
   const [parametersChanged, setParametersChanged] = useState(false);
   
   /**

@@ -43,6 +43,7 @@ const KPICards = ({
   // Datos de centros y métricas
   const [centros, setCentros] = useState([]);
   const [centrosFin, setCentrosFin] = useState({});
+  const [centrosFin_prev, setCentrosFin_prev] = useState({});
   const [clientesPorCentro, setClientesPorCentro] = useState({});
   const [kpisData, setKpisData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +60,17 @@ const KPICards = ({
     return String(periodo);
   }, [periodo]);
 
+  // Período anterior para calcular variaciones (solo tenemos sep y oct)
+  const prevPeriodo = useMemo(() => {
+    if (normalizedPeriodo === '2025-10') return '2025-09';
+    return null;
+  }, [normalizedPeriodo]);
+
+  // Helper: calcula variación % entre valor actual y anterior (null si no hay datos)
+  const calcVar = useCallback((curr, prev) => {
+    if (prev === null || prev === undefined || prev === 0 || !isFinite(prev) || !isFinite(curr)) return null;
+    return Math.round((curr - prev) / Math.abs(prev) * 1000) / 10;
+  }, []);
 
   // Opciones del filtro select
   const centerOptions = useMemo(() => [
@@ -213,31 +225,29 @@ const KPICards = ({
         }
 
 
-        // 3. Cargar datos financieros de cada centro
-        const centroPromises = centrosFinalistasIds.map(async (centroId) => {
+        // 3. Cargar datos financieros de cada centro (período actual y anterior en paralelo)
+        const makeCentroPromises = (prd) => centrosFinalistasIds.map(async (centroId) => {
           try {
-            console.log(`[KPICards] Loading financial data for centro ${centroId}...`);
-            const response = await api.kpis.centroFinancieros(centroId, normalizedPeriodo);
-            console.log(`[KPICards] Centro ${centroId} financial response:`, response);
+            const response = await api.kpis.centroFinancieros(centroId, prd);
             return { centroId: String(centroId), data: response };
-          } catch (error) {
-            console.error(`[KPICards] Error loading centro ${centroId}:`, error);
+          } catch {
             return { centroId: String(centroId), data: null };
           }
         });
 
+        const [centroResults, centroResultsPrev] = await Promise.all([
+          Promise.all(makeCentroPromises(normalizedPeriodo)),
+          prevPeriodo ? Promise.all(makeCentroPromises(prevPeriodo)) : Promise.resolve([])
+        ]);
 
-        const centroResults = await Promise.all(centroPromises);
-        
         // 4. Procesar datos y actualizar estado
         const centrosFinalData = {};
+        const centrosFinalDataPrev = {};
         const centrosConNombres = [];
-
 
         centroResults.forEach(({ centroId, data }) => {
           if (data) {
             centrosFinalData[centroId] = data;
-            // Actualizar nombre del centro con datos reales
             centrosConNombres.push({
               CENTRO_ID: parseInt(centroId),
               DESC_CENTRO: data.metricas_base?.DESC_CENTRO || `Centro ${centroId}`,
@@ -246,13 +256,18 @@ const KPICards = ({
           }
         });
 
+        centroResultsPrev.forEach(({ centroId, data }) => {
+          if (data) centrosFinalDataPrev[centroId] = data;
+        });
 
         if (active) {
           setCentrosFin(centrosFinalData);
+          setCentrosFin_prev(centrosFinalDataPrev);
           setCentros(centrosConNombres);
-          console.log('[KPICards] ✅ Centros financial data loaded:', { 
-            centros: centrosConNombres.length, 
-            datos: Object.keys(centrosFinalData).length 
+          console.log('[KPICards] ✅ Centros financial data loaded:', {
+            centros: centrosConNombres.length,
+            current: Object.keys(centrosFinalData).length,
+            prev: Object.keys(centrosFinalDataPrev).length
           });
         }
 
@@ -268,7 +283,7 @@ const KPICards = ({
 
     loadDirectionData();
     return () => { active = false; };
-  }, [mode, normalizedPeriodo]);
+  }, [mode, normalizedPeriodo, prevPeriodo]);
 
 
   // ✅ CORREGIDO: Cálculo y actualización de KPIs para dirección usando endpoint de clientes separado
@@ -335,9 +350,25 @@ const KPICards = ({
         roe: countCentros > 0 ? totalROE / countCentros : 0
       };
 
+      // Calcular totales período anterior para variaciones reales
+      let prevTotalROE = 0, prevCountCentros = 0, prevTotalContratos = 0, prevTotalIngresos = 0;
+      Object.values(centrosFin_prev).forEach((centroData) => {
+        if (centroData?.metricas_base) {
+          prevTotalContratos += centroData.metricas_base.total_contratos || 0;
+          prevTotalIngresos += centroData.metricas_base.ingresos_total || 0;
+          prevTotalROE += centroData.kpis_financieros?.roe?.roe_pct || 0;
+          prevCountCentros++;
+        }
+      });
+      const prevGlobal = {
+        roe: prevCountCentros > 0 ? prevTotalROE / prevCountCentros : null,
+        contratos: prevTotalContratos || null,
+        ingresos: prevTotalIngresos || null,
+      };
 
-      console.log('[KPICards] 📊 Calculated totals:', kpisPorCentro.global);
+      console.log('[KPICards] 📊 Calculated totals:', kpisPorCentro.global, '| prev:', prevGlobal);
 
+      const mkVar = (curr, prev) => calcVar(curr, prev);
 
       // Crear KPIs basados en selecciones
       const kpis = [
@@ -347,8 +378,7 @@ const KPICards = ({
             ? kpisPorCentro.global.roe
             : kpisPorCentro[centerSelections.roe_grupo]?.roe || 0,
           location: centerSelections.roe_grupo,
-          variation: 2.3,
-          trend: 'up',
+          variation: mkVar(kpisPorCentro.global.roe, prevGlobal.roe),
           format: 'percent',
           status: 'excellent'
         },
@@ -358,8 +388,7 @@ const KPICards = ({
             ? kpisPorCentro.global.clientes
             : kpisPorCentro[centerSelections.total_clientes]?.clientes || 0,
           location: centerSelections.total_clientes,
-          variation: 5.8,
-          trend: 'up',
+          variation: null, // clientes sin filtro temporal — sin variación
           format: 'number',
           status: 'good'
         },
@@ -369,8 +398,7 @@ const KPICards = ({
             ? kpisPorCentro.global.contratos
             : kpisPorCentro[centerSelections.total_contratos]?.contratos || 0,
           location: centerSelections.total_contratos,
-          variation: 8.4,
-          trend: 'up',
+          variation: mkVar(kpisPorCentro.global.contratos, prevGlobal.contratos),
           format: 'number',
           status: 'excellent'
         },
@@ -380,23 +408,20 @@ const KPICards = ({
             ? kpisPorCentro.global.ingresos
             : kpisPorCentro[centerSelections.ingresos_totales]?.ingresos || 0,
           location: centerSelections.ingresos_totales,
-          variation: 12.1,
-          trend: 'up',
+          variation: mkVar(kpisPorCentro.global.ingresos, prevGlobal.ingresos),
           format: 'currency',
           status: 'excellent'
         }
       ];
 
-
       console.log('[KPICards] ✅ Final KPIs:', kpis);
       setKpisData(kpis);
-
 
     } catch (error) {
       console.error('[KPICards] ❌ Error calculating KPIs:', error);
       setError(error);
     }
-  }, [mode, centerSelections, centrosFin, clientesPorCentro]);
+  }, [mode, centerSelections, centrosFin, centrosFin_prev, clientesPorCentro, calcVar]);
 
 
   // ✅ CORREGIDO: Carga de KPIs para gestor
@@ -413,44 +438,48 @@ const KPICards = ({
         console.log('[KPICards] 🔄 Loading gestor data for:', gestorId);
 
 
-        const [roe, incentivos, clientes, contratos] = await Promise.all([
+        const nullRoe = { roe_pct: null };
+        const nullInc = { total_incentivos: null };
+
+        const [roe, incentivos, clientes, contratos, roePrev, incentivosPrev] = await Promise.all([
           api.kpis.gestorROE(gestorId, normalizedPeriodo).catch(() => ({ roe_pct: 16.5 })),
           api.incentives.gestorDetalle(gestorId, normalizedPeriodo).catch(() => ({ total_incentivos: 8500 })),
           api.basic.clientesByGestor(gestorId).catch(() => []),
-          api.basic.contractsByGestor(gestorId).catch(() => [])
+          api.basic.contractsByGestor(gestorId).catch(() => []),
+          prevPeriodo
+            ? api.kpis.gestorROE(gestorId, prevPeriodo).catch(() => nullRoe)
+            : Promise.resolve(nullRoe),
+          prevPeriodo
+            ? api.incentives.gestorDetalle(gestorId, prevPeriodo).catch(() => nullInc)
+            : Promise.resolve(nullInc),
         ]);
-
 
         const kpis = [
           {
             key: 'roe_gestor',
-            value: roe?.roe_pct || 16.5,
-            variation: 1.8,
-            trend: 'up',
+            value: roe?.roe_pct ?? 16.5,
+            variation: calcVar(roe?.roe_pct ?? 16.5, roePrev?.roe_pct),
             format: 'percent',
             status: 'excellent'
           },
           {
             key: 'bonus_gestor',
-            value: incentivos?.total_incentivos || 8500,
-            variation: 12.3,
-            trend: 'up',
+            value: incentivos?.total_incentivos ?? 8500,
+            variation: calcVar(incentivos?.total_incentivos ?? 8500, incentivosPrev?.total_incentivos),
             format: 'currency',
             status: 'excellent'
           },
           {
             key: 'clientes_gestor',
-            value: clientes?.length || 28,
-            variation: 3.7,
-            trend: 'up',
+            value: clientes?.length ?? 28,
+            variation: null, // endpoint sin filtro temporal
             format: 'number',
             status: 'good'
           },
           {
             key: 'contratos_gestor',
-            value: contratos?.length || 45,
-            variation: 8.2,
-            trend: 'up',
+            value: contratos?.length ?? 45,
+            variation: null, // endpoint sin filtro temporal
             format: 'number',
             status: 'good'
           }
@@ -469,7 +498,7 @@ const KPICards = ({
 
     loadGestorData();
     return () => { active = false; };
-  }, [mode, gestorId, normalizedPeriodo]);
+  }, [mode, gestorId, normalizedPeriodo, prevPeriodo, calcVar]);
 
 
   // Formateo de valores
@@ -496,9 +525,12 @@ const KPICards = ({
 
   // ✅ CORREGIDO: Componente KPICard con Select mejorado
   const KPICard = ({ kpi, config, filterKey, showFilter }) => {
+    const hasVariation = kpi.variation !== null && kpi.variation !== undefined;
     const isPositiveVariation = kpi.variation > 0;
-    const variationColor = isPositiveVariation ? theme.colors.success : theme.colors.error;
-    const TrendIcon = kpi.trend === 'up' ? ArrowUpOutlined : ArrowDownOutlined;
+    const variationColor = hasVariation
+      ? (isPositiveVariation ? theme.colors.success : theme.colors.error)
+      : (theme.colors?.textLight || '#999');
+    const TrendIcon = kpi.variation >= 0 ? ArrowUpOutlined : ArrowDownOutlined;
     const statusColor = kpi.status === 'excellent' ? theme.colors.success : theme.colors.bmGreenPrimary;
 
 
@@ -592,13 +624,15 @@ const KPICards = ({
           {/* Variation */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <TrendIcon style={{ fontSize: 14, color: variationColor }} />
-              <span style={{ 
+              {hasVariation && <TrendIcon style={{ fontSize: 14, color: variationColor }} />}
+              <span style={{
                 color: variationColor,
                 fontSize: 14,
-                fontWeight: 600 
+                fontWeight: 600
               }}>
-                {kpi.variation > 0 ? '+' : ''}{kpi.variation?.toFixed(1)}%
+                {hasVariation
+                  ? `${kpi.variation > 0 ? '+' : ''}${kpi.variation.toFixed(1)}%`
+                  : '—'}
               </span>
             </div>
           </div>

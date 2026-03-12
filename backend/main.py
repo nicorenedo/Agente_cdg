@@ -24,6 +24,10 @@ import logging
 from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional, Union
 
+# Fix encoding para consola Windows (emojis en print)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 # Asegurar import de src/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
