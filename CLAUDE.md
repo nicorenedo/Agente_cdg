@@ -319,7 +319,7 @@ llm = AzureChatOpenAI(
 ## 12. ESTADO ACTUAL DEL PROYECTO
 
 > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-> Última actualización: 2026-03-11
+> Última actualización: 2026-03-12
 
 ### ✅ Completado
 
@@ -383,13 +383,26 @@ llm = AzureChatOpenAI(
 - Validado end-to-end: el agente usa `get_mis_kpis`, consulta la BD real, y responde con datos reales en ~7s
 - Frontend arrancado en localhost:3000, backend en localhost:8000
 
+**Validación completa de ambos agentes (sesión 7 — completado):**
+- **GestorAgent 3/3** (tests ya validados sesión anterior): margen, contratos, clientes
+- **CDGAgent 2/2** (sesión 7):
+  - Test 1 "¿Qué gestor tiene el mejor margen en octubre?" → `comparative_performance` | Top: Javier Fernández (Banca Privada, margen 526%), seguido por Clara Calvet, María González. Confianza: 0.85
+  - Test 2 "¿Qué centros tienen desviaciones críticas vs precio estándar?" → `deviation_detection` | 12 desviaciones ALTA: Préstamo Hipotecario/Fondos (+17%), Fondo Banca March (+16.4%), Depósito Plazo Fijo (+15.8%). Confianza: 0.85
+- Fixes aplicados:
+  - `chat_agent.py`: propagación de `user_role`/`scope` del request context al clasificador (fix ACCESS_DENIED para CDG)
+  - `main.py`: `determine_user_role` recibe ahora `req.context` con `user_role`
+  - `cdg_agent.py`: `_determine_analysis_type` mejorado con keywords en español (`desviaci`, `que gestor`, `ranking`, etc.)
+  - `cdg_agent.py`: `_deviation_detection_analysis` implementada con datos reales de `deviation_queries`
+- Commit: `2590270`
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Para continuar la POC:**
+**Siguiente: probar el frontend end-to-end:**
 - Validar visualmente la landing page y los dashboards en el navegador
 - Probar el chat del gestor desde el frontend (ir a `/gestor-dashboard?gestor=1`)
 - Revisar y mejorar el mensaje de fallback en ChatInterface para el caso de `blocked: true`
+- Para CDG en frontend: el endpoint es `/agent/process` (POST) con `user_message` + `periodo`; pasar `user_role: "control_gestion"` en context para `/chat/message`
 
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
-- `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir
+- `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir (no bloquea la POC)
