@@ -476,13 +476,61 @@ Bug 2 — `ConversationalPivot.jsx` historial persiste entre sesiones:
 - Root cause: localStorage key era `conversational-pivot-history-${mode}` — misma key para todos los gestores y períodos
 - Fix: key cambiada a `...-${mode}-${gestorId}-${periodo}`; useEffect de carga incluye `gestorId` y `periodo` en deps; al cambiar key sin datos previos, limpia el estado
 
+**Dashboard de Dirección (CDG) — sesión 9 — completado:**
+
+**Diagnóstico previo (endpoints verificados):**
+- `GET /charts/gestores-ranking?metric=CONTRATOS` → 15 gestores, conteos reales ✓
+- `GET /charts/centros-distribution` → 5 centros con contratos reales ✓
+- `GET /charts/productos-popularity` → 3 productos con popularidad real ✓
+- `GET /charts/gestores-ranking?metric=INGRESOS/MARGEN_NETO/ROE` → NO funcionaba (solo CONTRATOS/CLIENTES)
+
+**Bugs encontrados y corregidos:**
+
+Bug 1 — `gestores-ranking` no soportaba INGRESOS/MARGEN_NETO/ROE:
+- Root cause: endpoint tenía enum `["CONTRATOS","CLIENTES"]`; sin parámetro `periodo`; delegaba todo a `QueryIntegratedChartGenerator` que solo manejaba conteos
+- Fix: endpoint reescrito en `main.py` con routing por métrica: INGRESOS/MARGEN_NETO → `comparative_queries.ranking_gestores_por_margen_enhanced(periodo)`; ROE → `compare_roe_gestores_enhanced(periodo)`
+- Commit: `9911aa5`
+
+Bug 2 — Pivot Dirección nunca renderizaba en InteractiveCharts:
+- Root cause: `DireccionView.jsx` pasaba `externalChartConfig` (incorrecto) en lugar de `externalChartData`; `handleConversationalChartUpdate` solo aceptaba un arg; no existía estado `pivotedChartData`
+- Fix: añadido estado `pivotedChartData`; handler acepta `(chartData, newConfig)`; prop corregida a `externalChartData={pivotedChartData}`
+- Commit: `9911aa5`
+
+Bug 3 — `PIVOTABLE_CONFIG` sin endpoints para INGRESOS+producto/ranking (Dirección):
+- Root cause: validación rechazaba combinaciones INGRESOS+gestor/centro/producto para modo Dirección por falta de endpoints
+- Fix: añadidos `producto: 'charts.productosPopularity'` y `ranking: 'charts.gestoresRanking'` a INGRESOS y MARGEN_NETO en PIVOTABLE_CONFIG
+- Commit: `9911aa5`
+
+Bug 4 — `getPivotableChartData` fallaba para Dirección (gestorId=null) con dimension=gestor/centro/producto:
+- Root cause: path normal llamaba `analyticsAPI.gestorMetricasCompletas(undefined, periodo)` → 422 error
+- Fix: early-return special cases para dimension=gestor/centro/producto sin gestorId → llaman `chartsAPI.gestoresRanking/centrosDistribution/productosPopularity`
+- Commit: `9911aa5`
+
+**Chat CDG (sesión 10 — completado):**
+
+Bug 5 — Chat CDG (`/chat/message` con `user_role: control_gestion`) retornaba DYNAMIC_SQL con "Consulta no procesable":
+- Root cause 1: Routing: `cdg_intents` solo incluía `business_review/executive_summary/deviation_detection`. Queries comparativas (`comparative_analysis`, `performance_analysis`) iban a REGLA 3 (SQL) antes de REGLA 3 CDG. REGLA 3 buscaba predefined query → no encontraba → DYNAMIC_SQL
+- Root cause 2: `BankingResponseFormatter.format_response()` llamada con kwargs no definidos: `cdg_analysis=True, preferences=, user_role=, gestor_id=, is_personal=` → `TypeError` → fallback a DYNAMIC_SQL
+- Fix 1: Expandidos `cdg_intents` a incluir `comparative_analysis`, `performance_analysis`, `ranking_analysis`, `global_analysis`, `incentive_analysis`
+- Fix 2: Añadida REGLA 2b: si `user_role=control_gestion AND requires_sql AND not is_personal` → CDG_AGENT (catch-all para CDG)
+- Fix 3: `format_response()` ahora recibe los kwargs en el dict `context={}` estándar
+- Commit: `a96db0e`
+
+**Resultado validado:**
+- `/chat/message` con `user_role: control_gestion` + "Que gestor tiene el mejor margen en octubre?" → flow_type=CDG_AGENT → respuesta con datos reales: Javier Fernández, margen 526%, ranking completo ✓
+- `/charts/gestores-ranking?metric=INGRESOS&periodo=2025-10` → Francisco Martínez €30,417 (real) ✓
+- `/charts/gestores-ranking?metric=MARGEN_NETO` → beneficio_neto real ✓
+- `/charts/gestores-ranking?metric=ROE` → Luis Pérez 95.05% ✓
+- `/charts/centros-distribution` → MADRID=58, PALMA=58, BARCELONA=36, MALAGA=35, BILBAO=29 ✓
+- `/charts/productos-popularity` → Hipotecario=75, Fondos=72, Depósito=69 ✓
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Siguiente: dashboard de Dirección (CDG)**
-- Revisar `DireccionView.jsx` y sus gráficos (gestores-ranking, centros-distribution, productos-popularity)
-- Verificar que los endpoints `GET /charts/gestores-ranking`, `GET /charts/centros-distribution`, `GET /charts/productos-popularity` devuelven datos reales
-- Confirmar que el chat de Dirección funciona end-to-end en el frontend (usa `/chat/message` con `user_role: control_gestion`)
-- Probar el pivoteo desde el dashboard de Dirección
+**Siguiente: prueba visual dashboard Dirección**
+- Cargar localhost:3000 y navegar a DireccionView
+- Confirmar 3 gráficos (gestores-ranking, centros-distribution, productos-popularity) muestran datos reales
+- Probar ConversationalPivot desde Dirección (ej: "Muéstrame ingresos por gestor")
+- Probar chat de Dirección: escribir una pregunta en ChatInterface
 
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
