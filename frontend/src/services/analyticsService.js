@@ -128,13 +128,14 @@ const PIVOTABLE_CONFIG = Object.freeze({
     'MARGEN_NETO': {
       label: 'Margen Neto (%)',
       defaultValue: 0,
-      format: '0.00%', 
+      format: '0.00%',
       color: '#ef4444',
       endpoints: {
         gestor: 'comparatives.gestoresMargen',
         centro: 'comparatives.centrosMargen',
         segmento: 'comparatives.segmentosMargen',
-        ranking: 'comparatives.gestoresRanking'
+        producto: 'charts.productosPopularity', // Dirección fallback
+        ranking: 'charts.gestoresRanking'
       }
     },
     'INGRESOS': {
@@ -145,7 +146,9 @@ const PIVOTABLE_CONFIG = Object.freeze({
       endpoints: {
         gestor: 'analytics.gestorMetricasCompletas',
         centro: 'analytics.centroMetricas',
-        segmento: 'analytics.segmentoMetricas'
+        segmento: 'analytics.segmentoMetricas',
+        producto: 'charts.productosPopularity', // Dirección: overridden by special case; gestor: fallback
+        ranking: 'charts.gestoresRanking'       // catch-all para validación
       }
     },
     'INCENTIVOS': {
@@ -1866,6 +1869,27 @@ async function getPivotableChartData(metric, dimension, chartType = 'bar', optio
     if (dimension === 'cliente' && gestorId) {
       console.log(`[Analytics] Cliente dimension with gestorId ${gestorId} → gestorClientesMetricas`);
       rawData = await analyticsAPI.gestorClientesMetricas(gestorId, periodo);
+    } else if (dimension === 'gestor' && !gestorId) {
+      // ✅ Dirección mode: sin gestorId específico → usar ranking global de gestores
+      console.log(`[Analytics] Gestor dimension without gestorId → chartsAPI.gestoresRanking(${metric})`);
+      const result = await chartsAPI.gestoresRanking({ metric, chartType, periodo });
+      const transformed = transformBackendChartData(result, 'gestores-ranking');
+      _setCached("pivotable_chart", cacheKey, transformed, DEFAULT_TTL_MS);
+      return transformed;
+    } else if (dimension === 'centro' && !centroId && !gestorId) {
+      // ✅ Dirección mode: distribución de centros
+      console.log(`[Analytics] Centro dimension without centroId → chartsAPI.centrosDistribution`);
+      const result = await chartsAPI.centrosDistribution({ chartType, periodo });
+      const transformed = transformBackendChartData(result, 'centros-distribution');
+      _setCached("pivotable_chart", cacheKey, transformed, DEFAULT_TTL_MS);
+      return transformed;
+    } else if (dimension === 'producto' && !gestorId && !centroId) {
+      // ✅ Dirección mode: popularidad de productos
+      console.log(`[Analytics] Producto dimension without gestorId → chartsAPI.productosPopularity`);
+      const result = await chartsAPI.productosPopularity({ chartType, periodo });
+      const transformed = transformBackendChartData(result, 'productos-popularity');
+      _setCached("pivotable_chart", cacheKey, transformed, DEFAULT_TTL_MS);
+      return transformed;
     } else {
       // Determinar qué endpoint usar por config
       const endpointKey = metricConfig.endpoints[dimension] || metricConfig.endpoints.ranking;

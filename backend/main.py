@@ -2600,17 +2600,95 @@ def charts_summary_dashboard():
 
 @app.get("/charts/gestores-ranking", tags=["Charts"], response_model=ApiResponse)
 def charts_gestores_ranking(
-    metric: str = Query("CONTRATOS", enum=["CONTRATOS", "CLIENTES"]),
-    chart_type: str = Query("horizontal_bar")
+    metric: str = Query("CONTRATOS"),
+    chart_type: str = Query("horizontal_bar"),
+    periodo: str = Query("2025-10")
 ):
-    """Gráfico de ranking de gestores"""
+    """Gráfico de ranking de gestores — soporta CONTRATOS, CLIENTES, INGRESOS, MARGEN_NETO, ROE"""
     try:
+        # CONTRATOS / CLIENTES: datos de contratos maestros (independientes de período)
+        if metric in ("CONTRATOS", "CLIENTES"):
+            if not CHART_GENERATOR_AVAILABLE:
+                return ok({"chart": {"id": "mock"}})
+            gen = QueryIntegratedChartGenerator()
+            chart = gen.generate_gestores_ranking_chart(metric=metric, chart_type=chart_type, user_role="CONTROL_GESTION")
+            return ok({"chart": chart}, meta={"metric": metric, "periodo": periodo})
+
+        # INGRESOS / MARGEN_NETO: usa ranking_gestores_por_margen_enhanced
+        if metric in ("INGRESOS", "MARGEN_NETO"):
+            result = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
+            rows = result.data if hasattr(result, "data") else (result or [])
+            data_field = "ingresos_total" if metric == "INGRESOS" else "beneficio_neto"
+            title = f"Ranking Gestores por {'Ingresos' if metric == 'INGRESOS' else 'Margen Neto'} ({periodo})"
+            chart_data = sorted(
+                [
+                    {
+                        "label": row.get("DESC_GESTOR", f"Gestor {row.get('GESTOR_ID','')}"),
+                        "value": float(row.get(data_field, 0) or 0),
+                        "center": row.get("DESC_CENTRO", ""),
+                        "original_data": row,
+                    }
+                    for row in rows[:15]
+                    if (row.get(data_field, 0) or 0) != 0
+                ],
+                key=lambda x: x["value"],
+                reverse=True,
+            )
+            chart = {
+                "id": f"gestores_ranking_{metric}_{periodo}",
+                "type": chart_type,
+                "title": title,
+                "data": chart_data,
+                "metric": metric,
+                "dimension": "gestor",
+                "created_at": now_iso(),
+                "interactive": True,
+                "pivot_enabled": True,
+                "data_source": "comparative_queries",
+            }
+            return ok({"chart": chart}, meta={"metric": metric, "periodo": periodo})
+
+        # ROE: usa compare_roe_gestores_enhanced
+        if metric == "ROE":
+            result = comparative_queries.compare_roe_gestores_enhanced(periodo)
+            rows = result.data if hasattr(result, "data") else (result or [])
+            chart_data = sorted(
+                [
+                    {
+                        "label": row.get("DESC_GESTOR", f"Gestor {row.get('GESTOR_ID','')}"),
+                        "value": float(row.get("roe", 0) or 0),
+                        "center": row.get("DESC_CENTRO", ""),
+                        "original_data": row,
+                    }
+                    for row in rows[:15]
+                    if (row.get("roe", 0) or 0) != 0
+                ],
+                key=lambda x: x["value"],
+                reverse=True,
+            )
+            chart = {
+                "id": f"gestores_ranking_roe_{periodo}",
+                "type": chart_type,
+                "title": f"Ranking Gestores por ROE ({periodo})",
+                "data": chart_data,
+                "metric": "ROE",
+                "dimension": "gestor",
+                "created_at": now_iso(),
+                "interactive": True,
+                "pivot_enabled": True,
+                "data_source": "comparative_queries",
+            }
+            return ok({"chart": chart}, meta={"metric": metric, "periodo": periodo})
+
+        # Fallback: mismo que CONTRATOS
         if not CHART_GENERATOR_AVAILABLE:
             return ok({"chart": {"id": "mock"}})
         gen = QueryIntegratedChartGenerator()
-        chart = gen.generate_gestores_ranking_chart(metric=metric, chart_type=chart_type)
-        return ok({"chart": chart}, meta={"metric": metric})
+        chart = gen.generate_gestores_ranking_chart(metric="CONTRATOS", chart_type=chart_type, user_role="CONTROL_GESTION")
+        return ok({"chart": chart}, meta={"metric": metric, "periodo": periodo})
+
     except Exception as e:
+        logger.exception("Error en charts_gestores_ranking")
         return ok({"error": str(e)}, meta={"note": "charts_gestores_ranking_error"})
 
 @app.get("/charts/centros-distribution", tags=["Charts"], response_model=ApiResponse)

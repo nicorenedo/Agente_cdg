@@ -56,6 +56,7 @@ const DireccionView = () => {
   // ✅ ESTADOS DE INTERACCIÓN DE GRÁFICOS
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [currentChartConfig, setCurrentChartConfig] = useState(null);
+  const [pivotedChartData, setPivotedChartData] = useState(null);
   const [pivotHistory, setPivotHistory] = useState([]);
 
   // ✅ ESTADOS DE UI - NUEVO: gestión del chat conversacional
@@ -176,17 +177,18 @@ const DireccionView = () => {
     }
   }, [periodo]);
 
-  // ✅ NUEVO: Handlers del ConversationalPivot
-  const handleConversationalChartUpdate = useCallback((newChartConfig) => {
-    console.log('[DireccionView] 🤖 Chart updated from ConversationalPivot:', newChartConfig);
-    
+  // ✅ NUEVO: Handlers del ConversationalPivot — mismo patrón que GestorView
+  const handleConversationalChartUpdate = useCallback((chartData, newConfig) => {
+    console.log('[DireccionView] 🤖 Chart updated from ConversationalPivot:', { chartData, newConfig });
+
+    setPivotedChartData(chartData);
     setCurrentChartConfig({
-      ...newChartConfig,
+      ...(newConfig || {}),
       updatedAt: new Date().toISOString(),
       source: 'conversational_pivot',
       mode: 'direccion'
     });
-    
+
     notification.success({
       message: 'Gráfico Actualizado',
       description: 'El gráfico corporativo se ha modificado mediante chat conversacional',
@@ -460,7 +462,7 @@ const DireccionView = () => {
               height={460}
               onReload={handleRefreshAll}
               onSelectEntity={(entity) => handleEntitySelection(entity, 'interactive_charts')}
-              externalChartConfig={currentChartConfig}
+              externalChartData={pivotedChartData}
               onChartConfigChange={(config) => setCurrentChartConfig(config)}
               onChartUpdate={handleChartUpdate}
               onChartPivot={handleChartPivot}
