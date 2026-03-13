@@ -380,6 +380,9 @@ const InteractiveCharts = ({
     if (Object.keys(chartConfigs).length === 0) return;
 
     let mounted = true;
+    // ✅ Copy ref values into local vars for use in cleanup (react-hooks/exhaustive-deps)
+    const loadedChartsRef = loadedCharts.current;
+    const abortControllersRef = abortControllers.current;
 
     const loadTimeout = setTimeout(() => {
       if (mounted) {
@@ -390,9 +393,9 @@ const InteractiveCharts = ({
     return () => {
       mounted = false;
       clearTimeout(loadTimeout);
-      loadedCharts.current.clear();
+      loadedChartsRef.clear();
 
-      Object.values(abortControllers.current).forEach(controller => {
+      Object.values(abortControllersRef).forEach(controller => {
         try {
           controller.abort();
         } catch (e) {}
