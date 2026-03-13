@@ -527,12 +527,44 @@ class IntelligentQueryClassifier:
                         'reasoning': f"No hay query predefinida para {intent}, construir SQL dinámico"
                     }
             
-            # 🎯 REGLA 2: Consultas con requires_sql pero NO personales → Buscar query o SQL dinámico
+            # 🎯 REGLA 2: Análisis complejo NO personal → CDG_AGENT (antes que SQL)
+            cdg_intents = [
+                'business_review',
+                'executive_summary',
+                'deviation_detection',
+                'comparative_performance',
+                'ranking_analysis',
+                'global_analysis',
+                'comparative_analysis',
+                'performance_analysis',  # cuando is_personal=False → CDG
+                'incentive_analysis',    # cuando is_personal=False → CDG
+            ]
+
+            if intent in cdg_intents and not is_personal:
+                logger.info(f"🎯 Análisis complejo no personal → CDG_AGENT (intent: {intent})")
+                return {
+                    'flow_type': 'CDG_AGENT',
+                    'classification': initial_classification,
+                    'confidence': initial_classification.get('confidence', 0.85),
+                    'reasoning': f"Análisis complejo {intent} requiere CDG Agent"
+                }
+            
+            # 🎯 REGLA 2b: CDG users con requires_sql y no personal → siempre CDG_AGENT
+            if (user_role.value == 'control_gestion'
+                    and initial_classification.get('requires_sql', False)
+                    and not is_personal):
+                logger.info(f"🎯 Usuario CDG con SQL no personal → CDG_AGENT (intent: {intent})")
+                return {
+                    'flow_type': 'CDG_AGENT',
+                    'classification': initial_classification,
+                    'confidence': initial_classification.get('confidence', 0.85),
+                    'reasoning': f"Usuario CDG con consulta SQL general: {intent}"
+                }
+
+            # 🎯 REGLA 3: Consultas con requires_sql pero NO personales → Buscar query predefinida
             if initial_classification.get('requires_sql', False):
                 logger.info("🎯 Consulta requiere SQL → Buscando query predefinida")
-                
                 predefined_match = await self._find_predefined_query(user_message, context)
-                
                 if predefined_match['found']:
                     return {
                         'flow_type': 'PREDEFINED_QUERY',
@@ -546,23 +578,7 @@ class IntelligentQueryClassifier:
                         'classification': initial_classification,
                         'confidence': initial_classification['confidence']
                     }
-            
-            # 🎯 REGLA 3: Análisis complejo NO personal → CDG_AGENT
-            cdg_intents = [
-                'business_review',
-                'executive_summary',
-                'deviation_detection'  # Solo si NO es personal
-            ]
-            
-            if intent in cdg_intents and not is_personal:
-                logger.info(f"🎯 Análisis complejo no personal → CDG_AGENT (intent: {intent})")
-                return {
-                    'flow_type': 'CDG_AGENT',
-                    'classification': initial_classification,
-                    'confidence': initial_classification.get('confidence', 0.85),
-                    'reasoning': f"Análisis complejo {intent} requiere CDG Agent"
-                }
-            
+
             # 🎯 REGLA 4: Consultas generales conceptuales → CONTEXTUAL_RESPONSE
             if intent == 'general_inquiry' or not initial_classification.get('requires_sql', True):
                 logger.info("🎯 Consulta general → CONTEXTUAL_RESPONSE")
@@ -2031,11 +2047,12 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                 formatted_response = await self.formatter.format_response(
                     cdg_response.content,
                     message.message,
-                    cdg_analysis=True,
-                    preferences=session.preferences,
-                    user_role=PermissionManager.determine_user_role(message.user_id).value,
-                    gestor_id=message.gestor_id,
-                    is_personal=message.gestor_id is not None
+                    context={
+                        'user_role': PermissionManager.determine_user_role(message.user_id, message.context).value,
+                        'gestor_id': message.gestor_id,
+                        'is_personal': message.gestor_id is not None,
+                        'preferences': session.preferences,
+                    }
                 )
             else:
                 formatted_response = "El análisis avanzado ha sido procesado exitosamente por el sistema CDG."
