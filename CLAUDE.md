@@ -546,7 +546,20 @@ Bug 5 — Chat CDG (`/chat/message` con `user_role: control_gestion`) retornaba 
 - Probar "muéstrame en gráfico circular" en ConversationalPivot → debe cambiar a pie chart
 - Probar "vuelve a barras" → debe revertir a horizontal_bar
 
+**Rebrand a identidad Accenture (sesión 11 — completado):**
+- Producto renombrado: "Banca March CDG" → **"CDG Intelligence"** (genérico, adaptable a cualquier banco cliente)
+- `theme.js`: paleta completa reemplazada por identidad Accenture — primary `#A100FF`, primaryLight `#CC66FF`, primaryDark `#7B00CC`, accent `#00B8F5`, headerBg `#1A0033`, fondo `#F8F5FF`
+- `analyticsService.js`: colores de gráficos `PRODUCT_COLORS/CLIENT_COLORS/DIRECTION_COLORS` → paleta 5 colores Accenture
+- `TopBar.jsx`: gradiente `#1A0033→#A100FF`, logo tipográfico "> CDG Intelligence" en blanco, botones outline-blanco sobre fondo oscuro
+- `LandingPage.jsx`: eliminado `BancaMarchLogo.png`, reemplazado por texto "> CDG Intelligence / POWERED BY ACCENTURE"; overlay del fondo actualizado a púrpura
+- `KPICards.jsx`: borde superior 3px `#A100FF`, variación positiva en púrpura, shadow purple-tinted
+- `ConversationalPivot.jsx`: burbuja usuario `#A100FF` fondo blanco, burbuja agente `#F3E8FF` con borde izquierdo `#A100FF`
+- `public/index.html`: `<title>CDG Intelligence</title>`, meta description actualizada
+- `backend/src/prompts/*.py`: 50+ ocurrencias de "Banca March" → "Agente CDG"
+- Commit: `b0baa97`
+
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
 - `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir (no bloquea la POC)
 - `GET /basic/precios-std` y `GET /prices/comparison` — devuelven 404; no se usan en ningún flujo activo
+- `analyticsService.js:2857` — `.replace('Fondo Banca March', 'Fondos CDG')` mantiene el string del nombre real en BD (no es UI-visible, no se toca)
