@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # 🔐 SISTEMA DE CONFIDENCIALIDAD BANCARIA
 CONFIDENTIALITY_RULES = {
     'GESTOR': {
-        'allowed_dimensions': ['periodo', 'producto', 'contrato'],  # Solo sus propios datos
+        'allowed_dimensions': ['periodo', 'producto', 'contrato', 'cliente'],  # Solo sus propios datos
         'forbidden_dimensions': ['gestor'],  # No puede ver otros gestores específicos
         'allowed_metrics': [
             'ROE', 'MARGEN_NETO', 'INGRESOS', 'EFICIENCIA', 'CONTRATOS', 
@@ -140,7 +140,8 @@ DIMENSIONES POR ROL:
 ROL GESTOR (Confidencialidad Alta):
 - periodo (evolución temporal propia)
 - producto (distribución por productos propios)
-- contrato (análisis por contratos propios)  
+- contrato (análisis por contratos propios)
+- cliente (análisis por clientes propios)
 - gestor_anonimo (comparativa vs promedio anónimo)
 - ranking (posición anónima en ranking)
 - tendencia_temporal (evolución de métricas propias)
@@ -187,11 +188,26 @@ Si se solicita algo fuera de permisos, ajusta automáticamente a la alternativa 
 
 EJEMPLOS POR CONTEXTO:
 
+GESTOR solicita: "Muéstrame los ingresos por cliente"
+→ {"metric": "INGRESOS", "dimension": "cliente"}
+
+GESTOR solicita: "Muéstrame el margen por cliente"
+→ {"metric": "MARGEN_NETO", "dimension": "cliente"}
+
+GESTOR solicita: "Contratos por cliente"
+→ {"metric": "CONTRATOS", "dimension": "cliente"}
+
 GESTOR solicita: "Muéstrame el ROE de otros gestores"
 → {"metric": "PROMEDIO_ANONIMO", "dimension": "gestor_anonimo"}
 
-GESTOR solicita: "Evolución de mis ingresos por trimestre"  
+GESTOR solicita: "Evolución de mis ingresos por trimestre"
 → {"chart_type": "line", "metric": "INGRESOS", "dimension": "periodo"}
+
+GESTOR solicita: "Ingresos por producto"
+→ {"metric": "INGRESOS", "dimension": "producto"}
+
+GESTOR solicita: "Margen neto por producto"
+→ {"metric": "MARGEN_NETO", "dimension": "producto"}
 
 CONTROL_GESTION solicita: "Ranking de gestores por margen neto"
 → {"chart_type": "horizontal_bar", "metric": "MARGEN_NETO", "dimension": "gestor"}
@@ -204,6 +220,14 @@ GESTOR solicita: "Gráfico circular de mis contratos por producto"
 
 CUALQUIER ROL solicita: "Cambia a barras horizontales"
 → {"chart_type": "horizontal_bar"}
+
+CUALQUIER ROL solicita: "Cambia a líneas"
+→ {"chart_type": "line"}
+
+REGLA CRÍTICA: Cuando el usuario dice "por cliente" o "de cada cliente", la dimension SIEMPRE es "cliente".
+Las métricas válidas son: INGRESOS, MARGEN_NETO, CONTRATOS, ROE, EFICIENCIA, GASTOS.
+Las dimensiones válidas son: cliente, producto, periodo, gestor, centro, segmento.
+NUNCA uses "CLIENTES" como valor de metric. Si el usuario habla de clientes, eso es la DIMENSIÓN, no la MÉTRICA.
 
 Responde ÚNICAMENTE el JSON, sin explicaciones adicionales.
 '''

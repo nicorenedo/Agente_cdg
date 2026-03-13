@@ -1708,8 +1708,12 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
     // ✅ FIX: /charts/pivot solo devuelve new_config, no datos del gráfico.
     // Extraer la configuración interpretada por Azure OpenAI y luego buscar los datos.
     const newConfig = result?.new_config || {};
-    const metric = newConfig.metric || currentChartConfig.metric || 'CONTRATOS';
-    const dimension = newConfig.dimension || currentChartConfig.dimension || 'cliente';
+    // Normalize: Azure sometimes returns 'CLIENTES' as metric when 'cliente' should be the dimension
+    const rawMetric = (newConfig.metric || currentChartConfig.metric || 'CONTRATOS').toUpperCase();
+    const metric = (rawMetric === 'CLIENTES') ? 'CONTRATOS' : rawMetric;
+    // Normalize dimension: Azure may return 'CLIENTES' or 'clientes' instead of 'cliente'
+    const rawDimension = (newConfig.dimension || currentChartConfig.dimension || 'cliente').toLowerCase();
+    const dimension = (rawDimension === 'clientes') ? 'cliente' : rawDimension;
     const chartType = newConfig.chartType || currentChartConfig.chartType || 'horizontal_bar';
 
     const chartData = await getPivotableChartData(metric, dimension, chartType, { ...options, userId });
@@ -1759,8 +1763,10 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
         ]
       };
 
-      const metric = parsedIntent.metric || currentChartConfig.metric || 'CONTRATOS';
-      const dimension = parsedIntent.dimension || currentChartConfig.dimension || 'gestor';
+      const rawMetricLocal = (parsedIntent.metric || currentChartConfig.metric || 'CONTRATOS').toUpperCase();
+      const metric = (rawMetricLocal === 'CLIENTES') ? 'CONTRATOS' : rawMetricLocal;
+      const rawDimensionLocal = (parsedIntent.dimension || currentChartConfig.dimension || 'gestor').toLowerCase();
+      const dimension = (rawDimensionLocal === 'clientes') ? 'cliente' : rawDimensionLocal;
       const chartType = parsedIntent.chartType || currentChartConfig.chartType || 'bar';
 
       // ✅ FIX: wrap in {success: true} format expected by ConversationalPivot
