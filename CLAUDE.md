@@ -524,13 +524,27 @@ Bug 5 — Chat CDG (`/chat/message` con `user_role: control_gestion`) retornaba 
 - `/charts/centros-distribution` → MADRID=58, PALMA=58, BARCELONA=36, MALAGA=35, BILBAO=29 ✓
 - `/charts/productos-popularity` → Hipotecario=75, Fondos=72, Depósito=69 ✓
 
+**Bug fix — Pivot no cambia a gráfico circular (sesión 11 — completado):**
+- Root cause 1: `analyticsService.pivotChart()` leía `newConfig.chartType` (camelCase) pero backend devuelve `new_config.chart_type` (snake_case) → chartType ignorado, siempre usaba `currentChartConfig.chartType` como fallback
+- Fix: `newConfig.chartType || newConfig.chart_type || currentChartConfig.chartType || 'horizontal_bar'`
+- Root cause 2: `chart_prompts.py` no tenía ejemplos para cambio puro de tipo ("gráfico circular", "tarta", "donut", "vuelve a barras") → Azure OpenAI no devolvía `{"chart_type": "pie"}` de forma fiable
+- Fix: añadidos 6 ejemplos de cambio puro de tipo en `CHART_PIVOT_SYSTEM_PROMPT`
+- Commit: `fd328a3`
+
+**Rediseño UI profesional (sesión 11 — completado):**
+- `theme.js`: `borderRadius: 8` (era 6), espaciados como números (4/8/16/24/32/40), objeto `shadows` (card/elevated/overlay), transición `normal: '0.2s ease'`
+- `index.css`: CSS custom properties para sistema de 8px grid (`--spacing-*`, `--radius-*`, `--shadow-*`, `--color-*`), estilos base de `.ant-card` (8px radius, shadow, hover), transiciones suaves, media query `min-width: 1280px`
+- `GestorView`: eliminado wrapper Card doble alrededor de ConversationalPivot (causaba height mismatch y doble encabezado), ConversationalPivot recibe `height={520}` directamente; InteractiveCharts también `height={520}` para alineación
+- `DireccionView`: ConversationalPivot movido de fila full-width inferior a panel lateral derecho sticky (`lg:8, position:sticky, top:88px`); columna izquierda (`lg:16`) tiene InteractiveCharts + DeviationAnalysis apilados; se eliminó layoutConfig.analysis separado
+- Commit: `d3c2969`
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Siguiente: prueba visual dashboard Dirección**
-- Cargar localhost:3000 y navegar a DireccionView
-- Confirmar 3 gráficos (gestores-ranking, centros-distribution, productos-popularity) muestran datos reales
-- Probar ConversationalPivot desde Dirección (ej: "Muéstrame ingresos por gestor")
-- Probar chat de Dirección: escribir una pregunta en ChatInterface
+**Siguiente: prueba visual ambos dashboards**
+- GestorView: verificar que InteractiveCharts (height=520) y ConversationalPivot (height=520) se alinean correctamente sin Card doble
+- DireccionView: confirmar que ConversationalPivot queda sticky en el lateral derecho y no se desplaza al hacer scroll
+- Probar "muéstrame en gráfico circular" en ConversationalPivot → debe cambiar a pie chart
+- Probar "vuelve a barras" → debe revertir a horizontal_bar
 
 ### ⚠️ Pendiente de decisión
 - `MAESTRO_CONTRATOS_BACKUP_20250922_002703` — tabla basura en la BD, pendiente de `DROP TABLE`
