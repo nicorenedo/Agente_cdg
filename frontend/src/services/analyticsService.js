@@ -1974,15 +1974,16 @@ function transformPivotableData(rawData, context) {
       // Extraer valor usando configuración de métrica — incluir campos de clientes-con-metricas
       const mLower = metric.toLowerCase();
       // ✅ FIX: usar ?? (nullish) para preservar 0 como valor válido en campos cliente
+      // ✅ FIX: wrap || chain in parens — cannot mix ?? and || without grouping
       let value =
-        // Campos de /analytics/gestor/{id}/clientes-con-metricas (tiene prioridad para dimensión cliente)
+        // Campos de /analytics/gestor/{id}/clientes-con-metricas (prioridad para dimensión cliente)
         (mLower === 'ingresos' ? (item.ingresos_cliente ?? item.ingresos) : undefined) ??
         (mLower === 'margen_neto' ? (item.beneficio_neto ?? item.margen_neto_pct) : undefined) ??
         (mLower === 'contratos' ? item.num_contratos : undefined) ??
-        // Campos genéricos (usar || porque aquí sí queremos falsy-fallthrough)
-        item[mLower] || item[`${mLower}_pct`] ||
-        item.total_contratos || item.margen_neto_pct || item.roe_pct ||
-        item.value || metricConfig.defaultValue;
+        // Campos genéricos — wrapped in parens to isolate || from ??
+        (item[mLower] || item[`${mLower}_pct`] ||
+         item.total_contratos || item.margen_neto_pct || item.roe_pct ||
+         item.value || metricConfig.defaultValue);
       return Number(value) || metricConfig.defaultValue;
     });
     
