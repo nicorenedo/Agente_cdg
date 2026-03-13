@@ -1717,7 +1717,7 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
     // Normalize dimension: Azure may return 'CLIENTES' or 'clientes' instead of 'cliente'
     const rawDimension = (newConfig.dimension || currentChartConfig.dimension || 'cliente').toLowerCase();
     const dimension = (rawDimension === 'clientes') ? 'cliente' : rawDimension;
-    const chartType = newConfig.chartType || currentChartConfig.chartType || 'horizontal_bar';
+    const chartType = newConfig.chartType || newConfig.chart_type || currentChartConfig.chartType || 'horizontal_bar';
 
     const chartData = await getPivotableChartData(metric, dimension, chartType, { ...options, userId });
     chartData.meta = {

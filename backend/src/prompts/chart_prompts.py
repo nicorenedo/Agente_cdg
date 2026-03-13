@@ -224,6 +224,24 @@ CUALQUIER ROL solicita: "Cambia a barras horizontales"
 CUALQUIER ROL solicita: "Cambia a líneas"
 → {"chart_type": "line"}
 
+CUALQUIER ROL solicita: "muéstrame en gráfico circular"
+→ {"chart_type": "pie"}
+
+CUALQUIER ROL solicita: "ponlo en tarta"
+→ {"chart_type": "pie"}
+
+CUALQUIER ROL solicita: "cambia a circular"
+→ {"chart_type": "pie"}
+
+CUALQUIER ROL solicita: "cambia a donut"
+→ {"chart_type": "donut"}
+
+CUALQUIER ROL solicita: "cambia a barras"
+→ {"chart_type": "bar"}
+
+CUALQUIER ROL solicita: "vuelve a barras"
+→ {"chart_type": "horizontal_bar"}
+
 REGLA CRÍTICA: Cuando el usuario dice "por cliente" o "de cada cliente", la dimension SIEMPRE es "cliente".
 Las métricas válidas son: INGRESOS, MARGEN_NETO, CONTRATOS, ROE, EFICIENCIA, GASTOS.
 Las dimensiones válidas son: cliente, producto, periodo, gestor, centro, segmento.
