@@ -22,8 +22,7 @@ import {
   ExpandOutlined,
   CompressOutlined,
   MessageOutlined,
-  RobotOutlined,
-  CloseOutlined
+  RobotOutlined
 } from '@ant-design/icons';
 import TopBar from '../components/common/TopBar';
 import KPICards from '../components/Dashboard/KPICards';
@@ -66,19 +65,19 @@ const DireccionView = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [systemHealth, setSystemHealth] = useState(null);
 
-  // ✅ Layout config responsivo mejorado para incluir chat
+  // Layout config: main content (lg:16) + lateral sticky chat (lg:8)
   const layoutConfig = useMemo(() => {
     if (showConversationalPivot) {
       return {
-        chart: { xs: 24, sm: 24, md: 24, lg: 14, xl: 14, xxl: 14 },
-        analysis: { xs: 24, sm: 24, md: 24, lg: 10, xl: 10, xxl: 10 },
-        pivot: { xs: 24, sm: 24, md: 24, lg: 24, xl: 24, xxl: 24 }
+        main:     { xs: 24, sm: 24, md: 24, lg: 16, xl: 16, xxl: 16 },
+        analysis: { xs: 24, sm: 24, md: 12, lg: 12, xl: 12, xxl: 12 },
+        pivot:    { xs: 24, sm: 24, md: 24, lg:  8, xl:  8, xxl:  8 }
       };
     }
     return {
-      chart: { xs: 24, sm: 24, md: 12, lg: 12, xl: 12, xxl: 12 },
+      main:     { xs: 24, sm: 24, md: 24, lg: 24, xl: 24, xxl: 24 },
       analysis: { xs: 24, sm: 24, md: 12, lg: 12, xl: 12, xxl: 12 },
-      pivot: { xs: 0, sm: 0, md: 0, lg: 0, xl: 0, xxl: 0 }
+      pivot:    { xs: 0,  sm: 0,  md: 0,  lg: 0,  xl: 0,  xxl: 0  }
     };
   }, [showConversationalPivot]);
 
@@ -449,10 +448,11 @@ const DireccionView = () => {
           style={{ marginBottom: theme.spacing?.lg || 24 }}
         />
 
-        {/* ✅ Grid principal con InteractiveCharts y DeviationAnalysis AMPLIADO */}
-        <Row gutter={[24, 24]} style={{ marginTop: theme.spacing?.lg || 24 }}>
-          {/* ✅ INTERACTIVECHARTS CON FILTROS EMBEBIDOS */}
-          <Col {...layoutConfig.chart}>
+        {/* Main grid: charts (left) + sticky lateral chat (right) */}
+        <Row gutter={[24, 24]} style={{ marginTop: theme.spacing?.lg || 24 }} align="top">
+
+          {/* Left column: InteractiveCharts + DeviationAnalysis */}
+          <Col {...layoutConfig.main}>
             <InteractiveCharts
               mode="direccion"
               periodo={periodo}
@@ -466,74 +466,40 @@ const DireccionView = () => {
               onChartConfigChange={(config) => setCurrentChartConfig(config)}
               onChartUpdate={handleChartUpdate}
               onChartPivot={handleChartPivot}
-              style={{ height: '100%' }}
               key={`interactive-charts-${refreshToken}`}
             />
+
+            <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+              <Col xs={24}>
+                <DeviationAnalysis
+                  mode="direccion"
+                  periodo={periodo}
+                  bonusPool={50000}
+                  filters={{}}
+                  onReload={handleRefreshAll}
+                  onSelectRow={(entity) => handleEntitySelection(entity, 'deviation_analysis')}
+                  onOpenDrillDown={handleDrillDownOpen}
+                  style={{ minHeight: 400 }}
+                />
+              </Col>
+            </Row>
           </Col>
 
-          {/* ✅ ANÁLISIS DE DESVIACIONES - AMPLIADO PARA RELLENAR ESPACIO VACÍO */}
-          <Col {...layoutConfig.analysis}>
-            <DeviationAnalysis
-              mode="direccion"
-              periodo={periodo}
-              bonusPool={50000}
-              filters={{}}
-              onReload={handleRefreshAll}
-              onSelectRow={(entity) => handleEntitySelection(entity, 'deviation_analysis')}
-              onOpenDrillDown={handleDrillDownOpen}
-              style={{ height: 800 }} // ✅ AUMENTADO DE 460px A 750px PARA RELLENAR EL HUECO
-            />
-          </Col>
-        </Row>
-
-        {/* ✅ NUEVO: ConversationalPivot integrado */}
-        {showConversationalPivot && (
-          <Row gutter={[24, 24]} style={{ marginTop: theme.spacing?.lg || 24 }}>
+          {/* Right column: sticky ConversationalPivot */}
+          {showConversationalPivot && (
             <Col {...layoutConfig.pivot}>
-              <Card
-                title={
-                  <Space>
-                    <RobotOutlined style={{ color: '#722ed1' }} />
-                    <span>Asistente Conversacional Corporativo</span>
-                    <Badge count="IA" style={{ backgroundColor: '#722ed1' }} />
-                    {pivotHistory.length > 0 && (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        • {pivotHistory.length} pivots
-                      </Text>
-                    )}
-                  </Space>
-                }
-                extra={
-                  <Space>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      Solo gráfico análisis general
-                    </Text>
-                    <Button 
-                      type="text" 
-                      size="small"
-                      icon={<CloseOutlined />}
-                      onClick={() => setShowConversationalPivot(false)}
-                    />
-                  </Space>
-                }
-                style={{ 
-                  height: 500,
-                  borderRadius: theme.token?.borderRadius || 8,
-                  border: `2px solid ${theme.colors?.bmGreenPrimary || '#1890ff'}40`
-                }}
-                styles={{ body: { height: 420, padding: 0 }}}
-              >
+              <div style={{ position: 'sticky', top: 88 }}>
                 <ConversationalPivot
                   mode="direccion"
                   periodo={periodo}
+                  height={520}
                   currentChartConfig={currentChartConfig}
                   onChartUpdate={handleConversationalChartUpdate}
-                  style={{ height: '100%' }}
                 />
-              </Card>
+              </div>
             </Col>
-          </Row>
-        )}
+          )}
+        </Row>
 
         {/* Drill-down navegable */}
         <Card

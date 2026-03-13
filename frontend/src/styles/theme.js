@@ -48,27 +48,35 @@ const theme = {
     colorWarning: '#FF9800',
     colorError: '#D32F2F',
     colorInfo: '#1976D2',
-    borderRadius: 6,
+    borderRadius: 8,
     fontSize: 14,
     fontFamily: "'Inter', 'Segoe UI', sans-serif",
     controlHeight: 32,
     colorBgContainer: '#FFFFFF',
-    colorBorder: '#E0E0E0',
+    colorBorder: '#E8E8E8',
     colorText: '#333333',
     colorTextSecondary: '#666666'
   },
-  
+
   spacing: {
-    xs: '4px',
-    sm: '8px',
-    md: '16px',
-    lg: '24px',
-    xl: '32px'
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+    xxl: 40
   },
-  
+
+  shadows: {
+    card: '0 2px 8px rgba(0,0,0,0.08)',
+    elevated: '0 4px 16px rgba(0,0,0,0.12)',
+    overlay: '0 8px 32px rgba(0,0,0,0.16)'
+  },
+
   transitions: {
     fast: '0.15s ease-in-out',
-    normal: '0.3s ease-in-out'
+    normal: '0.2s ease',
+    slow: '0.3s ease-in-out'
   }
 };
 

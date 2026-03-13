@@ -28,8 +28,7 @@ import {
   TeamOutlined,
   RobotOutlined,
   ExpandOutlined,
-  CompressOutlined,
-  CloseOutlined
+  CompressOutlined
 } from '@ant-design/icons';
 
 import TopBar from '../components/common/TopBar';
@@ -735,14 +734,14 @@ const GestorView = () => {
         </div>
 
         {/* ✅ Grid principal con InteractiveCharts + ConversationalPivot */}
-        <Row gutter={[24, 24]} style={{ marginBottom: theme.spacing?.lg || 24 }}>
+        <Row gutter={[24, 24]} style={{ marginBottom: theme.spacing?.lg || 24 }} align="stretch">
           <Col {...layoutConfig.chart}>
             <InteractiveCharts
               mode="gestor"
               periodo={normalizedPeriodo}
               gestorId={gestorId}
               metric="MARGEN"
-              height={480}
+              height={520}
               onReload={handleRefreshAll}
               onSelectEntity={(entity) => handleEntitySelection(entity, 'interactive_charts')}
               externalChartData={pivotedChartData}
@@ -751,42 +750,16 @@ const GestorView = () => {
             />
           </Col>
 
-          {/* ✅ NUEVO: ConversationalPivot integrado */}
           {showConversationalPivot && (
             <Col {...layoutConfig.pivot}>
-              <Card
-                title={
-                  <Space>
-                    <RobotOutlined style={{ color: '#722ed1' }} />
-                    <span>Chat Conversacional</span>
-                    <Badge count="IA" style={{ backgroundColor: '#722ed1' }} />
-                  </Space>
-                }
-                extra={
-                  <Space>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      Solo gráfico análisis general
-                    </Text>
-                    <Button 
-                      type="text" 
-                      size="small"
-                      icon={<CloseOutlined />}
-                      onClick={() => setShowConversationalPivot(false)}
-                    />
-                  </Space>
-                }
-                style={{ height: 600 }}
-                styles={{ body: { height: 520, padding: 0 }}}
-              >
-                <ConversationalPivot
-                  mode="gestor"
-                  gestorId={gestorId}
-                  periodo={normalizedPeriodo}
-                  currentChartConfig={currentChartConfig}
-                  onChartUpdate={handleConversationalChartUpdate}
-                  style={{ height: '100%' }}
-                />
-              </Card>
+              <ConversationalPivot
+                mode="gestor"
+                gestorId={gestorId}
+                periodo={normalizedPeriodo}
+                height={520}
+                currentChartConfig={currentChartConfig}
+                onChartUpdate={handleConversationalChartUpdate}
+              />
             </Col>
           )}
         </Row>
