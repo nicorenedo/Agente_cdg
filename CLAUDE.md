@@ -442,6 +442,17 @@ llm = AzureChatOpenAI(
 **Commits de esta sesión:**
 - `50f92c2` — KPICards variaciones reales sep→oct + debug mode off + encoding fix
 - `1d1d63c` — analyticsService + GestorView: datos reales en todos los gráficos + pivot funcional
+- `accdb8e` — InteractiveCharts stale-closure fix + ConversationalPivot localStorage isolation
+
+**Bugs corregidos en la sesión de continuación:**
+
+Bug 1 — `InteractiveCharts.jsx` gráficos vacíos (stale closure race condition):
+- Root cause: `loadChartData` tenía `loadingStates` en sus deps → al cambiar el estado de carga, el callback se recreaba → `loadAllCharts` se recreaba → pero el loading `useEffect` tenía deps `[periodo, mode, gestorId]` sin `loadAllCharts`, así que usaba la versión stale donde `chartConfigs = {}` → `if (!config) return` → ningún gráfico se cargaba nunca
+- Fix: `loadingRef.current` (useRef) reemplaza `loadingStates` como guard de carga concurrente; eliminado `loadingStates` de deps de `loadChartData`; loading `useEffect` ahora incluye `[..., loadAllCharts, chartConfigs]` con guard `if (Object.keys(chartConfigs).length === 0) return` para esperar la inicialización
+
+Bug 2 — `ConversationalPivot.jsx` historial persiste entre sesiones:
+- Root cause: localStorage key era `conversational-pivot-history-${mode}` — misma key para todos los gestores y períodos
+- Fix: key cambiada a `...-${mode}-${gestorId}-${periodo}`; useEffect de carga incluye `gestorId` y `periodo` en deps; al cambiar key sin datos previos, limpia el estado
 
 ### ⏭️ Próximo paso exacto al retomar
 
