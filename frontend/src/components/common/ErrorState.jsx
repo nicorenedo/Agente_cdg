@@ -8,7 +8,7 @@ import theme from '../../styles/theme';
 const { Title, Paragraph, Text } = Typography;
 
 /**
- * ErrorState corporativo CDG - Manejo de errores con estilo Banca March
+ * ErrorState corporativo CDG - Manejo de errores con identidad Accenture CDG
  * Soporte para ApiClientError y errores genéricos
  */
 const ErrorState = ({

@@ -6,7 +6,7 @@ import PropTypes from 'prop-types';
 import theme from '../../styles/theme';
 
 /**
- * Loader corporativo CDG con spinner personalizado Banca March
+ * Loader corporativo CDG con spinner personalizado Accenture CDG
  * Tres modos: spinner, skeleton y pantalla completa
  */
 const Loader = ({
@@ -19,7 +19,7 @@ const Loader = ({
   delay = 0,
   ...rest
 }) => {
-  // Spinner personalizado con colores Banca March
+  // Spinner personalizado con colores Accenture CDG
   const customSpinner = (
     <LoadingOutlined 
       style={{ 

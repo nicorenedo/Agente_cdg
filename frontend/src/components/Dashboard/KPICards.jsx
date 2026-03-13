@@ -149,7 +149,7 @@ const KPICards = ({
 
   // Animación CSS
   const animatedCardStyle = {
-    boxShadow: '0 0 0 2px #d0fff2, 0 6px 24px 0 rgba(27,94,85,0.13)',
+    boxShadow: '0 0 0 2px #E8D0FF, 0 6px 24px 0 rgba(161,0,255,0.13)',
     animation: 'spin-shadow 3s linear infinite'
   };
 
@@ -528,10 +528,10 @@ const KPICards = ({
     const hasVariation = kpi.variation !== null && kpi.variation !== undefined;
     const isPositiveVariation = kpi.variation > 0;
     const variationColor = hasVariation
-      ? (isPositiveVariation ? theme.colors.success : theme.colors.error)
+      ? (isPositiveVariation ? '#A100FF' : theme.colors.error)
       : (theme.colors?.textLight || '#999');
     const TrendIcon = kpi.variation >= 0 ? ArrowUpOutlined : ArrowDownOutlined;
-    const statusColor = kpi.status === 'excellent' ? theme.colors.success : theme.colors.bmGreenPrimary;
+    const statusColor = kpi.status === 'excellent' ? '#A100FF' : theme.colors.bmGreenPrimary;
 
 
     const handleClick = (e) => {
@@ -555,10 +555,12 @@ const KPICards = ({
           ...animatedCardStyle,
           borderRadius: theme.token?.borderRadius || 8,
           border: `1px solid ${theme.colors?.borderLight || '#e8e8e8'}`,
-          transition: 'all 0.3s',
+          transition: 'all 0.2s ease',
           cursor: onKpiClick ? 'pointer' : 'default',
           height: '100%',
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8fffe 100%)',
+          background: '#ffffff',
+          borderTop: '3px solid #A100FF',
+          boxShadow: '0 2px 8px rgba(161,0,255,0.08)',
         }}
         styles={{ body: { padding: '20px' } }}
       >

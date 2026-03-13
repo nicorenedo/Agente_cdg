@@ -42,10 +42,10 @@ const root = createRoot(container);
 
 // Configuración para desarrollo
 if (process.env.NODE_ENV === 'development') {
-  console.log('%cCDG - Sistema de Control de Gestión Banca March', 
-    'color: #1B5E55; font-size: 16px; font-weight: bold;'
+  console.log('%cCDG - Sistema de Control de Gestión Agente CDG', 
+    'color: #A100FF; font-size: 16px; font-weight: bold;'
   );
-  console.log('%cIniciando aplicación...', 'color: #229B8B; font-size: 12px;');
+  console.log('%cIniciando aplicación...', 'color: #CC66FF; font-size: 12px;');
   console.log('Configuración:', window.CDG_CONFIG);
 
   // Habilitar React DevTools
@@ -160,8 +160,8 @@ window.addEventListener('offline', () => {
 // Log de información de build en producción
 if (process.env.NODE_ENV === 'production') {
   console.log(
-    '%cCDG Banca March', 
-    'color: #1B5E55; font-size: 14px; font-weight: bold;'
+    '%cCDG Agente CDG', 
+    'color: #A100FF; font-size: 14px; font-weight: bold;'
   );
   console.log(
     `%cVersión: ${window.CDG_CONFIG.appVersion} | Build: ${window.CDG_CONFIG.buildTime}`, 

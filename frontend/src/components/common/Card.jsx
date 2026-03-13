@@ -5,7 +5,7 @@ import PropTypes from 'prop-types';
 import theme from '../../styles/theme';
 
 /**
- * Card corporativa CDG - Wrapper de Ant Design Card con tema Banca March
+ * Card corporativa CDG - Wrapper de Ant Design Card con identidad Accenture CDG
  * Perfecta para KPIs, gráficos y contenido dashboard
  */
 const Card = ({

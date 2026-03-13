@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"http://localhost:8000/deviations/pricing?periodo=2025-10&umbral=0\" 2>&1)"
+    ]
+  }
+}

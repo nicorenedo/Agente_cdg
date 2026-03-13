@@ -12,7 +12,7 @@ const { Title, Paragraph } = Typography;
 
 /**
  * TopBar - Barra superior fija para navegación del dashboard CDG
- * Integrada con endpoints corporativos y tema Banca March
+ * Identidad visual Accenture — CDG Intelligence
  */
 const TopBar = ({
   valuePeriod,
@@ -128,11 +128,12 @@ const TopBar = ({
     left: 0,
     right: 0,
     zIndex: 1000,
-    backgroundColor: theme.colors.backgroundLight,
-    borderBottom: `1px solid ${theme.colors.border}`,
-    padding: compact ? `${theme.spacing.xs} ${theme.spacing.sm}` : `${theme.spacing.sm} ${theme.spacing.md}`,
+    background: 'linear-gradient(90deg, #1A0033 0%, #A100FF 100%)',
+    padding: compact
+      ? `${theme.spacing.xs}px ${theme.spacing.sm}px`
+      : `${theme.spacing.sm}px ${theme.spacing.md}px`,
     fontFamily: theme.token.fontFamily,
-    boxShadow: '0 2px 8px rgba(27, 94, 85, 0.08)',
+    boxShadow: '0 2px 16px rgba(161,0,255,0.35)',
   };
 
   return (
@@ -140,14 +141,29 @@ const TopBar = ({
       <div style={topBarStyle}>
         <Row align="middle" justify="space-between" gutter={[16, 8]}>
           <Col flex="auto">
-            <Space 
-              direction={compact ? 'vertical' : 'horizontal'} 
+            <Space
+              direction={compact ? 'vertical' : 'horizontal'}
               size={compact ? 8 : 16}
               wrap
             >
+              {/* Logo CDG Intelligence */}
+              {!compact && (
+                <div style={{
+                  color: 'white',
+                  fontWeight: 700,
+                  fontSize: 18,
+                  letterSpacing: '-0.5px',
+                  marginRight: 8,
+                  userSelect: 'none'
+                }}>
+                  <span style={{ color: '#CC66FF', marginRight: 6, fontSize: 20 }}>{'>'}</span>
+                  CDG Intelligence
+                </div>
+              )}
+
               {/* Selector de Período */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CalendarOutlined style={{ color: theme.colors.bmGreenPrimary }} />
+                <CalendarOutlined style={{ color: 'rgba(255,255,255,0.8)' }} />
                 <DatePicker
                   picker="month"
                   value={toDate(valuePeriod)}
@@ -166,7 +182,7 @@ const TopBar = ({
               {/* Selector de Gestor (opcional) */}
               {onGestorChange && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <UserOutlined style={{ color: theme.colors.bmGreenPrimary }} />
+                  <UserOutlined style={{ color: 'rgba(255,255,255,0.8)' }} />
                   <Select
                     showSearch
                     allowClear
@@ -197,14 +213,14 @@ const TopBar = ({
           <Col>
             <Space size={compact ? 8 : 12}>
               <Button
-                type="primary"
                 icon={<ReloadOutlined />}
                 onClick={handleRefresh}
                 loading={loading}
                 size={compact ? 'small' : 'middle'}
                 style={{
-                  backgroundColor: theme.colors.bmGreenPrimary,
-                  borderColor: theme.colors.bmGreenPrimary,
+                  backgroundColor: 'transparent',
+                  borderColor: 'rgba(255,255,255,0.6)',
+                  color: 'white',
                 }}
               >
                 {!compact && 'Refrescar'}
@@ -216,7 +232,7 @@ const TopBar = ({
                   onClick={() => setHelpVisible(true)}
                   size="middle"
                   type="text"
-                  style={{ color: theme.colors.bmGreenPrimary }}
+                  style={{ color: 'rgba(255,255,255,0.85)' }}
                 >
                   Ayuda
                 </Button>
@@ -232,7 +248,7 @@ const TopBar = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <QuestionCircleOutlined style={{ color: theme.colors.bmGreenPrimary }} />
-            <span>Panel de Control CDG</span>
+            <span>CDG Intelligence</span>
           </div>
         }
         onCancel={() => setHelpVisible(false)}
@@ -255,10 +271,10 @@ const TopBar = ({
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <div>
             <Title level={5} style={{ color: theme.colors.bmGreenPrimary, margin: 0 }}>
-              Sistema de Control de Gestión
+              CDG Intelligence
             </Title>
             <Paragraph style={{ margin: '8px 0 0 0', color: theme.colors.textSecondary }}>
-              Dashboard corporativo para análisis financiero y operativo de Banca March
+              Plataforma de Control de Gestión para análisis financiero y operativo
             </Paragraph>
           </div>
 

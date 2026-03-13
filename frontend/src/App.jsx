@@ -17,7 +17,7 @@ import GestorView from './pages/GestorView';
 import DireccionView from './pages/DireccionView';
 
 // ============================================================================
-// 🎨 CONFIGURACIÓN TEMA BANCA MARCH
+// CONFIGURACIÓN TEMA ACCENTURE — CDG Intelligence
 // ============================================================================
 
 const antdTheme = {
@@ -47,7 +47,7 @@ const antdTheme = {
     Card: {
       borderRadius: 12,
       padding: 20,
-      boxShadow: '0 2px 8px rgba(27, 94, 85, 0.08)',
+      boxShadow: '0 2px 8px rgba(161,0,255,0.08)',
     },
     Table: {
       borderRadius: 8,
@@ -282,8 +282,8 @@ const App = () => {
   // Log de inicio en desarrollo
   React.useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('%c🏦 CDG - Sistema Control de Gestión Banca March', 
-        'color: #1B5E55; font-size: 18px; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);');
+      console.log('%c> CDG Intelligence',
+        'color: #A100FF; font-size: 18px; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);');
       console.log('%c🔗 API URL:', 'font-weight: bold; color: #2563eb;', process.env.REACT_APP_API_URL || 'http://localhost:8000');
       console.log('%c🌍 Environment:', 'font-weight: bold; color: #059669;', process.env.NODE_ENV);
       console.log('%c📦 Theme loaded:', 'font-weight: bold; color: #7c3aed;', theme.colors.bmGreenPrimary);

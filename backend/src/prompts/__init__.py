@@ -1,7 +1,7 @@
 # backend/src/prompts/__init__.py
 
 """
-Módulo de prompts para el sistema CDG de Banca March
+Módulo de prompts para el sistema CDG de Agente CDG
 =====================================================
 
 Este módulo contiene todos los prompts especializados para:

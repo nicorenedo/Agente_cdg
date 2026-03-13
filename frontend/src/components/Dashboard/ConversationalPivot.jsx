@@ -579,10 +579,10 @@ const ConversationalPivot = ({
             icon={isUser ? <UserOutlined /> : <RobotOutlined />}
             style={{
               backgroundColor: isError
-                ? '#ff4d4f'
+                ? '#E5002B'
                 : isUser
-                ? theme.colors?.bmGreenPrimary || '#1b5e55'
-                : '#52c41a'
+                ? '#A100FF'
+                : '#1A0033'
             }}
           />
 
@@ -594,11 +594,15 @@ const ConversationalPivot = ({
               backgroundColor: isError
                 ? '#fff1f0'
                 : isUser
-                ? '#e6f7ff'
-                : '#f6ffed',
-              border: `1px solid ${
-                isError ? '#ffccc7' : isUser ? '#91d5ff' : '#b7eb8f'
-              }`,
+                ? '#A100FF'
+                : '#F3E8FF',
+              border: isUser
+                ? 'none'
+                : isError
+                ? '1px solid #ffccc7'
+                : '1px solid #CC66FF',
+              borderLeft: (!isUser && !isError) ? '3px solid #A100FF' : undefined,
+              color: isUser ? 'white' : undefined,
               maxWidth: '100%'
             }}
           >

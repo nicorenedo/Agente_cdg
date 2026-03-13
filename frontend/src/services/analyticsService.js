@@ -67,17 +67,17 @@ const SEMAPHORE_COLORS = Object.freeze({
   Gris: "#6b7280",
 });
 
-/** ✅ COLORES consistentes para visualizaciones */
-const PRODUCT_COLORS = ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff",  "#339276ff", "#49a175ff"];
-const CLIENT_COLORS = ["#214239ff", "#2a634fff", "#1a9072ff", "#46d2a1ff", "#022e16ff", "#34a382ff", "#49a175ff"];
+/** Paleta Accenture para visualizaciones */
+const PRODUCT_COLORS = ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8", "#7B00CC", "#00D4E8"];
+const CLIENT_COLORS  = ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8", "#7B00CC", "#00D4E8"];
 
-/** ✅ COLORES ESPECÍFICOS PARA DASHBOARD DIRECCIÓN */
+/** Colores específicos para Dashboard Dirección — paleta Accenture */
 const DIRECTION_COLORS = Object.freeze({
-  gestores: ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff",  "#339276ff", "#49a175ff", "#354d43ff"],
-  centros: ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff"],
-  productos: ["#214239ff", "#2a634fff", "#1a9072ff"],
-  gastos: ["#ef4444", "#f59e0b", "#22c55e", "#3b82f6"], // ✅ NUEVO para gastos
-  general: ["#022e16ff","#214239ff", "#224b3cff", "#267a65ff", "#2f8365ff"]
+  gestores: ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8", "#7B00CC", "#00D4E8", "#FF6680"],
+  centros:  ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8"],
+  productos:["#A100FF", "#00B8F5", "#CC66FF"],
+  gastos:   ["#E5002B", "#F5A623", "#A100FF", "#00B8F5"],
+  general:  ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8"]
 });
 
 /* =========================================
@@ -2854,7 +2854,7 @@ function transformPriceComparison(data = {}, options = {}) {
     return label
       .replace('Préstamo Hipotecario', 'Hipotecario')
       .replace('Depósito a Plazo Fijo en Euros', 'Depósito PF')
-      .replace('Fondo Banca March', 'Fondos BM');
+      .replace('Fondo Banca March', 'Fondos CDG');
   });
 
   return {

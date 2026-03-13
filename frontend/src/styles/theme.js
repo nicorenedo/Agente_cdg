@@ -1,82 +1,88 @@
 // src/styles/theme.js
-// Colores corporativos oficiales de Banca March
+// Identidad visual Accenture — CDG Intelligence
 
 const theme = {
   colors: {
-    // Colores corporativos exactos de Banca March
-    bmGreenPrimary: '#1B5E55',
-    bmGreenLight: '#229B8B', 
-    bmGreenDark: '#123B36',
-    
-    // Colores de soporte
-    background: '#FFFFFF',
-    backgroundLight: '#FAFAFA',
-    backgroundDark: '#F5F5F5',
-    textPrimary: '#333333',
-    textSecondary: '#666666',
-    textLight: '#999999',
-    border: '#E0E0E0',
-    borderLight: '#F0F0F0',
-    
-    // Estados mejorados
-    success: '#4CAF50',
-    successLight: '#81C784',
-    warning: '#FF9800',
-    warningLight: '#FFB74D',
-    error: '#D32F2F',
-    errorLight: '#E57373',
-    info: '#1976D2',
-    infoLight: '#64B5F6',
-    
-    // Colores adicionales para gráficos
+    // Paleta Accenture
+    bmGreenPrimary: '#A100FF',   // Accenture purple (alias mantenido por compatibilidad)
+    bmGreenLight:   '#CC66FF',   // Accenture purple light
+    bmGreenDark:    '#7B00CC',   // Accenture purple dark
+    accent:         '#00B8F5',   // Accenture cyan
+    headerBg:       '#1A0033',   // Dark header
+
+    // Fondos
+    background:      '#FFFFFF',
+    backgroundLight: '#F8F5FF',
+    backgroundDark:  '#F0E8FF',
+
+    // Tipografía
+    textPrimary:   '#1A1A2E',
+    textSecondary: '#6B6B8A',
+    textLight:     '#9999BB',
+
+    // Bordes
+    border:      '#E8E0F5',
+    borderLight: '#F0E8FF',
+
+    // Estados semáforo Accenture
+    success:      '#A100FF',   // Excelente → púrpura
+    successLight: '#CC66FF',
+    warning:      '#F5A623',   // Regular → ámbar
+    warningLight: '#FFD480',
+    error:        '#E5002B',   // Crítico → rojo Accenture
+    errorLight:   '#FF6680',
+    info:         '#00B8F5',   // Info → cyan
+    infoLight:    '#80DBFA',
+
+    // Paleta Accenture para gráficos
     chart: {
-      primary: '#1B5E55',
-      secondary: '#229B8B',
-      tertiary: '#123B36',
-      accent1: '#4CAF50',
-      accent2: '#FF9800',
-      accent3: '#1976D2',
-      accent4: '#9C27B0',
-      accent5: '#607D8B'
+      primary:  '#A100FF',
+      secondary:'#00B8F5',
+      tertiary: '#CC66FF',
+      accent1:  '#0087C8',
+      accent2:  '#E600C8',
+      accent3:  '#7B00CC',
+      accent4:  '#00D4E8',
+      accent5:  '#FF6680'
     }
   },
-  
+
   // Configuración para Ant Design
   token: {
-    colorPrimary: '#1B5E55',
-    colorSuccess: '#229B8B',
-    colorWarning: '#FF9800',
-    colorError: '#D32F2F',
-    colorInfo: '#1976D2',
-    borderRadius: 8,
-    fontSize: 14,
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
-    controlHeight: 32,
-    colorBgContainer: '#FFFFFF',
-    colorBorder: '#E8E8E8',
-    colorText: '#333333',
-    colorTextSecondary: '#666666'
+    colorPrimary:          '#A100FF',
+    colorSuccess:          '#A100FF',
+    colorWarning:          '#F5A623',
+    colorError:            '#E5002B',
+    colorInfo:             '#00B8F5',
+    borderRadius:          8,
+    fontSize:              14,
+    fontFamily:            "'Inter', 'Segoe UI', sans-serif",
+    controlHeight:         32,
+    colorBgContainer:      '#FFFFFF',
+    colorBorder:           '#E8E0F5',
+    colorText:             '#1A1A2E',
+    colorTextSecondary:    '#6B6B8A'
   },
 
   spacing: {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
+    xs:  4,
+    sm:  8,
+    md:  16,
+    lg:  24,
+    xl:  32,
     xxl: 40
   },
 
   shadows: {
-    card: '0 2px 8px rgba(0,0,0,0.08)',
-    elevated: '0 4px 16px rgba(0,0,0,0.12)',
-    overlay: '0 8px 32px rgba(0,0,0,0.16)'
+    card:     '0 2px 8px rgba(161,0,255,0.08)',
+    elevated: '0 4px 16px rgba(161,0,255,0.12)',
+    overlay:  '0 8px 32px rgba(161,0,255,0.16)'
   },
 
   transitions: {
-    fast: '0.15s ease-in-out',
+    fast:   '0.15s ease-in-out',
     normal: '0.2s ease',
-    slow: '0.3s ease-in-out'
+    slow:   '0.3s ease-in-out'
   }
 };
 

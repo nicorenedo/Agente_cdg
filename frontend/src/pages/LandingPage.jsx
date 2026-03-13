@@ -15,7 +15,6 @@ import {
 
 import api from '../services/api';
 import theme from '../styles/theme';
-import BancaMarchLogo from '../assets/BancaMarchlogo.png';
 import FondoInterfaz from '../assets/FondoInterfazBM.png';
 
 const { Option } = Select;
@@ -147,7 +146,7 @@ const LandingPageContent = () => {
   /* ───── Estilos básicos ───── */
   const containerStyle = {
     height: '100vh',
-    background: `linear-gradient(135deg, rgba(27, 94, 85, 0.85), rgba(18, 59, 54, 0.9)), url(${FondoInterfaz})`,
+    background: `linear-gradient(135deg, rgba(26,0,51,0.92) 0%, rgba(161,0,255,0.80) 100%), url(${FondoInterfaz})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     display: 'flex',
@@ -185,7 +184,22 @@ const LandingPageContent = () => {
         />
       )}
 
-      <img src={BancaMarchLogo} alt="Banca March" style={{ maxWidth: 260, marginBottom: 32 }} />
+      {/* Logo CDG Intelligence */}
+      <div style={{ marginBottom: 32, textAlign: 'center' }}>
+        <div style={{
+          color: 'white',
+          fontWeight: 800,
+          fontSize: 36,
+          letterSpacing: '-1px',
+          lineHeight: 1.1
+        }}>
+          <span style={{ color: '#CC66FF', marginRight: 8, fontSize: 40 }}>{'>'}</span>
+          CDG Intelligence
+        </div>
+        <div style={{ color: 'rgba(204,102,255,0.85)', fontSize: 13, marginTop: 4, letterSpacing: 2 }}>
+          POWERED BY ACCENTURE
+        </div>
+      </div>
 
       <Title level={1} style={{ color: 'white', marginBottom: 8, textAlign: 'center' }}>
         Sistema de Control de Gestión
@@ -285,7 +299,7 @@ const LandingPageContent = () => {
                 loading={loadingGestores}
                 style={{
                   width: '100%',
-                  background: `linear-gradient(135deg, ${theme.colors.bmGreenLight}, ${theme.colors.bmGreenPrimary})`,
+                  background: 'linear-gradient(135deg, #CC66FF, #A100FF)',
                   border: 'none',
                 }}
               >
@@ -315,11 +329,11 @@ const LandingPageContent = () => {
               </Title>
 
               <Space direction="vertical" size="small">
-                <div>
-                  <TeamOutlined style={{ color: theme.colors.bmGreenLight }} /> Control consolidado
+                <div style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  <TeamOutlined style={{ color: '#CC66FF' }} /> Control consolidado
                 </div>
-                <div>
-                  <ThunderboltOutlined style={{ color: theme.colors.bmGreenLight }} /> KPIs en tiempo real
+                <div style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  <ThunderboltOutlined style={{ color: '#CC66FF' }} /> KPIs en tiempo real
                 </div>
               </Space>
 
@@ -330,7 +344,7 @@ const LandingPageContent = () => {
                 onClick={handleNavigateDireccion}
                 style={{
                   width: '100%',
-                  background: `linear-gradient(135deg, ${theme.colors.bmGreenDark}, ${theme.colors.bmGreenPrimary})`,
+                  background: 'linear-gradient(135deg, #7B00CC, #A100FF)',
                   border: 'none',
                   marginTop: 16,
                 }}
@@ -345,7 +359,7 @@ const LandingPageContent = () => {
       {/* Footer */}
       <div style={{ position: 'absolute', bottom: 32, color: 'white', textAlign: 'center' }}>
         <Space split={<Divider type="vertical" style={{ borderColor: 'rgba(255,255,255,0.4)' }} />}>
-          <span>Agente CDG ©2025 Banca March</span>
+          <span>CDG Intelligence ©2025 Accenture</span>
           <span>{gestores.length} gestores disponibles</span>
           <span style={{ color: systemStatus === 'healthy' ? '#52c41a' : '#fa8c16' }}>
             {systemStatus === 'healthy' ? 'Datos reales' : 'Datos demo'}

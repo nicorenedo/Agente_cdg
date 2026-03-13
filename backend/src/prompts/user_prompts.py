@@ -58,7 +58,7 @@ Máximo 5 acciones priorizadas por impacto:
 - Optimizaciones operativas
 - Objetivos para próximo período
 
-Utiliza terminología bancaria precisa y lenguaje ejecutivo apropiado para directivos de Banca March. Si alguna sección carece de datos, indícalo claramente.
+Utiliza terminología bancaria precisa y lenguaje ejecutivo apropiado para directivos de Agente CDG. Si alguna sección carece de datos, indícalo claramente.
 """
 
 EXECUTIVE_SUMMARY_USER_PROMPT = """
@@ -529,7 +529,7 @@ Solicita al usuario que especifique:
 - ¿Requiere justificación técnica o conclusiones directas?
 - ¿Hay deadline específico que condicione el formato?
 
-Proporciona una respuesta amigable que guíe al usuario hacia una consulta más específica, ofreciendo opciones concretas basadas en las interpretaciones posibles y el contexto bancario de Banca March.
+Proporciona una respuesta amigable que guíe al usuario hacia una consulta más específica, ofreciendo opciones concretas basadas en las interpretaciones posibles y el contexto bancario de Agente CDG.
 """
 
 DYNAMIC_DASHBOARD_USER_PROMPT = """
@@ -1029,7 +1029,7 @@ DATOS OBTENIDOS:
 
 INSTRUCCIONES PARA LA EXPLICACIÓN:
 1. **Interpretación**: Qué significan estos números
-2. **Contexto bancario**: Por qué son importantes para Banca March  
+2. **Contexto bancario**: Por qué son importantes para Agente CDG  
 3. **Comparación**: Cómo se sitúan vs objetivos/benchmarks
 4. **Tendencias**: Si hay patrones o evoluciones relevantes
 5. **Acciones**: Qué se puede hacer con esta información

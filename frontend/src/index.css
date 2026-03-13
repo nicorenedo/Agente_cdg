@@ -1,5 +1,5 @@
 /* src/index.css */
-/* Estilos base CDG - Sistema Control de Gestión Banca March */
+/* Estilos base CDG Intelligence — identidad Accenture */
 
 /* ─── CSS Design Tokens (8px grid system) ─── */
 :root {
@@ -18,10 +18,10 @@
   --shadow-elevated: 0 4px 16px rgba(0,0,0,0.12);
   --shadow-overlay:  0 8px 32px rgba(0,0,0,0.16);
 
-  --color-primary:   #1B5E55;
-  --color-primary-l: #229B8B;
-  --color-border:    #E8E8E8;
-  --color-bg:        #FAFAFA;
+  --color-primary:   #A100FF;
+  --color-primary-l: #CC66FF;
+  --color-border:    #E8E0F5;
+  --color-bg:        #F8F5FF;
 
   --transition: 0.2s ease;
 }
@@ -82,13 +82,13 @@ button {
 
 /* Links */
 a {
-  color: #1B5E55;
+  color: #A100FF;
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
 a:hover {
-  color: #229B8B;
+  color: #CC66FF;
   text-decoration: underline;
 }
 
@@ -129,12 +129,12 @@ a:hover {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #229B8B;
+  background: #CC66FF;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #1B5E55;
+  background: #A100FF;
 }
 
 /* Clases utilitarias básicas */
