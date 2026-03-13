@@ -444,6 +444,8 @@ llm = AzureChatOpenAI(
 - `1d1d63c` — analyticsService + GestorView: datos reales en todos los gráficos + pivot funcional
 - `accdb8e` — InteractiveCharts stale-closure fix + ConversationalPivot localStorage isolation
 - `74cdb71` — Loop infinito backend + pivot success wrapper
+- `b82260e` — analyticsService: ?? + || mixing syntax error (missing parens)
+- `41f37ef` — InteractiveCharts: ESLint cleanup (ref values copied to local vars)
 
 **Bugs corregidos (sesión de continuación 2):**
 
