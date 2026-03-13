@@ -458,6 +458,14 @@ Bug 2 — Pivot "Muéstrame ingresos por cliente" → "No se pudo completar":
 - Fix: fallback local ahora devuelve `{success: true, data: pivotedData, newConfig, changesMade, interpretation}` igual que el path del backend
 - También: `transformPivotableData` usa `??` (nullish) para mapear `ingresos_cliente` preservando 0 como valor válido
 
+**Bug corregido (sesión de continuación 3):**
+
+Bug — Pivot "Muéstrame los ingresos por cliente" → metric=CLIENTES dimension=CLIENTES (incorrecto):
+- Root cause 1 (`chart_prompts.py`): `CONFIDENTIALITY_RULES['GESTOR']['allowed_dimensions']` no incluía `cliente`. El prompt enviado a Azure OpenAI listaba como dimensiones válidas solo `periodo, producto, contrato`. El modelo no podía usar `cliente` como dimensión → lo mapeaba a la métrica `CLIENTES` en su lugar.
+- Root cause 2: El `CHART_PIVOT_SYSTEM_PROMPT` tampoco listaba `cliente` en las dimensiones del ROL GESTOR. No había ejemplos de "ingresos por cliente" ni "margen por cliente".
+- Fix `chart_prompts.py`: añadido `cliente` a `allowed_dimensions` del GESTOR; añadido `cliente` al bloque ROL GESTOR del system prompt; añadidos ejemplos explícitos ("ingresos por cliente" → metric:INGRESOS dimension:cliente, etc.); añadida regla explícita: "NUNCA uses CLIENTES como valor de metric — cliente es una DIMENSIÓN"
+- Fix `analyticsService.js` (fallback de seguridad): en `pivotChart()`, si Azure devuelve `metric='CLIENTES'` o `'clientes'` mapear a `CONTRATOS`; si devuelve `dimension='clientes'` mapear a `cliente` — aplicado en path principal y path fallback local. Commit: `7000c99`
+
 **Bugs corregidos (sesión de continuación 1):**
 
 Bug 1 — `InteractiveCharts.jsx` gráficos vacíos (stale closure race condition):
