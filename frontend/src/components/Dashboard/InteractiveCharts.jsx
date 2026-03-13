@@ -213,6 +213,10 @@ const InteractiveCharts = ({
   const loadedCharts = useRef(new Set());
   // ✅ FIX: track loading state via ref (not React state) to avoid stale-closure deps loop
   const loadingRef = useRef({});
+  // ✅ FIX: track latest filters via ref so loadChartData doesn't depend on filters state
+  // (inline {} objects create new references every render → infinite loop)
+  const filtersRef = useRef(filters);
+  useEffect(() => { filtersRef.current = filters; }, [filters]);
 
   /* Configuración según rol */
   const presetCharts = useMemo(() => {
@@ -273,7 +277,7 @@ const InteractiveCharts = ({
           metric: config.metric,
           chart_type: config.chartType,
           periodo,
-          ...filters
+          ...filtersRef.current
         });
         
         // ✅ analyticsService YA devuelve {labels, datasets, meta}
@@ -292,22 +296,22 @@ const InteractiveCharts = ({
           chartData = await analyticsService.getTopClientsChartData(gestorId, {
             periodo,
             limit: config.filters.limit || 10,
-            ...filters
+            ...filtersRef.current
           });
-          
+
         } else if (chartKey === 'productos-clientes') {
           // ✅ Usa función existente de analyticsService
           chartData = await analyticsService.getProductMixChartData(gestorId, {
             periodo,
-            ...filters
+            ...filtersRef.current
           });
-          
+
         } else if (chartKey === 'precios-comparison') {
           // ✅ Usa función existente de analyticsService
           chartData = await analyticsService.getPriceComparisonChartData({
             gestorId,
             periodo
-          }, filters);
+          }, filtersRef.current);
         }
       }
 
@@ -350,8 +354,8 @@ const InteractiveCharts = ({
     mode,
     gestorId,
     periodo,
-    filters,
     notification
+    // ✅ FIX: filters removed — accessed via filtersRef.current (inline {} creates new ref each render → loop)
     // ✅ FIX: loadingStates removed — guard now uses loadingRef to avoid infinite dep loop
   ]);
 

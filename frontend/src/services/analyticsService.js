@@ -1759,7 +1759,19 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
         ]
       };
 
-      return pivotedData;
+      const metric = parsedIntent.metric || currentChartConfig.metric || 'CONTRATOS';
+      const dimension = parsedIntent.dimension || currentChartConfig.dimension || 'gestor';
+      const chartType = parsedIntent.chartType || currentChartConfig.chartType || 'bar';
+
+      // ✅ FIX: wrap in {success: true} format expected by ConversationalPivot
+      return {
+        success: true,
+        data: pivotedData,
+        source: 'local_parser',
+        newConfig: { metric, dimension, chartType },
+        changesMade: pivotedData.meta.changes_made || [],
+        interpretation: `Gráfico actualizado: ${pivotedData.meta.metricLabel} por ${pivotedData.meta.dimensionLabel}`,
+      };
     }
 
     // 4. Si todo falla, mantener configuración actual pero mostrar error
@@ -1961,15 +1973,16 @@ function transformPivotableData(rawData, context) {
     values = items.map(item => {
       // Extraer valor usando configuración de métrica — incluir campos de clientes-con-metricas
       const mLower = metric.toLowerCase();
-      const value = item[mLower] ||
-                   item[`${mLower}_pct`] ||
-                   // Campos de /analytics/gestor/{id}/clientes-con-metricas
-                   (mLower === 'ingresos' ? item.ingresos_cliente : null) ||
-                   (mLower === 'margen_neto' ? (item.beneficio_neto ?? item.margen_neto_pct) : null) ||
-                   (mLower === 'contratos' ? item.num_contratos : null) ||
-                   // Campos genéricos
-                   item.total_contratos || item.margen_neto_pct || item.roe_pct ||
-                   item.value || metricConfig.defaultValue;
+      // ✅ FIX: usar ?? (nullish) para preservar 0 como valor válido en campos cliente
+      let value =
+        // Campos de /analytics/gestor/{id}/clientes-con-metricas (tiene prioridad para dimensión cliente)
+        (mLower === 'ingresos' ? (item.ingresos_cliente ?? item.ingresos) : undefined) ??
+        (mLower === 'margen_neto' ? (item.beneficio_neto ?? item.margen_neto_pct) : undefined) ??
+        (mLower === 'contratos' ? item.num_contratos : undefined) ??
+        // Campos genéricos (usar || porque aquí sí queremos falsy-fallthrough)
+        item[mLower] || item[`${mLower}_pct`] ||
+        item.total_contratos || item.margen_neto_pct || item.roe_pct ||
+        item.value || metricConfig.defaultValue;
       return Number(value) || metricConfig.defaultValue;
     });
     
