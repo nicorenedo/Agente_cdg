@@ -443,8 +443,20 @@ llm = AzureChatOpenAI(
 - `50f92c2` — KPICards variaciones reales sep→oct + debug mode off + encoding fix
 - `1d1d63c` — analyticsService + GestorView: datos reales en todos los gráficos + pivot funcional
 - `accdb8e` — InteractiveCharts stale-closure fix + ConversationalPivot localStorage isolation
+- `74cdb71` — Loop infinito backend + pivot success wrapper
 
-**Bugs corregidos en la sesión de continuación:**
+**Bugs corregidos (sesión de continuación 2):**
+
+Bug 1 — Loop infinito en backend ("Maximum request limit exceeded"):
+- Root cause: `filters = {}` default prop en `InteractiveCharts` crea nuevo objeto cada render → `filters` estaba en deps de `loadChartData` → callback se recreaba cada render → `loadAllCharts` se recreaba → `useEffect` se re-disparaba → `setLoadingStates` → re-render → loop infinito → cientos de llamadas a `/basic/gestores/by-segmento` y `/deviations/pricing`
+- Fix: `filtersRef` (useRef) almacena el valor actual de `filters`; `loadChartData` lee `filtersRef.current`; `filters` eliminado de deps del useCallback
+
+Bug 2 — Pivot "Muéstrame ingresos por cliente" → "No se pudo completar":
+- Root cause: en `pivotChart()`, el path de fallback local (cuando backend falla) devolvía `pivotedData` directamente (objeto con `labels/datasets`). `ConversationalPivot` comprueba `pivotResult.success` → `undefined` → falsy → lanzaba el error genérico
+- Fix: fallback local ahora devuelve `{success: true, data: pivotedData, newConfig, changesMade, interpretation}` igual que el path del backend
+- También: `transformPivotableData` usa `??` (nullish) para mapear `ingresos_cliente` preservando 0 como valor válido
+
+**Bugs corregidos (sesión de continuación 1):**
 
 Bug 1 — `InteractiveCharts.jsx` gráficos vacíos (stale closure race condition):
 - Root cause: `loadChartData` tenía `loadingStates` en sus deps → al cambiar el estado de carga, el callback se recreaba → `loadAllCharts` se recreaba → pero el loading `useEffect` tenía deps `[periodo, mode, gestorId]` sin `loadAllCharts`, así que usaba la versión stale donde `chartConfigs = {}` → `if (!config) return` → ningún gráfico se cargaba nunca
