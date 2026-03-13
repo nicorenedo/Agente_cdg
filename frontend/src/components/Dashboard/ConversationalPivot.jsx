@@ -279,16 +279,24 @@ const ConversationalPivot = ({
    * ========================================= */
 
   useEffect(() => {
-    const savedHistory = localStorage.getItem(`conversational-pivot-history-${mode}`);
+    // ✅ FIX: key includes gestorId+periodo to isolate history per session
+    const historyKey = `conversational-pivot-history-${mode}-${gestorId || 'global'}-${periodo}`;
+    const savedHistory = localStorage.getItem(historyKey);
     if (savedHistory) {
       try {
         const parsed = JSON.parse(savedHistory);
-        setConversationHistory(parsed);
+        // Validate it's an array (guard against stale/corrupt data)
+        if (Array.isArray(parsed)) {
+          setConversationHistory(parsed);
+        }
       } catch (e) {
         console.warn('[ConversationalPivot] Error loading history:', e);
       }
+    } else {
+      // Clear any history from previous session (different gestorId/periodo)
+      setConversationHistory([]);
     }
-  }, [mode]);
+  }, [mode, gestorId, periodo]);
 
   /* =========================================
    * Guardar historial en localStorage
@@ -296,11 +304,12 @@ const ConversationalPivot = ({
 
   const saveHistory = useCallback((history) => {
     try {
-      localStorage.setItem(`conversational-pivot-history-${mode}`, JSON.stringify(history));
+      const historyKey = `conversational-pivot-history-${mode}-${gestorId || 'global'}-${periodo}`;
+      localStorage.setItem(historyKey, JSON.stringify(history));
     } catch (e) {
       console.warn('[ConversationalPivot] Error saving history:', e);
     }
-  }, [mode]);
+  }, [mode, gestorId, periodo]);
 
   /* =========================================
    * Procesamiento de mensaje
@@ -536,10 +545,11 @@ const ConversationalPivot = ({
 
   const handleClearHistory = useCallback(() => {
     setConversationHistory([]);
-    localStorage.removeItem(`conversational-pivot-history-${mode}`);
+    const historyKey = `conversational-pivot-history-${mode}-${gestorId || 'global'}-${periodo}`;
+    localStorage.removeItem(historyKey);
     setLastPivotResult(null);
     antMessage.success('Historial limpiado');
-  }, [mode, antMessage]);
+  }, [mode, gestorId, periodo, antMessage]);
 
   /* =========================================
    * Renderizado de mensajes

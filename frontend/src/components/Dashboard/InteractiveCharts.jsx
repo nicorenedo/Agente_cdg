@@ -211,6 +211,8 @@ const InteractiveCharts = ({
 
   const abortControllers = useRef({});
   const loadedCharts = useRef(new Set());
+  // ✅ FIX: track loading state via ref (not React state) to avoid stale-closure deps loop
+  const loadingRef = useRef({});
 
   /* Configuración según rol */
   const presetCharts = useMemo(() => {
@@ -243,7 +245,8 @@ const InteractiveCharts = ({
     const config = chartConfigs[chartKey];
     if (!config) return;
 
-    if (loadingStates[chartKey]) {
+    // ✅ FIX: use ref to check loading (avoids stale-closure dep loop)
+    if (loadingRef.current[chartKey]) {
       console.log(`[InteractiveCharts] ⏭️ Skipping ${chartKey} - already loading`);
       return;
     }
@@ -253,6 +256,7 @@ const InteractiveCharts = ({
     }
     abortControllers.current[chartKey] = new AbortController();
 
+    loadingRef.current[chartKey] = true;
     setLoadingStates(prev => ({ ...prev, [chartKey]: true }));
     setErrorStates(prev => ({ ...prev, [chartKey]: null }));
 
@@ -337,6 +341,7 @@ const InteractiveCharts = ({
         });
       }
     } finally {
+      loadingRef.current[chartKey] = false;
       setLoadingStates(prev => ({ ...prev, [chartKey]: false }));
     }
   }, [
@@ -346,8 +351,8 @@ const InteractiveCharts = ({
     gestorId,
     periodo,
     filters,
-    notification,
-    loadingStates
+    notification
+    // ✅ FIX: loadingStates removed — guard now uses loadingRef to avoid infinite dep loop
   ]);
 
   /* Cargar todos los gráficos */
@@ -367,8 +372,11 @@ const InteractiveCharts = ({
   }, [periodo, mode, gestorId, presetKeys, loadChartData]);
 
   useEffect(() => {
+    // ✅ FIX: guard against chartConfigs not yet initialized (async effect race)
+    if (Object.keys(chartConfigs).length === 0) return;
+
     let mounted = true;
-    
+
     const loadTimeout = setTimeout(() => {
       if (mounted) {
         loadAllCharts();
@@ -378,7 +386,8 @@ const InteractiveCharts = ({
     return () => {
       mounted = false;
       clearTimeout(loadTimeout);
-      
+      loadedCharts.current.clear();
+
       Object.values(abortControllers.current).forEach(controller => {
         try {
           controller.abort();
@@ -386,7 +395,8 @@ const InteractiveCharts = ({
       });
       abortControllers.current = {};
     };
-  }, [periodo, mode, gestorId]);
+    // ✅ FIX: include loadAllCharts so effect re-fires when chartConfigs is ready
+  }, [periodo, mode, gestorId, loadAllCharts, chartConfigs]);
 
   /* Manejo de datos externos */
   useEffect(() => {
