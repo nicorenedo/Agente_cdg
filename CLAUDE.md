@@ -319,7 +319,7 @@ llm = AzureChatOpenAI(
 ## 12. ESTADO ACTUAL DEL PROYECTO
 
 > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-> Última actualización: 2026-03-13
+> Última actualización: 2026-03-14
 
 ### ✅ Completado
 
@@ -538,13 +538,33 @@ Bug 5 — Chat CDG (`/chat/message` con `user_role: control_gestion`) retornaba 
 - `DireccionView`: ConversationalPivot movido de fila full-width inferior a panel lateral derecho sticky (`lg:8, position:sticky, top:88px`); columna izquierda (`lg:16`) tiene InteractiveCharts + DeviationAnalysis apilados; se eliminó layoutConfig.analysis separado
 - Commit: `d3c2969`
 
+**Paleta de colores Accenture (sesión 12 — completado):**
+- `analyticsService.js`: `PRODUCT_COLORS`, `CLIENT_COLORS`, `DIRECTION_COLORS` → `ACCENTURE_CHART_PALETTE` (8 tonos de púrpura). Sin cyan (`#00B8F5`, `#0087C8`, `#00D4E8`) en ninguna serie de gráficos. `SEMAPHORE_COLORS` (Verde/Amarillo/Rojo funcional) intacto.
+- `theme.js`: `chart.secondary`, `chart.accent1`, `chart.accent4` actualizados a púrpura. Commit: `9c44f31`
+
+**Seguridad: ocultar precios reales en GestorView (sesión 12 — completado):**
+- `GESTOR_PRESET_CHARTS`: eliminada entrada `'precios-comparison'` — gestores no pueden ver `PRECIO_POR_PRODUCTO_REAL` (solo CDG/Dirección). `DIRECTION_PRESET_CHARTS` sin cambios. Commit: `15f1366`
+
+**Mejora de prompts (sesión 12 — completado):**
+- `gestor_agent.py` `_build_system_prompt()`: reescrito con enfoque de negocio — copiloto que explica el "por qué" detrás de KPIs, sitúa al gestor vs centro, prepara argumentos para Business Review. Eliminadas referencias técnicas a cuentas contables y "Banca March".
+- `cdg_agent.py`: "Banca March" → "CDG Intelligence" en `_generate_ai_insights`.
+- `system_prompts.py` `FINANCIAL_ANALYST_SYSTEM_PROMPT`: reescrito con rol CDG orientado a detección de desvíos, rankings, preparación de Business Review y acceso a precio real. Commit: `cb7b222`
+
+**UI polish (sesión 12 — completado):**
+- `KPICards.jsx`: icono decorativo en esquina superior-derecha de cada card (`RiseOutlined` para ROE, `GiftOutlined` para bonus, `AreaChartOutlined` para clientes, `ContainerOutlined` para contratos, `EuroCircleOutlined` para ingresos).
+- `InteractiveCharts.jsx`: loading state usa `<Skeleton active paragraph={{ rows: 6 }}>` en lugar de `<Spin>`; CSS `@keyframes ic-fade-in` inyectado para transición 0.2s entre tabs; card shadow actualizado a purple-tinted.
+- `ChatInterface.jsx`: header `background: '#1A0033'`, texto blanco, badges y botones adaptados al fondo oscuro. Título simplificado a "Copiloto CDG".
+- `ConversationalPivot.jsx`: misma cabecera oscura `#1A0033` para coherencia visual con ChatInterface. Commit: `618348e`
+
 ### ⏭️ Próximo paso exacto al retomar
 
 **Siguiente: prueba visual ambos dashboards**
-- GestorView: verificar que InteractiveCharts (height=520) y ConversationalPivot (height=520) se alinean correctamente sin Card doble
-- DireccionView: confirmar que ConversationalPivot queda sticky en el lateral derecho y no se desplaza al hacer scroll
-- Probar "muéstrame en gráfico circular" en ConversationalPivot → debe cambiar a pie chart
-- Probar "vuelve a barras" → debe revertir a horizontal_bar
+- Verificar que ningún gráfico muestra cyan (abrir browser, revisar paletas)
+- GestorView: confirmar que la pestaña "Comparativa de Precios" ya NO aparece
+- DireccionView: confirmar que la pestaña "Comparativa de Precios" SÍ aparece
+- Verificar cabeceras oscuras en ChatInterface y ConversationalPivot
+- Verificar iconos de esquina en KPI cards
+- Verificar Skeleton (no Spinner) en carga de gráficos
 
 **Rebrand a identidad Accenture (sesión 11 — completado):**
 - Producto renombrado: "Banca March CDG" → **"CDG Intelligence"** (genérico, adaptable a cualquier banco cliente)
