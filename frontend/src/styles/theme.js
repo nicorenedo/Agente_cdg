@@ -34,16 +34,16 @@ const theme = {
     info:         '#00B8F5',   // Info → cyan
     infoLight:    '#80DBFA',
 
-    // Paleta Accenture para gráficos
+    // Paleta Accenture para gráficos — monocromática púrpura
     chart: {
       primary:  '#A100FF',
-      secondary:'#00B8F5',
+      secondary:'#7B00CC',
       tertiary: '#CC66FF',
-      accent1:  '#0087C8',
+      accent1:  '#5500AA',
       accent2:  '#E600C8',
-      accent3:  '#7B00CC',
-      accent4:  '#00D4E8',
-      accent5:  '#FF6680'
+      accent3:  '#DD99FF',
+      accent4:  '#380080',
+      accent5:  '#F0CCFF'
     }
   },
 

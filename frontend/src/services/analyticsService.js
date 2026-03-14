@@ -67,17 +67,28 @@ const SEMAPHORE_COLORS = Object.freeze({
   Gris: "#6b7280",
 });
 
-/** Paleta Accenture para visualizaciones */
-const PRODUCT_COLORS = ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8", "#7B00CC", "#00D4E8"];
-const CLIENT_COLORS  = ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8", "#7B00CC", "#00D4E8"];
+/** Paleta monocromática Accenture — solo púrpuras, sin cyan */
+const ACCENTURE_CHART_PALETTE = Object.freeze([
+  '#A100FF',  // Púrpura Accenture primario
+  '#7B00CC',  // Púrpura oscuro
+  '#CC66FF',  // Púrpura claro
+  '#5500AA',  // Púrpura muy oscuro
+  '#E600C8',  // Magenta Accenture (acento)
+  '#DD99FF',  // Lavanda
+  '#380080',  // Indigo oscuro
+  '#F0CCFF',  // Lavanda muy claro (solo fondos/fills)
+]);
 
-/** Colores específicos para Dashboard Dirección — paleta Accenture */
+const PRODUCT_COLORS = ACCENTURE_CHART_PALETTE.slice(0, 7);
+const CLIENT_COLORS  = ACCENTURE_CHART_PALETTE.slice(0, 7);
+
+/** Colores específicos para Dashboard Dirección — paleta Accenture monocromática */
 const DIRECTION_COLORS = Object.freeze({
-  gestores: ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8", "#7B00CC", "#00D4E8", "#FF6680"],
-  centros:  ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8"],
-  productos:["#A100FF", "#00B8F5", "#CC66FF"],
-  gastos:   ["#E5002B", "#F5A623", "#A100FF", "#00B8F5"],
-  general:  ["#A100FF", "#00B8F5", "#CC66FF", "#0087C8", "#E600C8"]
+  gestores: [...ACCENTURE_CHART_PALETTE],
+  centros:  ACCENTURE_CHART_PALETTE.slice(0, 5),
+  productos:ACCENTURE_CHART_PALETTE.slice(0, 3),
+  gastos:   ['#E5002B', '#F5A623', '#A100FF', '#7B00CC'],
+  general:  ACCENTURE_CHART_PALETTE.slice(0, 5),
 });
 
 /* =========================================
