@@ -132,17 +132,7 @@ const GESTOR_PRESET_CHARTS = {
     availableChartTypes: ['donut', 'pie', 'horizontal_bar'],
     hasFilters: true
   },
-  'precios-comparison': {
-    key: 'precios-comparison',
-    title: 'Comparativa de Precios',
-    subtitle: 'Precio estándar vs precio real',
-    icon: <DollarCircleOutlined />,
-    defaultMetric: 'PRECIO',
-    defaultChartType: 'bar',
-    availableMetrics: ['PRECIO'],
-    availableChartTypes: ['bar', 'horizontal_bar'],
-    hasFilters: true
-  }
+  // 'precios-comparison' eliminado del preset de gestor — PRECIO_POR_PRODUCTO_REAL es restringido (solo CDG/Dirección)
 };
 
 /* =========================================
