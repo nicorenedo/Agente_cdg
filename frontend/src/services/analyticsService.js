@@ -1709,9 +1709,13 @@ async function pivotChart(userId, message, currentChartConfig = {}, chartInterac
   console.log(`[Analytics] Current config:`, currentChartConfig);
 
   try {
+    // Determinar rol: mode='direccion' → CONTROL_GESTION (acceso completo); gestor → GESTOR
+    const userRole = options.mode === 'direccion' ? 'CONTROL_GESTION' : 'GESTOR';
+
     // 1. Usar backend para interpretar la intención (Azure OpenAI) → devuelve new_config
     const result = await chartsAPI.pivot({
       userId,
+      userRole,
       message,
       currentChartConfig,
       chartInteractionType
