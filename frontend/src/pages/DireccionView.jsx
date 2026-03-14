@@ -1,5 +1,6 @@
 // frontend/src/pages/DireccionView.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Layout,
   Row,
@@ -22,7 +23,8 @@ import {
   ExpandOutlined,
   CompressOutlined,
   MessageOutlined,
-  RobotOutlined
+  RobotOutlined,
+  HomeOutlined
 } from '@ant-design/icons';
 import TopBar from '../components/common/TopBar';
 import KPICards from '../components/Dashboard/KPICards';
@@ -46,6 +48,8 @@ const { Title, Text } = Typography;
  * CAMBIO: DeviationAnalysis ahora rellena el espacio vacío con más altura
  */
 const DireccionView = () => {
+  const navigate = useNavigate();
+
   // ✅ ESTADOS PRINCIPALES
   const [periodo, setPeriodo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -294,6 +298,10 @@ const DireccionView = () => {
     }
   }, []);
 
+  const handleBackToLanding = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
+
   const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().then(() => {
@@ -413,13 +421,20 @@ const DireccionView = () => {
             </div>
             
             <Space>
-              <Text 
-                type="secondary" 
+              <Text
+                type="secondary"
                 style={{ fontSize: 12 }}
                 title="Última actualización"
               >
                 Actualizado: {new Date().toLocaleTimeString()}
               </Text>
+              <Button
+                type="text"
+                icon={<HomeOutlined />}
+                onClick={handleBackToLanding}
+              >
+                Volver
+              </Button>
             </Space>
           </Space>
         </div>
@@ -635,10 +650,15 @@ const DireccionView = () => {
           tooltip="Refrescar Todo"
           onClick={handleRefreshAll} 
         />
-        <FloatButton 
-          icon={<FullscreenOutlined />} 
+        <FloatButton
+          icon={<FullscreenOutlined />}
           tooltip="Pantalla Completa"
-          onClick={handleToggleFullscreen} 
+          onClick={handleToggleFullscreen}
+        />
+        <FloatButton
+          icon={<HomeOutlined />}
+          tooltip="Volver al Inicio"
+          onClick={handleBackToLanding}
         />
       </FloatButton.Group>
 
