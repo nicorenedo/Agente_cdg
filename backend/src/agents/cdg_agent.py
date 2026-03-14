@@ -1003,8 +1003,8 @@ class CDGAgentV6:
             TIPO DE ANÁLISIS: {analysis_type}
             DATOS: {json.dumps(content, default=str)[:1500]}
 
-            CONTEXTO: Banca March - Control de Gestión
-            AUDIENCIA: Directivos y gestores comerciales
+            CONTEXTO: CDG Intelligence — Control de Gestión
+            AUDIENCIA: Equipo de Control de Gestión y Dirección
 
             Genera insights en formato de lista numerada, enfocándote en:
             - Oportunidades de mejora específicas
