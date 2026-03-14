@@ -556,15 +556,32 @@ Bug 5 — Chat CDG (`/chat/message` con `user_role: control_gestion`) retornaba 
 - `ChatInterface.jsx`: header `background: '#1A0033'`, texto blanco, badges y botones adaptados al fondo oscuro. Título simplificado a "Copiloto CDG".
 - `ConversationalPivot.jsx`: misma cabecera oscura `#1A0033` para coherencia visual con ChatInterface. Commit: `618348e`
 
+**Corrección paleta completa — gráfico dinámico (sesión 13 — completado):**
+- `analyticsService.js` `PIVOTABLE_CONFIG.metrics`: todos los colores de métrica reemplazados con ACCENTURE_CHART_PALETTE (CONTRATOS `#22c55e`→`A100FF`, CLIENTES `#3b82f6`→`CC66FF`, ROE `#f59e0b`→`5500AA`, MARGEN_NETO `#ef4444`→`7B00CC`, INGRESOS `#10b981`→`A100FF`, INCENTIVOS `#8b5cf6`→`E600C8`)
+- `transformPivotableData`: eliminado el enfoque de opacidad variable (`baseColor + hexOpacity`), reemplazado por cycling sobre `ACCENTURE_CHART_PALETTE`
+- `generateMockPivotableChart`: fallback ahora usa paleta array en lugar de `'#22c55e'`
+- `transformPriceComparison`: colores STD `rgba(25,124,99)` → `#94a3b8`; Real `rgba(20,70,50)` → `#7B00CC`
+- Colores de segmentos `#52c41a`, `#13c2c2`, `#722ed1` → colores ACCENTURE_CHART_PALETTE. Commit: `1d8e8bf`
+
+**Botón Volver en DireccionView (sesión 13 — completado):**
+- Añadidos `useNavigate` + `HomeOutlined` + `handleBackToLanding` (navega a `/`)
+- Botón "Volver" en el header (Space superior derecho) idéntico al de GestorView
+- FloatButton `HomeOutlined` añadido al grupo de botones flotantes
+- Commit: `930e54c`
+
+**Animaciones framer-motion (sesión 13 — completado):**
+- `KPICards.jsx`: cada card monta con fade + slide-up (y:20→0, opacity:0→1, 0.3s), staggered 0.1s por índice. Aplica en GestorView y DireccionView
+- `InteractiveCharts.jsx`: tab "Gráfico Dinámico" hace fade-in (opacity:0→1, 0.4s) al aparecer por primera vez
+- No se animaron: tablas, listas, componentes de re-render frecuente
+- Commit: `f7d1925`
+
 ### ⏭️ Próximo paso exacto al retomar
 
 **Siguiente: prueba visual ambos dashboards**
-- Verificar que ningún gráfico muestra cyan (abrir browser, revisar paletas)
-- GestorView: confirmar que la pestaña "Comparativa de Precios" ya NO aparece
-- DireccionView: confirmar que la pestaña "Comparativa de Precios" SÍ aparece
-- Verificar cabeceras oscuras en ChatInterface y ConversationalPivot
-- Verificar iconos de esquina en KPI cards
-- Verificar Skeleton (no Spinner) en carga de gráficos
+- Verificar gráfico dinámico muestra barras púrpura (no verde)
+- Verificar botón "Volver" funciona en DireccionView (header + floatbutton)
+- Verificar animación stagger en KPI cards al cargar la página
+- Verificar fade-in suave en tab "Gráfico Dinámico" al pivotar
 
 **Rebrand a identidad Accenture (sesión 11 — completado):**
 - Producto renombrado: "Banca March CDG" → **"CDG Intelligence"** (genérico, adaptable a cualquier banco cliente)
