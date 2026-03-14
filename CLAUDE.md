@@ -575,13 +575,37 @@ Bug 5 — Chat CDG (`/chat/message` con `user_role: control_gestion`) retornaba 
 - No se animaron: tablas, listas, componentes de re-render frecuente
 - Commit: `f7d1925`
 
+**Bug crítico: pivoteo DireccionView ignoraba rol CDG (sesión 14 — completado):**
+
+**Síntoma:** "Enséñame los top 10 gestores con mejores ingresos" → "No se pudo interpretar tu solicitud"
+
+**Root cause (cadena completa):**
+1. `ConversationalPivot` llama `analyticsService.pivotChart(..., { gestorId, periodo, mode })`
+2. `pivotChart()` llamaba `chartsAPI.pivot({ userId, message, ... })` — sin pasar `userRole`
+3. `api.js` `charts.pivot` tiene `userRole = "GESTOR"` como default
+4. Backend recibe `user_role = "GESTOR"` → aplica reglas de confidencialidad → fuerza `dimension: "periodo"` (override por permisos)
+5. `getPivotableChartData("INGRESOS", "periodo", ...)` → `PIVOTABLE_CONFIG.metrics.INGRESOS` no tiene endpoint `periodo` → lanza error
+6. Fallback local activa `parsePivotIntent("top 10 gestores...")` → no reconoce la frase → devuelve null
+7. → "No se pudo interpretar tu solicitud"
+
+**Fix:** En `pivotChart()`, derivar `userRole` de `options.mode`:
+- `mode === 'direccion'` → `'CONTROL_GESTION'` (acceso completo)
+- else → `'GESTOR'`
+Pasar `userRole` a `chartsAPI.pivot()`. El backend devuelve `dimension: "gestor"` sin restricciones.
+
+**Verificado con curl:** `user_role: CONTROL_GESTION` → `new_config: { metric: INGRESOS, dimension: gestor, chartType: horizontal_bar }`, `adjustments_made: []` ✓
+
+**Commit:** `4c90fc3`
+
 ### ⏭️ Próximo paso exacto al retomar
 
 **Siguiente: prueba visual ambos dashboards**
-- Verificar gráfico dinámico muestra barras púrpura (no verde)
-- Verificar botón "Volver" funciona en DireccionView (header + floatbutton)
-- Verificar animación stagger en KPI cards al cargar la página
-- Verificar fade-in suave en tab "Gráfico Dinámico" al pivotar
+- "Enséñame los top 10 gestores con mejores ingresos" → debe mostrar barras púrpura con datos reales
+- "Cambia a ingresos por centro" → debe cambiar la dimensión
+- "Ponlo en gráfico circular" → debe cambiar el tipo
+- "Muéstrame el margen por gestor" → MARGEN_NETO por gestor
+- Verificar botón "Volver" en DireccionView (header + floatbutton)
+- Verificar animación stagger en KPI cards
 
 **Rebrand a identidad Accenture (sesión 11 — completado):**
 - Producto renombrado: "Banca March CDG" → **"CDG Intelligence"** (genérico, adaptable a cualquier banco cliente)
