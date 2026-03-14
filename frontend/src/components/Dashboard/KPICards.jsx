@@ -13,6 +13,10 @@ import {
   TeamOutlined,
   EuroCircleOutlined,
   InfoCircleOutlined,
+  RiseOutlined,
+  GiftOutlined,
+  AreaChartOutlined,
+  ContainerOutlined,
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 import api from '../../services/api';
@@ -523,6 +527,18 @@ const KPICards = ({
   };
 
 
+  // Icono de esquina por tipo de KPI
+  const cornerIconMap = {
+    roe_grupo:        <RiseOutlined style={{ fontSize: 18, color: 'rgba(161,0,255,0.25)' }} />,
+    roe_gestor:       <RiseOutlined style={{ fontSize: 18, color: 'rgba(161,0,255,0.25)' }} />,
+    bonus_gestor:     <GiftOutlined style={{ fontSize: 18, color: 'rgba(245,166,35,0.3)' }} />,
+    total_clientes:   <AreaChartOutlined style={{ fontSize: 18, color: 'rgba(0,184,245,0.25)' }} />,
+    clientes_gestor:  <AreaChartOutlined style={{ fontSize: 18, color: 'rgba(0,184,245,0.25)' }} />,
+    total_contratos:  <ContainerOutlined style={{ fontSize: 18, color: 'rgba(161,0,255,0.2)' }} />,
+    contratos_gestor: <ContainerOutlined style={{ fontSize: 18, color: 'rgba(161,0,255,0.2)' }} />,
+    ingresos_totales: <EuroCircleOutlined style={{ fontSize: 18, color: 'rgba(161,0,255,0.25)' }} />,
+  };
+
   // ✅ CORREGIDO: Componente KPICard con Select mejorado
   const KPICard = ({ kpi, config, filterKey, showFilter }) => {
     const hasVariation = kpi.variation !== null && kpi.variation !== undefined;
@@ -561,9 +577,24 @@ const KPICards = ({
           background: '#ffffff',
           borderTop: '3px solid #A100FF',
           boxShadow: '0 2px 8px rgba(161,0,255,0.08)',
+          position: 'relative',
+          overflow: 'hidden',
         }}
         styles={{ body: { padding: '20px' } }}
       >
+        {/* Decorative corner icon */}
+        {cornerIconMap[kpi.key] && (
+          <div style={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            lineHeight: 1,
+            pointerEvents: 'none',
+          }}>
+            {cornerIconMap[kpi.key]}
+          </div>
+        )}
+
         <Space direction="vertical" style={{ width: '100%' }} size="small">
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: '32px' }}>

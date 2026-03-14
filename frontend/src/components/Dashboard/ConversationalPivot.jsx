@@ -713,13 +713,13 @@ const ConversationalPivot = ({
       <Card
         title={
           <Space>
-            <RobotOutlined style={{ fontSize: 20, color: theme.colors?.bmGreenPrimary }} />
+            <RobotOutlined style={{ fontSize: 20, color: '#CC66FF' }} />
             <div>
-              <Title level={5} style={{ margin: 0 }}>
-                Pivoteo Conversacional de Gráficos
+              <Title level={5} style={{ margin: 0, color: '#ffffff' }}>
+                Análisis Conversacional
               </Title>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Chat Agent v11.0 • Perfect Integration
+              <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>
+                Cambia métrica, dimensión o tipo de gráfico
               </Text>
             </div>
           </Space>
@@ -728,12 +728,17 @@ const ConversationalPivot = ({
           <Space>
             <Badge
               status={mode === 'direccion' ? 'success' : 'processing'}
-              text={mode === 'direccion' ? 'Acceso Completo' : 'Acceso Limitado'}
+              text={
+                <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>
+                  {mode === 'direccion' ? 'Completo' : 'Limitado'}
+                </span>
+              }
             />
             <Tooltip title="Limpiar historial">
               <Button
+                type="text"
                 size="small"
-                icon={<ClearOutlined />}
+                icon={<ClearOutlined style={{ color: 'rgba(255,255,255,0.7)' }} />}
                 onClick={handleClearHistory}
                 disabled={conversationHistory.length === 0}
               />
@@ -741,6 +746,11 @@ const ConversationalPivot = ({
           </Space>
         }
         styles={{
+          header: {
+            background: '#1A0033',
+            borderRadius: '8px 8px 0 0',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+          },
           body: {
             height: height - 56,
             display: 'flex',

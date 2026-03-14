@@ -1045,60 +1045,65 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         transition: 'height 0.3s ease',
         ...style
       }}
-      styles={{ 
-        body: { 
-          padding: 0, 
-          flex: 1, 
-          display: 'flex', 
-          flexDirection: 'column' 
-        } 
+      styles={{
+        header: {
+          background: '#1A0033',
+          borderRadius: '8px 8px 0 0',
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
+        },
+        body: {
+          padding: 0,
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column'
+        }
       }}
       title={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Space>
-            <MessageOutlined style={{ color: theme.colors?.bmGreenPrimary }} />
-            <Title level={5} style={{ margin: 0 }}>
-              Chat CDG v12.0 - Perfect Integration + Confidentiality
+            <MessageOutlined style={{ color: '#CC66FF' }} />
+            <Title level={5} style={{ margin: 0, color: '#ffffff' }}>
+              Copiloto CDG
             </Title>
-            <Badge 
-              count={scope === 'direccion' ? 'Corporativo' : 'Personal'} 
-              style={{ backgroundColor: theme.colors?.bmGreenPrimary }} 
+            <Badge
+              count={scope === 'direccion' ? 'Corporativo' : 'Personal'}
+              style={{ backgroundColor: '#7B00CC' }}
             />
             {userRole && (
-              <Badge 
-                count={userRole === 'control_gestion' ? 'Admin' : 'User'} 
-                style={{ backgroundColor: userRole === 'control_gestion' ? '#52c41a' : '#1890ff' }} 
+              <Badge
+                count={userRole === 'control_gestion' ? 'Admin' : 'User'}
+                style={{ backgroundColor: userRole === 'control_gestion' ? '#5500AA' : '#380080' }}
               />
             )}
           </Space>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Tooltip title="Métricas de sesión con seguridad">
-              <Space size={4} style={{ fontSize: 10, color: theme.colors?.textSecondary }}>
-                <Text type="secondary" style={{ fontSize: 10 }}>
-                  📤{sessionMetrics.messages_sent} 🔍{sessionMetrics.queries_processed} 📊{sessionMetrics.reports_generated}
-                  {sessionMetrics.access_denied > 0 && (
-                    <span style={{ color: '#ff4d4f', marginLeft: 4 }}>
-                      🔐{sessionMetrics.access_denied}
-                    </span>
-                  )}
-                </Text>
-              </Space>
+            <Tooltip title="Métricas de sesión">
+              <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)' }}>
+                📤{sessionMetrics.messages_sent} 🔍{sessionMetrics.queries_processed}
+                {sessionMetrics.access_denied > 0 && (
+                  <span style={{ color: '#ff7875', marginLeft: 4 }}>
+                    🔐{sessionMetrics.access_denied}
+                  </span>
+                )}
+              </Text>
             </Tooltip>
-            
+
             <Dropdown menu={advancedActionsMenu} placement="bottomRight">
               <Button
                 type="text"
                 size="small"
-                icon={<SettingOutlined />}
+                icon={<SettingOutlined style={{ color: 'rgba(255,255,255,0.7)' }} />}
               />
             </Dropdown>
-            
+
             <Tooltip title={isExpanded ? 'Contraer' : 'Expandir'}>
               <Button
                 type="text"
                 size="small"
-                icon={isExpanded ? <CompressOutlined /> : <ExpandOutlined />}
+                icon={isExpanded
+                  ? <CompressOutlined style={{ color: 'rgba(255,255,255,0.7)' }} />
+                  : <ExpandOutlined style={{ color: 'rgba(255,255,255,0.7)' }} />}
                 onClick={handleToggleExpansion}
               />
             </Tooltip>
@@ -1111,23 +1116,24 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
               unCheckedChildren={<DisconnectOutlined />}
             />
             
-            <Badge 
+            <Badge
               status={
                 connectionStatus === 'connected' ? 'success' :
                 connectionStatus.includes('reconnecting') ? 'processing' :
                 connectionStatus === 'http-ready' || connectionStatus.startsWith('http-fallback') ? 'default' : 'error'
               }
               text={
-                connectionStatus === 'connected' ? 'WS' :
-                connectionStatus.includes('reconnecting') ? `Recon` :
-                connectionStatus === 'http-ready' || connectionStatus.startsWith('http-fallback') ? 'HTTP' : 'Error'
+                <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 9 }}>
+                  {connectionStatus === 'connected' ? 'WS' :
+                   connectionStatus.includes('reconnecting') ? 'Recon' :
+                   connectionStatus === 'http-ready' || connectionStatus.startsWith('http-fallback') ? 'HTTP' : 'Error'}
+                </span>
               }
-              style={{ fontSize: 9 }}
             />
 
             {securityFeatures.length > 0 && (
               <Tooltip title={`Seguridad activa: ${securityFeatures.join(', ')}`}>
-                <SecurityScanOutlined style={{ color: '#52c41a', fontSize: 14 }} />
+                <SecurityScanOutlined style={{ color: '#CC66FF', fontSize: 14 }} />
               </Tooltip>
             )}
           </div>

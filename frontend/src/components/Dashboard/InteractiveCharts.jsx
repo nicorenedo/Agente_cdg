@@ -25,6 +25,7 @@ import {
   Alert,
   Empty,
   Spin,
+  Skeleton,
   App
 } from 'antd';
 import {
@@ -198,6 +199,17 @@ const InteractiveCharts = ({
   const [chartConfigs, setChartConfigs] = useState({});
   const [dynamicChartData, setDynamicChartData] = useState(null);
   const [dynamicChartConfig, setDynamicChartConfig] = useState(null);
+
+  // Inject tab content transition CSS once
+  useEffect(() => {
+    if (!document.getElementById('ic-tab-transitions')) {
+      const s = document.createElement('style');
+      s.id = 'ic-tab-transitions';
+      s.textContent = `.ant-tabs-tabpane { animation: ic-fade-in 0.2s ease; }
+@keyframes ic-fade-in { from { opacity: 0; } to { opacity: 1; } }`;
+      document.head.appendChild(s);
+    }
+  }, []);
 
   const abortControllers = useRef({});
   const loadedCharts = useRef(new Set());
@@ -672,14 +684,14 @@ const InteractiveCharts = ({
         }
         style={{
           height: height + 80,
-          boxShadow: '0 2px 8px rgba(27, 94, 85, 0.1)',
+          boxShadow: '0 2px 8px rgba(161, 0, 255, 0.08)',
           borderRadius: 8
         }}
         styles={{ body: { height, padding: 16 } }}
       >
         {loading && (
-          <div style={{ height, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <Spin size="large" tip="Cargando datos..." />
+          <div style={{ height, padding: '16px 8px' }}>
+            <Skeleton active paragraph={{ rows: 6 }} title={false} />
           </div>
         )}
 
