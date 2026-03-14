@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { motion } from 'framer-motion';
 import {
   Card,
   Row,
@@ -728,30 +729,36 @@ const InteractiveCharts = ({
         </Space>
       ),
       children: dynamicChartData ? (
-        <Card
-          title={
-            <Space>
-              <LineChartOutlined />
-              Gráfico generado por lenguaje natural
-            </Space>
-          }
-          extra={
-            <Button
-              size="small"
-              onClick={() => {
-                setDynamicChartData(null);
-                setDynamicChartConfig(null);
-                setActiveTab('preset1');
-              }}
-            >
-              Limpiar
-            </Button>
-          }
-          style={{ height: height + 80 }}
-          styles={{ body: { height, padding: 16 } }}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4 }}
         >
-          {renderChart(dynamicChartData, dynamicChartConfig, 'dynamic')}
-        </Card>
+          <Card
+            title={
+              <Space>
+                <LineChartOutlined />
+                Gráfico generado por lenguaje natural
+              </Space>
+            }
+            extra={
+              <Button
+                size="small"
+                onClick={() => {
+                  setDynamicChartData(null);
+                  setDynamicChartConfig(null);
+                  setActiveTab('preset1');
+                }}
+              >
+                Limpiar
+              </Button>
+            }
+            style={{ height: height + 80 }}
+            styles={{ body: { height, padding: 16 } }}
+          >
+            {renderChart(dynamicChartData, dynamicChartConfig, 'dynamic')}
+          </Card>
+        </motion.div>
       ) : (
         <Card style={{ height: height + 80 }}>
           <Empty

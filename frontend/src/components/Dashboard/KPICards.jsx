@@ -19,6 +19,7 @@ import {
   ContainerOutlined,
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
+import { motion } from 'framer-motion';
 import api from '../../services/api';
 import theme from '../../styles/theme';
 import ErrorState from '../common/ErrorState';
@@ -759,19 +760,27 @@ const KPICards = ({
           ].includes(kpi.key);
 
 
+          const index = kpisData.indexOf(kpi);
           return (
-            <Col 
-              key={kpi.key} 
-              xs={24} 
-              sm={12} 
+            <Col
+              key={kpi.key}
+              xs={24}
+              sm={12}
               lg={6}
             >
-              <KPICard
-                kpi={kpi}
-                config={config}
-                filterKey={kpi.key}
-                showFilter={showFilter}
-              />
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.1 }}
+                style={{ height: '100%' }}
+              >
+                <KPICard
+                  kpi={kpi}
+                  config={config}
+                  filterKey={kpi.key}
+                  showFilter={showFilter}
+                />
+              </motion.div>
             </Col>
           );
         })}
