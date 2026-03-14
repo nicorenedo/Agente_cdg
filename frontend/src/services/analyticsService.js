@@ -105,7 +105,7 @@ const PIVOTABLE_CONFIG = Object.freeze({
       label: 'Contratos',
       defaultValue: 0,
       format: '0,0',
-      color: '#22c55e',
+      color: '#A100FF',
       endpoints: {
         gestor: 'basic.contractsByGestor',
         centro: 'basic.contractsByCentro', 
@@ -118,7 +118,7 @@ const PIVOTABLE_CONFIG = Object.freeze({
       label: 'Clientes',
       defaultValue: 0,
       format: '0,0',
-      color: '#3b82f6',
+      color: '#CC66FF',
       endpoints: {
         gestor: 'basic.clientesByGestor',
         centro: 'basic.clientesByCentro',
@@ -129,7 +129,7 @@ const PIVOTABLE_CONFIG = Object.freeze({
       label: 'ROE (%)',
       defaultValue: 0,
       format: '0.00%',
-      color: '#f59e0b',
+      color: '#5500AA',
       endpoints: {
         gestor: 'kpis.gestorROE',
         centro: 'kpis.centroFinancieros',
@@ -140,7 +140,7 @@ const PIVOTABLE_CONFIG = Object.freeze({
       label: 'Margen Neto (%)',
       defaultValue: 0,
       format: '0.00%',
-      color: '#ef4444',
+      color: '#7B00CC',
       endpoints: {
         gestor: 'comparatives.gestoresMargen',
         centro: 'comparatives.centrosMargen',
@@ -153,7 +153,7 @@ const PIVOTABLE_CONFIG = Object.freeze({
       label: 'Ingresos (€)',
       defaultValue: 0,
       format: '€0,0',
-      color: '#10b981',
+      color: '#A100FF',
       endpoints: {
         gestor: 'analytics.gestorMetricasCompletas',
         centro: 'analytics.centroMetricas',
@@ -166,7 +166,7 @@ const PIVOTABLE_CONFIG = Object.freeze({
       label: 'Incentivos (€)',
       defaultValue: 0,
       format: '€0,0',
-      color: '#8b5cf6',
+      color: '#E600C8',
       endpoints: {
         gestor: 'incentives.gestorDetalle',
         centro: 'incentives.centroTotal',
@@ -287,7 +287,7 @@ async function getSegmentInfo() {
     
     if (catalogsData?.segmentos && Array.isArray(catalogsData.segmentos)) {
       const segmentMap = {};
-      const colors = ['#1890ff', '#722ed1', '#13c2c2', '#52c41a', '#faad14'];
+      const colors = ['#A100FF', '#7B00CC', '#CC66FF', '#5500AA', '#E600C8'];
       
       catalogsData.segmentos.forEach((segment, index) => {
         const segmentId = segment.SEGMENTO_ID || segment.segmento_id;
@@ -315,9 +315,9 @@ async function getSegmentInfo() {
   // Fallback estático solo si falla la obtención dinámica
   const fallbackSegments = {
     'N10101': { nombre: 'Banca Minorista', color: '#1890ff' },
-    'N10102': { nombre: 'Banca Privada', color: '#722ed1' },
-    'N10103': { nombre: 'Banca de Empresas', color: '#13c2c2' },
-    'N10104': { nombre: 'Banca Personal', color: '#52c41a' },
+    'N10102': { nombre: 'Banca Privada', color: '#7B00CC' },
+    'N10103': { nombre: 'Banca de Empresas', color: '#CC66FF' },
+    'N10104': { nombre: 'Banca Personal', color: '#5500AA' },
     'N20301': { nombre: 'Fondos', color: '#faad14' }
   };
   
@@ -2041,13 +2041,8 @@ function transformPivotableData(rawData, context) {
     values = [0];
   }
 
-  // Generar colores basados en la métrica
-  const colors = values.map((_, index) => {
-    const baseColor = metricConfig.color;
-    // Variaciones de opacity para múltiples elementos
-    const opacity = 1 - (index * 0.1);
-    return `${baseColor}${Math.floor(opacity * 255).toString(16).padStart(2, '0')}`;
-  });
+  // Colores desde la paleta Accenture (cycling sobre todos los elementos)
+  const colors = values.map((_, index) => ACCENTURE_CHART_PALETTE[index % ACCENTURE_CHART_PALETTE.length]);
 
   const transformed = {
     labels,
@@ -2144,7 +2139,7 @@ function generateMockPivotableChart(metric, dimension, chartType, options = {}) 
     datasets: [{
       label: metricConfig?.label || metric,
       data: adjustedValues,
-      backgroundColor: metricConfig?.color || '#22c55e',
+      backgroundColor: adjustedValues.map((_, i) => ACCENTURE_CHART_PALETTE[i % ACCENTURE_CHART_PALETTE.length]),
       borderRadius: 4,
     }],
     raw: mock.labels.map((label, idx) => ({
@@ -2874,16 +2869,16 @@ function transformPriceComparison(data = {}, options = {}) {
       {
         label: "Precio Estándar",
         data: sortedData.map(item => item.precio_std),
-        backgroundColor: "rgba(25, 124, 99, 1)",
-        borderColor: "rgba(25, 124, 99, 1)",
+        backgroundColor: "#94a3b8",
+        borderColor: "#94a3b8",
         borderWidth: 2,
         borderRadius: 4,
       },
       {
         label: "Precio Real",
         data: sortedData.map(item => item.precio_real),
-        backgroundColor: "rgba(20, 70, 50, 1)",
-        borderColor: "rgba(20, 70, 50, 1)",
+        backgroundColor: "#7B00CC",
+        borderColor: "#7B00CC",
         borderWidth: 2,
         borderRadius: 4,
       }
