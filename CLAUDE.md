@@ -78,7 +78,31 @@
 
     ---
 
-    ## 5. REGLAS DE NEGOCIO CRÍTICAS
+    ## 5. MODELO TEMPORAL — YTD (Year-to-Date)
+
+    **Lógica definitiva de la POC:** todos los KPIs son **acumulados desde el inicio del año hasta el período seleccionado**.
+
+    | Período | Filtro SQL | Contratos activos |
+    |---|---|---|
+    | sep-2025 | `FECHA <= '2025-09-30'` | 216 |
+    | oct-2025 | `FECHA <= '2025-10-31'` | 220 (incluye sep+oct) |
+
+    **Fórmula SQL estándar:** `FECHA <= date(? || '-01', '+1 month', '-1 day')` donde `?` = `'YYYY-MM'`
+
+    **Consecuencias:**
+    - Ingresos oct YTD (€1,192k) siempre > sep YTD (€599k) ✓
+    - ROE oct 36.35% ≈ ROE sep 35.94% (acumulación estable) ✓
+    - Gastos oct YTD incluye fondeo €180k + provisión €45k de oct **y** sep
+    - `get_evolucion_gestores_sep_oct`: sep = `FECHA <= '2025-09-30'` / oct = `FECHA <= '2025-10-31'`
+
+    **Excepciones NO YTD (mantienen filtro mensual):**
+    - `strftime('%Y-%m', FECHA_ALTA) = ?` → contratos_nuevos_periodo (métrica delta mensual)
+    - `strftime(...)` en GROUP BY / SELECT as periodo (proyecciones de tendencia)
+    - Queries de tendencia multi-mes con rangos `>= / <=` fijos (datos históricos)
+
+    ---
+
+    ## 6. REGLAS DE NEGOCIO CRÍTICAS
 
     **5.1 Redistribución gastos centrales:**
     `Gasto_i = Gasto_Central_Total × (Contratos_Centro_i / Total_Contratos_Finalistas)`
@@ -95,7 +119,7 @@
 
     ---
 
-    ## 6. CONTROL DE ACCESO
+    ## 7. CONTROL DE ACCESO
 
     **Gestor:** ✅ Su cartera, KPIs propios, precios STD, comparativa anónima vs centro. ❌ Otros gestores, precios REAL. Filtrar siempre `WHERE GESTOR_ID = {gestor_id}`.
     **CDG/Dirección:** ✅ Acceso completo sin restricciones.
@@ -215,10 +239,12 @@
     | Total contratos | 220 oct / 216 sep (FECHA_ALTA filtra 4 contratos nuevos S16) |
     | Total movimientos | ~2,900+ |
     | Gastos centrales sep / oct | -€41,103 / -€271,251 (incluye fondeo 660001 -€180k) |
-    | ROE grupo oct-2025 | **36.77%** (ingresos €592,464 / gastos -€374,623 / margen €217,841) |
-    | Gestor 1 oct margen | **44.55%** (ingresos €32,238 / gastos directos -€3,079 / redistribuidos -€14,795) |
-    | Avg Privada oct | €37,656 (2.01× Minorista €19,697) |
-    | Modelo fábrica oct | cedido gestora €116,857 (83.98%), retenido banco €22,294 (16.02%) |
+    | **Modelo temporal** | **YTD** — FECHA <= date(?||'-01','+1 month','-1 day') |
+    | Sep YTD ingresos | €599,759 / ROE 35.94% / 216 contratos |
+    | Oct YTD ingresos | **€1,192,223** / ROE **36.35%** / 220 contratos (oct>sep ✓) |
+    | Gestor 1 oct YTD | ingresos €65,209 / margen **46.96%** |
+    | Modelo fábrica oct YTD | cedido €234,783 (84.12%), retenido €44,588, desv -0.88% vs 85% |
+    | Gastos centrales YTD | sep -€278,410 / oct -€549,661 |
     | Margen por segmento oct | Privada 91.8% > Minorista 85.7% > Empresas 80.9% > Personal 72.4% > Fondos 66.0% |
     | Evolucion gestores oct | 10 mejora / 8 estable / 12 retroceso (umbral ±5%) |
     | Outlier aceptado | G8 Pablo Moreno (-57.4% sep): fondos lumpy |
@@ -246,6 +272,13 @@
     - Verificados todos los endpoints DireccionView en 8004: 9/9 OK ✅
     - Valores de referencia confirmados: gestor 1 margen 44.55% ✅, ROE grupo 36.77% ✅, fábrica cedida 83.98% ✅
 
+    **Sesión 22 — completada (commits `d66933c`, `510bb0a`, `95b9d23`):**
+    - Bug 1 ✅: `PercentageOutlined` → `EuroCircleOutlined` en FabricaModelSection cedido gestora
+    - Bug 2 ✅: backend en puerto 8007 con código YTD; frontend/.env → 8007
+    - YTD backend ✅: todos los filtros `strftime('%Y-%m',FECHA)=?` → `FECHA<=date(?||'-01','+1 month','-1 day')` en 6 archivos de queries + main.py `/analytics/fabrica`. Excepciones respetadas.
+    - YTD labels ✅: KPICards `ROE Grupo YTD`, `Ingresos YTD`, `Contratos Activos`; TopBar badge "Acumulado YTD"
+    - Nueva sección 5 en CLAUDE.md documenta modelo YTD
+
     **Sesión 21 — completada (commit `fe77403`):**
     - FIX1: `total_contratos_activos` filtra por FECHA_ALTA≤último día del período. BD: 29 contratos con FECHA_ALTA incorrecto en oct → movidos a `2025-09-01`. Resultado: sep=216 ✓, oct=220 ✓.
     - FIX2 (análisis): ingresos sep €599,759 > oct €592,464 (1.22%, €7k). Aceptable para demo. Causa: ajuste narrativo P7 sesión 16. No se modifica BD.
@@ -256,8 +289,8 @@
     **Para iniciar el sistema (IMPORTANTE):**
     ```bash
     # Backend (usar cualquier puerto libre != 8000)
-    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8006
-    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8006 en frontend/.env)
+    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8007
+    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8007 en frontend/.env)
     cd frontend && npm start
     ```
     Si puerto 8000 queda libre (tras reinicio), cambiar `.env` a 8000 y arrancar en 8000.
