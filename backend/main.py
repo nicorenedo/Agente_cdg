@@ -539,7 +539,11 @@ async def chat_message(req: ChatRequest):
         permission_manager = PermissionManager()
         
         extracted_gestor_id = permission_manager.extract_gestor_id_from_message(req.message, req.context)
-        user_role = permission_manager.determine_user_role(req.user_id, req.context)
+        # Merge req.user_role into context so determine_user_role can use it
+        effective_context = dict(req.context) if req.context else {}
+        if req.user_role:
+            effective_context['user_role'] = req.user_role
+        user_role = permission_manager.determine_user_role(req.user_id, effective_context)
         
         # 🚨 VALIDACIÓN ESTRICTA DE CONFIDENCIALIDAD
         if extracted_gestor_id is not None:
@@ -577,7 +581,7 @@ async def chat_message(req: ChatRequest):
             periodo=req.periodo,
             include_charts=req.include_charts,
             include_recommendations=req.include_recommendations,
-            context=req.context,
+            context=effective_context,
             current_chart_config=req.current_chart_config
         )
         
@@ -2628,12 +2632,12 @@ def charts_gestores_ranking(
                         "center": row.get("DESC_CENTRO", ""),
                         "original_data": row,
                     }
-                    for row in rows[:15]
+                    for row in rows
                     if (row.get(data_field, 0) or 0) != 0
                 ],
                 key=lambda x: x["value"],
                 reverse=True,
-            )
+            )[:15]
             chart = {
                 "id": f"gestores_ranking_{metric}_{periodo}",
                 "type": chart_type,
@@ -2660,12 +2664,12 @@ def charts_gestores_ranking(
                         "center": row.get("DESC_CENTRO", ""),
                         "original_data": row,
                     }
-                    for row in rows[:15]
+                    for row in rows
                     if (row.get("roe", 0) or 0) != 0
                 ],
                 key=lambda x: x["value"],
                 reverse=True,
-            )
+            )[:15]
             chart = {
                 "id": f"gestores_ranking_roe_{periodo}",
                 "type": chart_type,
