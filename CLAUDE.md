@@ -622,6 +622,33 @@ Pasar `userRole` a `chartsAPI.pivot()`. El backend devuelve `dimension: "gestor"
 - Modelo fábrica: ratio 5.6667 exacto en todos los 125 pares contrato/período
 - **1 outlier narrativo aceptado:** G8 (Pablo Moreno, -57.4%) — actividad de fondos lumpy en sep, no corregible sin romper P6
 
+**Correcciones de calidad adicionales (sesión 17 — completado):**
+
+**C1 — `_get_total_contratos_finalistas()` hardcoded 216:**
+- `basic_queries.py` y `gestor_queries.py`: ambas funciones usan `COUNT(mc.CONTRATO_ID)` dinámico — sin cambio necesario
+- `cdg_agent.py` líneas 883+885: fallback hardcodeado `216` → `220` (commit `cd63e7e`)
+- `system_prompts.py`: 4 ocurrencias "216 contratos" → "220 contratos" (mismo commit)
+
+**C2 — Cuenta 66xxxx en filtro de gastos directos:**
+- Verificado: 669001 tiene 43 movimientos, todos con CONTRATO_ID IS NULL → ya incluidos en redistribución central
+- Filtro `SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')` para gastos directos es CORRECTO — sin cambio
+- Los nuevos 660001 y 690002 insertados en C4 también tienen CONTRATO_ID IS NULL → se redistribuyen correctamente
+
+**C3 — Redistribución de contratos por gestor:**
+- Análisis: distribución actual 4-12 contratos, avg 7.33, StdDev 2.39
+- Conclusión: distribución aceptable, riesgo alto (tocar P6/P7), beneficio bajo → **no se ejecutó**
+
+**C4 — ROE grupo consolidado (4 INSERTs + commit `97fcaf8`):**
+- Antes: ROE 75% (implausible — gastos centrales insuficientes)
+- Insertados IDs 2797-2800: 660001 Coste fondeo (-185k sep / -180k oct, CR0014) + 690002 Provisión riesgo (-46k sep / -45k oct, CR0029)
+- Después: ROE oct **36.77%** (target ~37%) ✓
+- Margen por segmento oct (con gastos directos): Privada 91.8% > Minorista 85.7% > Empresas 80.9% > Personal 72.4% > Fondos 66.0% ✓ (todos positivos)
+
+**Valores de referencia (post-sesión-17):**
+- ROE grupo oct-2025: **36.77%** (ingresos €592,464 / gastos -€374,623 / margen €217,841)
+- Contratos: avg 7.33/gestor, StdDev 2.39, rango [4, 12], total 220
+- Margen por segmento: Privada lidera (91.8%), todos positivos
+
 ### ⏭️ Próximo paso exacto al retomar
 
 **Siguiente: prueba visual ambos dashboards con datos corregidos**
@@ -650,4 +677,4 @@ Pasar `userRole` a `chartsAPI.pivot()`. El backend devuelve `dimension: "gestor"
 - `GET /basic/precios-std` y `GET /prices/comparison` — devuelven 404; no se usan en ningún flujo activo
 - `analyticsService.js:2857` — `.replace('Fondo Banca March', 'Fondos CDG')` mantiene el string del nombre real en BD (no es UI-visible, no se toca)
 - `BM_CONTABILIDAD_CDG_backup_20260315.db` — backup de la BD pre-corrección, mantener hasta confirmar que el sistema arranca correctamente
-- `basic_queries.py` línea con `_get_total_contratos_finalistas()`: el denominador hardcodeado era 216; ahora hay 220 contratos — revisar si esta función usa COUNT(*) dinámico o literal hardcodeado
+- ~~`basic_queries.py` línea con `_get_total_contratos_finalistas()`: el denominador hardcodeado era 216~~ → resuelto en sesión 17 (C1)
