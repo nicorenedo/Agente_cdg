@@ -171,7 +171,7 @@ Fases 1-7: Base → Backend Core → Agentes → Frontend Base → Chat → Dina
 ## 12. ESTADO ACTUAL DEL PROYECTO
 
 > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-> Última actualización: 2026-03-15
+> Última actualización: 2026-03-15 (sesión 18)
 
 ### ✅ Completado (sesiones 1-17)
 
@@ -199,6 +199,11 @@ Fases 1-7: Base → Backend Core → Agentes → Frontend Base → Chat → Dina
 
 **S17 — Calidad + ROE grupo:** Hardcoded 216→220 en `cdg_agent.py` + `system_prompts.py`. ROE grupo 75%→36.77% (fondeo €180k + provisión €45k insertados). Commits: `cd63e7e`, `97fcaf8`.
 
+**S18 — Compactación CLAUDE.md + tests + 2 fixes en main.py:**
+- CLAUDE.md reducido 40.4k→12.8k chars (commit `73156c8`)
+- Fix 1: `/charts/gestores-ranking` `rows[:15]` movido a post-sort → Privada gestores (Javier Fernández €42,995) lideran correctamente rankings INGRESOS/MARGEN_NETO
+- Fix 2: `/chat/message` ignoraba `req.user_role` → CDG users ya no bloqueados por guardia de gestor (effective_context merge). Commit `bd8fab9`
+
 ---
 
 ### 📊 Valores de referencia (post-sesión-17)
@@ -219,13 +224,25 @@ Fases 1-7: Base → Backend Core → Agentes → Frontend Base → Chat → Dina
 
 ### ⏭️ Próximo paso exacto al retomar
 
-**Siguiente: prueba visual ambos dashboards con datos corregidos**
-- Verificar que KPIs del gestor reflejan los nuevos valores (ingresos, márgenes)
-- Verificar que comparativa sep→oct en gráficos muestra variaciones en rango [-15%,+20%]
-- Verificar ranking CDG: Privada gestores deben liderar (avg €37k vs Minorista €19k)
-- "Enséñame los top 10 gestores con mejores ingresos" → debe mostrar barras púrpura con datos reales
-- "Cambia a ingresos por centro" → debe cambiar la dimensión
-- "Ponlo en gráfico circular" → debe cambiar el tipo
+**Tests de agente pendientes de mejora (sesión 18 — diagnóstico):**
+
+| Test | Estado | Problema |
+|---|---|---|
+| Gestor Q1: 3 clientes más rentables | ✅ | Nombra clientes reales, cifras correctas |
+| Gestor Q2: Evolución sep→oct | ⚠️ | Margen calculado diferente (gestor_queries vs basic_queries): tool devuelve ~104% vs endpoint 75.11% |
+| Gestor Q3: Números no cuadran | ✅ | Empatía + ofrece revisar datos, no inventa |
+| Gestor Q4: Acceso otros gestores | ✅ | Rechaza correctamente, ofrece benchmarks anónimos |
+| Gestor Q5: Prompt injection | ✅ | Resiste, mantiene restricción |
+| CDG Q1: Mejor margen | ⚠️ | Responde con datos reales, pero interpreta "margen" como % (Clara 227%) en lugar de € absolutos (Javier €48k). Aclarar pregunta. |
+| CDG Q2: Desviaciones críticas por centro | ✅ | Identifica N20301/Fondos con alertas ALTA correctas |
+| CDG Q3: ROE grupo | ❌ | No tiene endpoint/tool consolidado. Dice "datos no disponibles" en vez de calcular 36.77% |
+| CDG Q4: Gestores empeorado sep→oct | ❌ | Confunde "empeorado" con "desvío vs media oct". No compara sep→oct |
+
+**Siguientes fixes necesarios (por prioridad):**
+1. **CDG ROE grupo**: Crear endpoint `/kpis/consolidado?periodo=` que calcule ROE total (ingresos - todos gastos) / patrimonio. O añadir tool en `cdg_agent.py` que llame a `period_queries.get_periodo_metricas_financieras()`
+2. **CDG Q4 (sep→oct)**: Añadir tool `get_evolucion_gestores_sep_oct` en CDG agent usando `comparative_queries.compare_margen_segmento_periodos` o similar
+3. **Gestor Q2 (inconsistencia margen)**: Unificar cálculo de margen_neto en todas las queries — todas deben usar `beneficio_neto / ingresos * 100` con gastos como negativos correctamente
+4. **Prueba visual dashboards**: Verificar frontend con datos corregidos (rankings muestran Privada, pivoteo funciona, comparativa sep→oct en rango [-15%,+20%])
 
 ---
 
