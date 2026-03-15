@@ -319,7 +319,7 @@ llm = AzureChatOpenAI(
 ## 12. ESTADO ACTUAL DEL PROYECTO
 
 > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-> Última actualización: 2026-03-14
+> Última actualización: 2026-03-15
 
 ### ✅ Completado
 
@@ -597,15 +597,40 @@ Pasar `userRole` a `chartsAPI.pivot()`. El backend devuelve `dimension: "gestor"
 
 **Commit:** `4c90fc3`
 
+**Corrección de datos BD — auditoría y normalización (sesiones 15-16 — completado):**
+
+**Sesión 15 — Auditoría read-only:**
+- Identificados 4 problemas críticos: gastos centrales sep 12× oct, Bilbao gastos=0, Privada<Minorista, Javier Fernández margen -201%
+- Identificados 2 menores: ratio fábrica 5.40 vs 5.667 (14 huérfanos), cuenta 66 excluida del filtro
+- Backup creado antes de cualquier cambio: `BM_CONTABILIDAD_CDG_backup_20260315.db`
+
+**Sesión 16 — Corrección ejecutada (7/7 checks OK):**
+- **P1 (175 UPDATEs):** Gastos centrales sep escalados ×0.07534 → sep -€41,103 vs oct -€45,677 (ratio 0.90 ✓)
+- **P2 (44 INSERTs):** Gastos directos 620001 añadidos a gestores 27/28/29 en sep+oct (ratio 15% ✓)
+- **P4 (3 INSERTs):** Movimientos huérfanos de Javier Fernández oct-2025 restaurados → margen +€39,942 ✓
+- **P5 (370 UPDATEs + 4 contratos nuevos):** Ingresos Banca Privada escalados → avg €37,656 = 2.01× Minorista; 4 contratos nuevos oct-2025 (1076 hip/G6, 2070 dep/G16, 2071 dep/G22, 3073 fondo/G5)
+- **P6 (107 INSERTs+UPDATEs):** 125 pares 760024/760025 corregidos a ratio exacto 5.6667 ±0.02 ✓
+- **P7 (335 UPDATEs):** Narrativa sep→oct ajustada → 96.7% gestores en rango [-15%,+20%]
+- **Commit:** `25ba3c5`
+
+**Valores de referencia actualizados (post-corrección):**
+- Total contratos: 220 (antes 216) — 4 nuevos en oct-2025
+- Total movimientos: ~2,900+ (antes 2,100)
+- Gastos centrales sep: -€41,103 | oct: -€45,677
+- Avg Privada oct: €37,656 (2.01× Minorista €19,697)
+- Gestor 1 (Antonio Rodríguez, oct): ingresos ~€32,238, gastos directos ~€3,079 (referencia de validación)
+- Modelo fábrica: ratio 5.6667 exacto en todos los 125 pares contrato/período
+- **1 outlier narrativo aceptado:** G8 (Pablo Moreno, -57.4%) — actividad de fondos lumpy en sep, no corregible sin romper P6
+
 ### ⏭️ Próximo paso exacto al retomar
 
-**Siguiente: prueba visual ambos dashboards**
+**Siguiente: prueba visual ambos dashboards con datos corregidos**
+- Verificar que KPIs del gestor reflejan los nuevos valores (ingresos, márgenes)
+- Verificar que comparativa sep→oct en gráficos muestra variaciones en rango [-15%,+20%]
+- Verificar ranking CDG: Privada gestores deben liderar (avg €37k vs Minorista €19k)
 - "Enséñame los top 10 gestores con mejores ingresos" → debe mostrar barras púrpura con datos reales
 - "Cambia a ingresos por centro" → debe cambiar la dimensión
 - "Ponlo en gráfico circular" → debe cambiar el tipo
-- "Muéstrame el margen por gestor" → MARGEN_NETO por gestor
-- Verificar botón "Volver" en DireccionView (header + floatbutton)
-- Verificar animación stagger en KPI cards
 
 **Rebrand a identidad Accenture (sesión 11 — completado):**
 - Producto renombrado: "Banca March CDG" → **"CDG Intelligence"** (genérico, adaptable a cualquier banco cliente)
@@ -624,3 +649,5 @@ Pasar `userRole` a `chartsAPI.pivot()`. El backend devuelve `dimension: "gestor"
 - `backend/src/utils/initial_agent.py` — usa `openai` SDK directo en lugar de LangChain, pendiente de reescribir (no bloquea la POC)
 - `GET /basic/precios-std` y `GET /prices/comparison` — devuelven 404; no se usan en ningún flujo activo
 - `analyticsService.js:2857` — `.replace('Fondo Banca March', 'Fondos CDG')` mantiene el string del nombre real en BD (no es UI-visible, no se toca)
+- `BM_CONTABILIDAD_CDG_backup_20260315.db` — backup de la BD pre-corrección, mantener hasta confirmar que el sistema arranca correctamente
+- `basic_queries.py` línea con `_get_total_contratos_finalistas()`: el denominador hardcodeado era 216; ahora hay 220 contratos — revisar si esta función usa COUNT(*) dinámico o literal hardcodeado
