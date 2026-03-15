@@ -1945,6 +1945,93 @@ def analytics_segmento_metricas(segmento_id: str, periodo: str = Query("2025-10"
     except Exception as e:
         return ok({"error": str(e)}, meta={"note": "analytics_segmento_metricas_error"})
 
+@app.get("/analytics/fabrica", tags=["Analytics"], response_model=ApiResponse)
+def analytics_fabrica(periodo: str = Query("2025-10", description="YYYY-MM o 'all' para ambos períodos")):
+    """
+    Modelo Fábrica — Fondos de Inversión.
+    Desglose de importe cedido a gestora (760025) vs retenido por banco (760024).
+    Solo visible para CDG/Dirección.
+    """
+    try:
+        from database.db_connection import execute_query as eq
+
+        def _fondo_stats(per):
+            q = """
+                SELECT
+                    COALESCE(SUM(CASE WHEN CUENTA_ID = '760025' THEN IMPORTE ELSE 0 END), 0) as cedido_gestora,
+                    COALESCE(SUM(CASE WHEN CUENTA_ID = '760024' THEN IMPORTE ELSE 0 END), 0) as retenido_banco,
+                    COUNT(DISTINCT CASE WHEN CUENTA_ID IN ('760024','760025') THEN CONTRATO_ID END) as contratos_fondo,
+                    COUNT(CASE WHEN CUENTA_ID = '760025' THEN 1 END) as movimientos_gestora,
+                    COUNT(CASE WHEN CUENTA_ID = '760024' THEN 1 END) as movimientos_banco
+                FROM MOVIMIENTOS_CONTRATOS
+                WHERE CUENTA_ID IN ('760024', '760025')
+                  AND strftime('%Y-%m', FECHA) = ?
+            """
+            r = eq(q, (per,), fetch_type="one")
+            if not r:
+                return {"cedido_gestora": 0, "retenido_banco": 0, "contratos_fondo": 0, "ratio_pct": 0}
+            cedido = float(r["cedido_gestora"] or 0)
+            retenido = float(r["retenido_banco"] or 0)
+            total = cedido + retenido
+            ratio = round(cedido / total * 100, 2) if total > 0 else 0.0
+            return {
+                "periodo": per,
+                "cedido_gestora": round(cedido, 2),
+                "retenido_banco": round(retenido, 2),
+                "total_fondo": round(total, 2),
+                "ratio_gestora_pct": ratio,
+                "ratio_banco_pct": round(100 - ratio, 2),
+                "contratos_fondo": r["contratos_fondo"] or 0,
+            }
+
+        # Desglose por contrato (oct por defecto)
+        q_contratos = """
+            SELECT
+                mov.CONTRATO_ID,
+                mc.FECHA_ALTA,
+                g.DESC_GESTOR,
+                SUM(CASE WHEN mov.CUENTA_ID = '760025' THEN mov.IMPORTE ELSE 0 END) as cedido_gestora,
+                SUM(CASE WHEN mov.CUENTA_ID = '760024' THEN mov.IMPORTE ELSE 0 END) as retenido_banco
+            FROM MOVIMIENTOS_CONTRATOS mov
+            JOIN MAESTRO_CONTRATOS mc ON mov.CONTRATO_ID = mc.CONTRATO_ID
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            WHERE mov.CUENTA_ID IN ('760024', '760025')
+              AND strftime('%Y-%m', mov.FECHA) = ?
+            GROUP BY mov.CONTRATO_ID, mc.FECHA_ALTA, g.DESC_GESTOR
+            ORDER BY cedido_gestora DESC
+            LIMIT 50
+        """
+        contratos_detail = eq(q_contratos, (periodo,)) or []
+
+        stats_oct = _fondo_stats("2025-10")
+        stats_sep = _fondo_stats("2025-09")
+
+        # Variación sep→oct
+        variacion_cedido_pct = None
+        if stats_sep["cedido_gestora"] > 0:
+            variacion_cedido_pct = round(
+                (stats_oct["cedido_gestora"] - stats_sep["cedido_gestora"]) / stats_sep["cedido_gestora"] * 100, 2
+            )
+
+        return ok({
+            "periodo_solicitado": periodo,
+            "oct_2025": stats_oct,
+            "sep_2025": stats_sep,
+            "variacion_cedido_pct": variacion_cedido_pct,
+            "desviacion_ratio_vs_target": round(stats_oct["ratio_gestora_pct"] - 85.0, 2),
+            "contratos_detalle": [
+                {
+                    "contrato_id": r["CONTRATO_ID"],
+                    "gestor": r["DESC_GESTOR"],
+                    "cedido_gestora": round(float(r["cedido_gestora"] or 0), 2),
+                    "retenido_banco": round(float(r["retenido_banco"] or 0), 2),
+                }
+                for r in contratos_detail
+            ],
+        }, meta={"periodo": periodo, "source": "movimientos_contratos_760024_760025"})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "analytics_fabrica_error"})
+
 @app.get("/analytics/gestor/{gestor_id}/metricas-completas", tags=["Analytics"], response_model=ApiResponse)
 def analytics_gestor_metricas_completas(gestor_id: int, periodo: str = Query("2025-10")):
     """Métricas financieras completas de un gestor específico"""
@@ -2414,6 +2501,32 @@ def kpis_gestor(gestor_id: str, periodo: str = Query(..., description="YYYY-MM")
         return ok({"gestor_id": gestor_id, "periodo": periodo, "kpis": row}, meta={"note": "raw enhanced KPIs"})
     except Exception as e:
         return ok({"error": str(e)}, meta={"note": "kpis_gestor_error"})
+
+@app.get("/kpis/consolidado", tags=["KPIs"], response_model=ApiResponse)
+def kpis_consolidado(periodo: str = Query("2025-10", description="YYYY-MM")):
+    """KPIs consolidados del grupo para un período: ingresos, gastos, margen, ROE"""
+    try:
+        res = period_queries.get_periodo_metricas_financieras(periodo)
+        if not res.data:
+            return ok({"error": "Sin datos para el período"}, meta={"periodo": periodo})
+        row = res.data[0]
+        ingresos = row.get("ingresos_periodo", 0) or 0
+        margen_pct = row.get("margen_neto_pct", 0) or 0
+        return ok({
+            "periodo": periodo,
+            "ingresos_totales": round(ingresos, 2),
+            "gastos_directos": round(row.get("gastos_directos", 0) or 0, 2),
+            "gastos_centrales": round(row.get("gastos_centrales", 0) or 0, 2),
+            "gastos_totales": round(row.get("gastos_totales", 0) or 0, 2),
+            "beneficio_neto": round(row.get("beneficio_neto", 0) or 0, 2),
+            "margen_neto_pct": margen_pct,
+            "roe_pct": margen_pct,  # ROE grupo = margen sobre ingresos totales
+            "total_gestores_activos": row.get("total_gestores_activos", 0),
+            "total_contratos_activos": row.get("total_contratos_activos", 0),
+            "total_clientes_activos": row.get("total_clientes_activos", 0),
+        }, meta={"periodo": periodo, "source": "period_queries"})
+    except Exception as e:
+        return ok({"error": str(e)}, meta={"note": "kpis_consolidado_error"})
 
 @app.get("/kpis/gestor/{gestor_id}/evolution", tags=["KPIs"], response_model=ApiResponse)
 def kpis_evolution_range(gestor_id: str, from_period: str = Query(...), to_period: str = Query(...)):

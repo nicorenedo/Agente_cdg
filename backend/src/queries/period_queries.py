@@ -126,7 +126,7 @@ class PeriodQueries:
             COUNT(DISTINCT co.CLIENTE_ID) as total_clientes_activos,
             COUNT(DISTINCT co.CONTRATO_ID) as total_contratos_activos,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_periodo,
-            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','66','68','69')
                               THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
             COUNT(DISTINCT mov.MOVIMIENTO_ID) as total_movimientos
         FROM MAESTRO_GESTORES g
@@ -139,7 +139,7 @@ class PeriodQueries:
         SELECT COALESCE(SUM(IMPORTE), 0) AS total
         FROM MOVIMIENTOS_CONTRATOS
         WHERE CONTRATO_ID IS NULL
-          AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','68','69')
+          AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
           AND strftime('%Y-%m', FECHA) = ?
         """
 
@@ -244,7 +244,7 @@ class PeriodQueries:
             s.DESC_SEGMENTO,
             COUNT(DISTINCT g.GESTOR_ID) as gestores_segmento,
             COUNT(DISTINCT co.CONTRATO_ID) as contratos_segmento,
-            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','66','68','69')
                               THEN mov.IMPORTE ELSE 0 END), 0) as gastos_segmento,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
                               THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_segmento
@@ -262,7 +262,7 @@ class PeriodQueries:
             pr.PRODUCTO_ID,
             pr.DESC_PRODUCTO,
             COUNT(DISTINCT co.CONTRATO_ID) as contratos_producto,
-            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+            COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','66','68','69')
                               THEN mov.IMPORTE ELSE 0 END), 0) as gastos_producto,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
                               THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_producto
@@ -278,7 +278,7 @@ class PeriodQueries:
         SELECT COALESCE(SUM(IMPORTE), 0) AS total
         FROM MOVIMIENTOS_CONTRATOS
         WHERE CONTRATO_ID IS NULL
-          AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','68','69')
+          AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
           AND strftime('%Y-%m', FECHA) = ?
         """
 
@@ -314,10 +314,10 @@ class PeriodQueries:
                 strftime('%Y-%m', FECHA) as periodo,
                 COUNT(DISTINCT CONTRATO_ID) as contratos_activos,
                 COALESCE(SUM(CASE WHEN CUENTA_ID LIKE '76%' THEN IMPORTE ELSE 0 END), 0) as ingresos_periodo,
-                COALESCE(SUM(CASE WHEN SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')
+                COALESCE(SUM(CASE WHEN SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')
                                        AND CONTRATO_ID IS NOT NULL
                                   THEN IMPORTE ELSE 0 END), 0) as gastos_directos,
-                COALESCE(SUM(CASE WHEN SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')
+                COALESCE(SUM(CASE WHEN SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')
                                        AND CONTRATO_ID IS NULL
                                   THEN IMPORTE ELSE 0 END), 0) as gastos_centrales
             FROM MOVIMIENTOS_CONTRATOS

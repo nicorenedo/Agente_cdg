@@ -576,14 +576,14 @@ class BasicQueries:
     # =====================================
 
     def _get_gastos_centrales_periodo(self, periodo: Optional[str]) -> float:
-        """Total de gastos de centros soporte (CONTRATO_ID IS NULL, cuentas 62/64/68/69).
+        """Total de gastos de centros soporte (CONTRATO_ID IS NULL, cuentas 62/64/66/68/69).
         Fuente: MOVIMIENTOS_CONTRATOS. Los importes son negativos por convenio contable."""
         if periodo:
             query = """
             SELECT COALESCE(SUM(IMPORTE), 0) AS total
             FROM MOVIMIENTOS_CONTRATOS
             WHERE CONTRATO_ID IS NULL
-              AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','68','69')
+              AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
               AND strftime('%Y-%m', FECHA) = ?
             """
             result = self.query_executor.execute_query(query, (periodo,), fetch_type="one")
@@ -592,7 +592,7 @@ class BasicQueries:
             SELECT COALESCE(SUM(IMPORTE), 0) AS total
             FROM MOVIMIENTOS_CONTRATOS
             WHERE CONTRATO_ID IS NULL
-              AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','68','69')
+              AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
             """
             result = self.query_executor.execute_query(query, fetch_type="one")
         return float(result["total"]) if result else 0.0

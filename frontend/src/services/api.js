@@ -496,6 +496,10 @@ const analytics = {
   // ✅ NUEVOS: Métricas por Contrato
   contratoDetalleCompleto: (contratoId, cfg) =>
     unwrap(http.get(`/analytics/contrato/${contratoId}/detalle-completo`, cfg)),
+
+  // ✅ Modelo Fábrica (CDG/Dirección only)
+  fabrica: (periodo = "2025-10", cfg) =>
+    unwrap(http.get("/analytics/fabrica", { params: { periodo }, ...cfg })),
 };
 
 // ✅ Data Queries - ACTUALIZADO

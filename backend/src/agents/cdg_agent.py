@@ -298,13 +298,15 @@ except Exception as e:
 class AnalysisType(Enum):
     """Tipos de análisis especializados que maneja el CDG Agent"""
     DEEP_GESTOR_ANALYSIS = "deep_gestor_analysis"
-    COMPARATIVE_PERFORMANCE = "comparative_performance" 
+    COMPARATIVE_PERFORMANCE = "comparative_performance"
     DEVIATION_DETECTION = "deviation_detection"
     INCENTIVE_CALCULATION = "incentive_calculation"
     BUSINESS_INTELLIGENCE = "business_intelligence"
     EXECUTIVE_REPORTING = "executive_reporting"
     PREDICTIVE_ANALYSIS = "predictive_analysis"
     CHART_ADVANCED_GENERATION = "chart_advanced_generation"
+    GLOBAL_KPI = "global_kpi"
+    EVOLUCION_GESTORES = "evolucion_gestores"
 
 @dataclass
 class CDGRequest:
@@ -459,6 +461,23 @@ class CDGAgentV6:
         """
         message_lower = user_message.lower()
 
+        # ROE / KPIs consolidados del grupo (alta prioridad)
+        if any(term in message_lower for term in [
+            'roe', 'rentabilidad global', 'rentabilidad consolidada', 'rentabilidad del grupo',
+            'margen grupo', 'margen global', 'kpis globales', 'kpis consolidado',
+            'resultados globales', 'resultados del grupo', 'resultados consolidado',
+            'consolidado', 'grupo en octubre', 'grupo en septiembre',
+        ]):
+            return AnalysisType.GLOBAL_KPI
+
+        # Evolución sep→oct por gestores
+        if any(term in message_lower for term in [
+            'evoluci', 'mejorado', 'empeorado', 'retrocedido', 'retroceso',
+            'quién mejoró', 'quien mejoró', 'quién empeoró', 'quien empeoró',
+            'sep.*oct', 'septiembre.*octubre', 'variaci', 'cambio mensual',
+        ]):
+            return AnalysisType.EVOLUCION_GESTORES
+
         # Detección de desviaciones (alta prioridad — incluye español)
         if any(term in message_lower for term in [
             'desviaci', 'anomalía', 'outlier', 'alert', 'critical',
@@ -510,7 +529,9 @@ class CDGAgentV6:
             AnalysisType.BUSINESS_INTELLIGENCE: self._business_intelligence_analysis,
             AnalysisType.EXECUTIVE_REPORTING: self._executive_reporting_analysis,
             AnalysisType.PREDICTIVE_ANALYSIS: self._predictive_analysis,
-            AnalysisType.CHART_ADVANCED_GENERATION: self._advanced_chart_generation
+            AnalysisType.CHART_ADVANCED_GENERATION: self._advanced_chart_generation,
+            AnalysisType.GLOBAL_KPI: self._global_kpi_analysis,
+            AnalysisType.EVOLUCION_GESTORES: self._evolucion_gestores_analysis,
         }
         
         handler = handlers.get(analysis_type, self._business_intelligence_analysis)
@@ -751,6 +772,104 @@ class CDGAgentV6:
     
     async def _incentive_calculation_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         return await self._business_intelligence_analysis(request)
+
+    async def _global_kpi_analysis(self, request: CDGRequest) -> Dict[str, Any]:
+        """🎯 KPIs consolidados del grupo: ROE, ingresos totales, margen neto sep vs oct"""
+        try:
+            periodo = request.periodo or '2025-10'
+            results = {}
+            data_sources = []
+
+            try:
+                metricas_oct = period_queries.get_periodo_metricas_financieras('2025-10')
+                metricas_sep = period_queries.get_periodo_metricas_financieras('2025-09')
+                if metricas_oct.data:
+                    oct = metricas_oct.data[0]
+                    results['periodo_actual'] = {
+                        'periodo': '2025-10',
+                        'ingresos_totales': oct.get('ingresos_periodo', 0),
+                        'gastos_directos': oct.get('gastos_directos', 0),
+                        'gastos_centrales': oct.get('gastos_centrales', 0),
+                        'gastos_totales': oct.get('gastos_totales', 0),
+                        'beneficio_neto': oct.get('beneficio_neto', 0),
+                        'margen_neto_pct': oct.get('margen_neto_pct', 0),
+                        'roe_pct': oct.get('margen_neto_pct', 0),
+                        'total_gestores_activos': oct.get('total_gestores_activos', 0),
+                        'total_contratos_activos': oct.get('total_contratos_activos', 0),
+                    }
+                    data_sources.append('periodo_actual_oct')
+                if metricas_sep.data:
+                    sep = metricas_sep.data[0]
+                    results['periodo_anterior'] = {
+                        'periodo': '2025-09',
+                        'ingresos_totales': sep.get('ingresos_periodo', 0),
+                        'beneficio_neto': sep.get('beneficio_neto', 0),
+                        'margen_neto_pct': sep.get('margen_neto_pct', 0),
+                        'roe_pct': sep.get('margen_neto_pct', 0),
+                    }
+                    data_sources.append('periodo_anterior_sep')
+                # Variación sep→oct
+                if results.get('periodo_actual') and results.get('periodo_anterior'):
+                    ing_oct = results['periodo_actual']['ingresos_totales'] or 0
+                    ing_sep = results['periodo_anterior']['ingresos_totales'] or 0
+                    if ing_sep > 0:
+                        results['variacion_ingresos_pct'] = round((ing_oct - ing_sep) / ing_sep * 100, 2)
+                    roe_oct = results['periodo_actual']['roe_pct'] or 0
+                    roe_sep = results['periodo_anterior']['roe_pct'] or 0
+                    results['variacion_roe_pct'] = round(roe_oct - roe_sep, 2)
+            except Exception as e:
+                logger.warning(f"Error en métricas consolidadas: {e}")
+
+            return {
+                'analysis_type': 'global_kpi',
+                'periodo': periodo,
+                'results': results,
+                'data_sources': data_sources,
+                'confidence_score': 0.9 if data_sources else 0.3,
+            }
+        except Exception as e:
+            logger.error(f"Error en global_kpi_analysis: {e}")
+            return {'error': str(e), 'confidence_score': 0.0}
+
+    async def _evolucion_gestores_analysis(self, request: CDGRequest) -> Dict[str, Any]:
+        """🎯 Evolución sep→oct por gestor: quién mejoró, quién empeoró"""
+        try:
+            results = {}
+            data_sources = []
+
+            try:
+                evolucion = comparative_queries.get_evolucion_gestores_sep_oct()
+                if evolucion and hasattr(evolucion, 'data') and evolucion.data:
+                    all_data = evolucion.data
+                    resultados = {
+                        'mejora': [r for r in all_data if r['clasificacion'] == 'mejora'],
+                        'estable': [r for r in all_data if r['clasificacion'] == 'estable'],
+                        'retroceso': [r for r in all_data if r['clasificacion'] == 'retroceso'],
+                        'todos': all_data,
+                    }
+                    results['evolucion'] = resultados
+                    results['resumen'] = {
+                        'total_gestores': len(all_data),
+                        'num_mejora': len(resultados['mejora']),
+                        'num_estable': len(resultados['estable']),
+                        'num_retroceso': len(resultados['retroceso']),
+                        'top_mejora': resultados['mejora'][:3] if resultados['mejora'] else [],
+                        'top_retroceso': resultados['retroceso'][:3] if resultados['retroceso'] else [],
+                    }
+                    data_sources.append('evolucion_sep_oct')
+            except Exception as e:
+                logger.warning(f"Error en evolución gestores: {e}")
+
+            return {
+                'analysis_type': 'evolucion_gestores',
+                'periodo': 'sep-2025 vs oct-2025',
+                'results': results,
+                'data_sources': data_sources,
+                'confidence_score': 0.9 if data_sources else 0.3,
+            }
+        except Exception as e:
+            logger.error(f"Error en evolucion_gestores_analysis: {e}")
+            return {'error': str(e), 'confidence_score': 0.0}
     
     async def _executive_reporting_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         return await self._business_intelligence_analysis(request)

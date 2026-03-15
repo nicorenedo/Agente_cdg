@@ -33,6 +33,7 @@ import DeviationAnalysis from '../components/Dashboard/DeviationAnalysis';
 import DrillDownView from '../components/Dashboard/DrillDownView';
 import ConversationalPivot from '../components/Dashboard/ConversationalPivot';
 import ChatInterface from '../components/Dashboard/ChatInterface';
+import FabricaModelSection from '../components/Dashboard/FabricaModelSection';
 import Loader from '../components/common/Loader';
 import ErrorState from '../components/common/ErrorState';
 import api from '../services/api';
@@ -498,6 +499,8 @@ const DireccionView = () => {
                 />
               </Col>
             </Row>
+
+            <FabricaModelSection periodo={periodo} />
           </Col>
 
           {/* Right column: sticky ConversationalPivot */}

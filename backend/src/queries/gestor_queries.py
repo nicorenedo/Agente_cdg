@@ -71,18 +71,18 @@ class GestorQueries:
     # =================================================================
 
     def _get_gastos_centrales(self, periodo: Optional[str] = None) -> float:
-        """Gastos de centros soporte (CONTRATO_ID IS NULL, cuentas 62/64/68/69). Negativos por convenio."""
+        """Gastos de centros soporte (CONTRATO_ID IS NULL, cuentas 62/64/66/68/69). Negativos por convenio."""
         if periodo:
             r = execute_query(
                 "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-                " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+                " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
                 " AND strftime('%Y-%m',FECHA)=?",
                 (periodo,), fetch_type="one"
             )
         else:
             r = execute_query(
                 "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-                " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')",
+                " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')",
                 fetch_type="one"
             )
         return float(r["t"]) if r else 0.0
@@ -150,9 +150,9 @@ class GestorQueries:
         gastos         = round(gastos_directos + redistribuidos, 2)
         patrimonio     = r['patrimonio_total'] or 1
 
-        margen    = self.kpi_calc.calculate_margen_neto(ingresos, gastos)
+        margen    = self.kpi_calc.calculate_margen_neto(ingresos, abs(gastos))
         roe       = self.kpi_calc.calculate_roe(margen['beneficio_neto'], patrimonio)
-        eficiencia = self.kpi_calc.calculate_ratio_eficiencia(ingresos, gastos)
+        eficiencia = self.kpi_calc.calculate_ratio_eficiencia(ingresos, abs(gastos))
 
         enhanced = {
             'gestor_id': r['GESTOR_ID'],

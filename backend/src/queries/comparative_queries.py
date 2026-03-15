@@ -273,7 +273,7 @@ class ComparativeQueries:
         # Gastos centrales redistribuidos
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
             " AND strftime('%Y-%m',FECHA)=?",
             (periodo,), fetch_type="one"
         )
@@ -309,7 +309,7 @@ class ComparativeQueries:
         for row in raw_results:
             margen_analysis = self.kpi_calc.calculate_margen_neto(
                 ingresos=row['ingresos_total'],
-                gastos=row['gastos_total']
+                gastos=abs(row['gastos_total'])
             )
             margenes_para_media.append(margen_analysis['margen_neto_pct'])
 
@@ -318,11 +318,11 @@ class ComparativeQueries:
         for i, row in enumerate(raw_results):
             margen_analysis = self.kpi_calc.calculate_margen_neto(
                 ingresos=row['ingresos_total'],
-                gastos=row['gastos_total']
+                gastos=abs(row['gastos_total'])
             )
             eficiencia_analysis = self.kpi_calc.calculate_ratio_eficiencia(
                 ingresos=row['ingresos_total'],
-                gastos=row['gastos_total']
+                gastos=abs(row['gastos_total'])
             )
 
             enhanced_row = {
@@ -476,7 +476,7 @@ class ComparativeQueries:
 
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
             " AND strftime('%Y-%m',FECHA)=?",
             (periodo,), fetch_type="one"
         )
@@ -674,7 +674,7 @@ class ComparativeQueries:
 
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
+            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
             " AND strftime('%Y-%m',FECHA)=?",
             (periodo,), fetch_type="one"
         )
@@ -709,11 +709,11 @@ class ComparativeQueries:
         for i, row in enumerate(raw_results):
             margen_analysis = self.kpi_calc.calculate_margen_neto(
                 ingresos=row['ingresos'],
-                gastos=row['gastos']
+                gastos=abs(row['gastos'])
             )
             eficiencia_analysis = self.kpi_calc.calculate_ratio_eficiencia(
                 ingresos=row['ingresos'],
-                gastos=row['gastos']
+                gastos=abs(row['gastos'])
             )
 
             enhanced_row = {
@@ -1387,6 +1387,118 @@ class ComparativeQueries:
             query_type="matriz_comparativa_segmentos",
             execution_time=execution_time,
             row_count=len(results) if results else 0,
+            query_sql=query
+        )
+
+
+    def get_evolucion_gestores_sep_oct(self) -> QueryResult:
+        """
+        Compara ingresos y beneficio de cada gestor entre sep-2025 y oct-2025.
+        Devuelve variación % y clasificación: mejora / estable / retroceso.
+        Umbral estable: ±5%
+        """
+        query = """
+            SELECT
+                g.GESTOR_ID,
+                g.DESC_GESTOR,
+                s.DESC_SEGMENTO,
+                c.DESC_CENTRO,
+                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-09'
+                             AND mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_sep,
+                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-10'
+                             AND mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_oct,
+                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-09'
+                             AND SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos_sep,
+                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-10'
+                             AND SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos_oct,
+                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
+            FROM MAESTRO_GESTORES g
+            JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+            JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
+            LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+            WHERE c.IND_CENTRO_FINALISTA = 1
+            GROUP BY g.GESTOR_ID, g.DESC_GESTOR, s.DESC_SEGMENTO, c.DESC_CENTRO
+            HAVING ingresos_sep > 0 OR ingresos_oct > 0
+            ORDER BY g.GESTOR_ID
+        """
+
+        # Gastos centrales por período para redistribución
+        def _gc(periodo):
+            r = execute_query(
+                "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+                " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
+                " AND strftime('%Y-%m',FECHA)=?",
+                (periodo,), fetch_type="one"
+            )
+            return float(r["t"]) if r else 0.0
+
+        r_t = execute_query(
+            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
+            fetch_type="one"
+        )
+        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+        gc_sep = _gc("2025-09")
+        gc_oct = _gc("2025-10")
+
+        start_time = datetime.now()
+        raw = execute_query(query) or []
+        execution_time = (datetime.now() - start_time).total_seconds()
+
+        results = []
+        for row in raw:
+            n = row.get("n_contratos") or 0
+            redist_sep = round(gc_sep * n / total_finalistas, 2)
+            redist_oct = round(gc_oct * n / total_finalistas, 2)
+
+            beneficio_sep = round((row["ingresos_sep"] or 0) + (row["gastos_directos_sep"] or 0) - abs(redist_sep), 2)
+            beneficio_oct = round((row["ingresos_oct"] or 0) + (row["gastos_directos_oct"] or 0) - abs(redist_oct), 2)
+
+            if row["ingresos_sep"] and row["ingresos_sep"] > 0:
+                var_ingresos_pct = round((row["ingresos_oct"] - row["ingresos_sep"]) / row["ingresos_sep"] * 100, 2)
+            else:
+                var_ingresos_pct = None
+
+            if beneficio_sep and beneficio_sep > 0:
+                var_beneficio_pct = round((beneficio_oct - beneficio_sep) / beneficio_sep * 100, 2)
+            else:
+                var_beneficio_pct = None
+
+            if var_ingresos_pct is not None:
+                if var_ingresos_pct > 5:
+                    clasificacion = "mejora"
+                elif var_ingresos_pct < -5:
+                    clasificacion = "retroceso"
+                else:
+                    clasificacion = "estable"
+            else:
+                clasificacion = "sin_datos_sep"
+
+            results.append({
+                "gestor_id": row["GESTOR_ID"],
+                "desc_gestor": row["DESC_GESTOR"],
+                "desc_segmento": row["DESC_SEGMENTO"],
+                "desc_centro": row["DESC_CENTRO"],
+                "ingresos_sep": round(row["ingresos_sep"] or 0, 2),
+                "ingresos_oct": round(row["ingresos_oct"] or 0, 2),
+                "variacion_ingresos_pct": var_ingresos_pct,
+                "beneficio_sep": beneficio_sep,
+                "beneficio_oct": beneficio_oct,
+                "variacion_beneficio_pct": var_beneficio_pct,
+                "clasificacion": clasificacion,
+            })
+
+        # Ordenar: retroceso primero, luego estable, luego mejora
+        order = {"retroceso": 0, "estable": 1, "mejora": 2, "sin_datos_sep": 3}
+        results.sort(key=lambda x: (order.get(x["clasificacion"], 9), x.get("variacion_ingresos_pct") or 0))
+
+        return QueryResult(
+            data=results,
+            query_type="evolucion_gestores_sep_oct",
+            execution_time=execution_time,
+            row_count=len(results),
             query_sql=query
         )
 
