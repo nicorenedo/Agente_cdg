@@ -124,7 +124,7 @@ class PeriodQueries:
             ? as periodo,
             COUNT(DISTINCT g.GESTOR_ID) as total_gestores_activos,
             COUNT(DISTINCT co.CLIENTE_ID) as total_clientes_activos,
-            COUNT(DISTINCT co.CONTRATO_ID) as total_contratos_activos,
+            COUNT(DISTINCT CASE WHEN co.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day') THEN co.CONTRATO_ID END) as total_contratos_activos,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_periodo,
             COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','66','68','69')
                               THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
@@ -144,7 +144,7 @@ class PeriodQueries:
         """
 
         start_time = datetime.now()
-        result = execute_query(query, (periodo, periodo), fetch_type="one")
+        result = execute_query(query, (periodo, periodo, periodo), fetch_type="one")
         result_c = execute_query(query_centrales, (periodo,), fetch_type="one")
         execution_time = (datetime.now() - start_time).total_seconds()
 

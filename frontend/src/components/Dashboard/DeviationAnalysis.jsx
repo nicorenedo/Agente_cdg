@@ -1061,21 +1061,18 @@ const DeviationAnalysis = ({
   const totalDeviations = pricingData.total + margenData.total + volumenData.total;
 
   return (
-    <div 
-      className={className} 
-      style={{ 
-        width: '100%', 
-        height: '100vh',
-        overflowY: 'auto',
+    <div
+      className={className}
+      style={{
+        width: '100%',
         backgroundColor: '#fafafa',
         padding: '16px',
-        ...style 
+        ...style
       }}
     >
       <Card
-        style={{ 
-          width: '100%', 
-          minHeight: '95vh',
+        style={{
+          width: '100%',
           backgroundColor: 'white',
           borderRadius: 8
         }}
@@ -1123,7 +1120,6 @@ const DeviationAnalysis = ({
           onChange={setActiveTab}
           type="card"
           size="small"
-          style={{ minHeight: 600 }}
           items={getDynamicTabItems()}
           tabBarStyle={{ marginBottom: 16 }}
         />
