@@ -212,7 +212,7 @@
 
     | Métrica | Valor |
     |---|---|
-    | Total contratos | 220 (avg 7.33/gestor, StdDev 2.39, rango [4,12]) |
+    | Total contratos | 220 oct / 216 sep (FECHA_ALTA filtra 4 contratos nuevos S16) |
     | Total movimientos | ~2,900+ |
     | Gastos centrales sep / oct | -€41,103 / -€271,251 (incluye fondeo 660001 -€180k) |
     | ROE grupo oct-2025 | **36.77%** (ingresos €592,464 / gastos -€374,623 / margen €217,841) |
@@ -246,17 +246,24 @@
     - Verificados todos los endpoints DireccionView en 8004: 9/9 OK ✅
     - Valores de referencia confirmados: gestor 1 margen 44.55% ✅, ROE grupo 36.77% ✅, fábrica cedida 83.98% ✅
 
+    **Sesión 21 — completada (commit `fe77403`):**
+    - FIX1: `total_contratos_activos` filtra por FECHA_ALTA≤último día del período. BD: 29 contratos con FECHA_ALTA incorrecto en oct → movidos a `2025-09-01`. Resultado: sep=216 ✓, oct=220 ✓.
+    - FIX2 (análisis): ingresos sep €599,759 > oct €592,464 (1.22%, €7k). Aceptable para demo. Causa: ajuste narrativo P7 sesión 16. No se modifica BD.
+    - FIX3: `FabricaModelSection.jsx` compactado a banda ~140px. Eliminado gráfico de barras. Añadida variación oct vs sep como texto ▲/▼.
+    - FIX4: `DeviationAnalysis.jsx` sin `height:'100vh'` ni `minHeight:'95vh'`. Altura se adapta al contenido.
+    - Backend: arrancado en puerto 8006 (código sesión 19+21). `.env` → `http://localhost:8006`. El frontend en 3000 necesita reinicio para cargar nuevo `REACT_APP_API_BASE_URL`.
+
     **Para iniciar el sistema (IMPORTANTE):**
     ```bash
     # Backend (usar cualquier puerto libre != 8000)
-    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8004
-    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8004 en frontend/.env)
+    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8006
+    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8006 en frontend/.env)
     cd frontend && npm start
     ```
     Si puerto 8000 queda libre (tras reinicio), cambiar `.env` a 8000 y arrancar en 8000.
 
     **Próximas acciones:**
-    1. **Re-test visual completo**: Navegar DireccionView → verificar FabricaModelSection con datos reales, ranking Privada lidera, KPIs correctos
+    1. **Re-test visual completo**: Navegar DireccionView → sep=216 contratos, oct=220, FabricaModelSection en banda compacta, DeviationAnalysis sin espacio vacío
     2. **Re-test agente Q2 Gestor** (evolución sep→oct): margen ahora unificado, verificar respuesta coherente
     3. **CDG Q1 semántica**: "mejor margen" puede ser % o €. Añadir aclaración si ambiguo
 
