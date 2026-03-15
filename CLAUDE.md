@@ -89,7 +89,9 @@
 
     **5.4 Modelo Fábrica (Fondos):** Gestora 85% (`760025`) / Banco 15% (`760024`). Afecta rentabilidad real del gestor.
 
-    **5.5 Filtro gastos directos:** `SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')` con `CONTRATO_ID IS NOT NULL`. Las cuentas 66xxxx tienen `CONTRATO_ID IS NULL` → van a redistribución central (correcto, no tocar).
+    **5.5 Filtros de gastos:**
+    - **Gastos directos** (CONTRATO_ID IS NOT NULL): `SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')` — sin '66' porque las cuentas 66xxxx solo aparecen con CONTRATO_ID IS NULL.
+    - **Gastos centrales** (CONTRATO_ID IS NULL): `SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')` — incluye '66' para capturar coste fondeo (660001, -€180k/oct) y 669001.
 
     ---
 
@@ -132,7 +134,7 @@
     - **Ingresos:** `SUM(IMPORTE) WHERE CUENTA_ID LIKE '76%'`
     - **Gastos directos:** `ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL`
     - **Gastos redistribuidos:** `gastos_centrales_periodo × (n_contratos_gestor / 220)`
-    - **Gastos centrales:** `ABS(SUM(IMPORTE)) WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')`
+    - **Gastos centrales:** `ABS(SUM(IMPORTE)) WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')`
 
     ---
 
