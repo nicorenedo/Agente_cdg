@@ -162,21 +162,26 @@ const TopBar = ({
               )}
 
               {/* Selector de Período */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CalendarOutlined style={{ color: 'rgba(255,255,255,0.8)' }} />
-                <DatePicker
-                  picker="month"
-                  value={toDate(valuePeriod)}
-                  onChange={handlePeriodChange}
-                  size={compact ? 'small' : 'middle'}
-                  format="YYYY-MM"
-                  allowClear={false}
-                  placeholder="Seleccionar período"
-                  style={{ 
-                    minWidth: compact ? 120 : 140,
-                    fontFamily: theme.token.fontFamily
-                  }}
-                />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CalendarOutlined style={{ color: 'rgba(255,255,255,0.8)' }} />
+                  <DatePicker
+                    picker="month"
+                    value={toDate(valuePeriod)}
+                    onChange={handlePeriodChange}
+                    size={compact ? 'small' : 'middle'}
+                    format="YYYY-MM"
+                    allowClear={false}
+                    placeholder="Seleccionar período"
+                    style={{
+                      minWidth: compact ? 120 : 140,
+                      fontFamily: theme.token.fontFamily
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', marginLeft: 22, letterSpacing: 0.3 }}>
+                  Acumulado YTD
+                </span>
               </div>
 
               {/* Selector de Gestor (opcional) */}

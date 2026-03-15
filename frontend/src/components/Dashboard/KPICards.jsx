@@ -92,31 +92,31 @@ const KPICards = ({
     direccion: [
       { 
         key: 'roe_grupo', 
-        label: 'ROE Grupo', 
-        icon: PercentageOutlined, 
+        label: 'ROE Grupo YTD',
+        icon: PercentageOutlined,
         color: theme.colors.bmGreenPrimary,
-        description: 'Rentabilidad sobre patrimonio del grupo/centro'
+        description: 'Rentabilidad acumulada enero→período seleccionado'
       },
-      { 
-        key: 'total_clientes', 
-        label: 'Total Clientes', 
-        icon: UserOutlined, 
+      {
+        key: 'total_clientes',
+        label: 'Total Clientes',
+        icon: UserOutlined,
         color: theme.colors.info,
         description: 'Total clientes del grupo o centro'
       },
-      { 
-        key: 'total_contratos', 
-        label: 'Total Contratos', 
-        icon: FileTextOutlined, 
+      {
+        key: 'total_contratos',
+        label: 'Contratos Activos',
+        icon: FileTextOutlined,
         color: theme.colors.bmGreenLight,
-        description: 'Número total de contratos vigentes'
+        description: 'Contratos con FECHA_ALTA en o antes del período'
       },
-      { 
-        key: 'ingresos_totales', 
-        label: 'Ingresos Totales', 
-        icon: EuroCircleOutlined, 
+      {
+        key: 'ingresos_totales',
+        label: 'Ingresos YTD',
+        icon: EuroCircleOutlined,
         color: theme.colors.success,
-        description: 'Ingresos del grupo o centro'
+        description: 'Ingresos acumulados enero→período seleccionado'
       }
     ],
     gestor: [
