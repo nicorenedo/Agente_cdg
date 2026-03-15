@@ -93,7 +93,7 @@ class IncentiveQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
             )
@@ -107,7 +107,7 @@ class IncentiveQueries:
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
             " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
+            " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0
@@ -240,7 +240,7 @@ class IncentiveQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
             ),
@@ -339,7 +339,7 @@ class IncentiveQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING ingresos_total > 0
@@ -354,7 +354,7 @@ class IncentiveQueries:
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
             " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
+            " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0
@@ -447,7 +447,7 @@ class IncentiveQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING margen_neto_pct >= ?
@@ -534,7 +534,7 @@ class IncentiveQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING ingresos_total > 0
@@ -549,7 +549,7 @@ class IncentiveQueries:
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
             " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
+            " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0
@@ -662,7 +662,7 @@ class IncentiveQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING beneficio_neto > 0
@@ -752,7 +752,7 @@ class IncentiveQueries:
                     COUNT(DISTINCT mc.CONTRATO_ID) as contratos_ini
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                WHERE strftime('%Y-%m', mc.FECHA_ALTA) <= ?
+                WHERE mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR
             ),
             productos_fin AS (
@@ -762,7 +762,7 @@ class IncentiveQueries:
                     COUNT(DISTINCT mc.CONTRATO_ID) as contratos_fin
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                WHERE strftime('%Y-%m', mc.FECHA_ALTA) <= ?
+                WHERE mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID
             )
             SELECT
@@ -830,7 +830,7 @@ class IncentiveQueries:
                     COUNT(DISTINCT mc.CLIENTE_ID) as clientes_ini
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                WHERE strftime('%Y-%m', mc.FECHA_ALTA) <= ?
+                WHERE mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR
             ),
             base_clientes_fin AS (
@@ -839,7 +839,7 @@ class IncentiveQueries:
                     COUNT(DISTINCT mc.CLIENTE_ID) as clientes_fin
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                WHERE strftime('%Y-%m', mc.FECHA_ALTA) <= ?
+                WHERE mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID
             )
             SELECT
@@ -1006,7 +1006,7 @@ class IncentiveQueries:
         JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
         JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
         LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-             AND strftime('%Y-%m', mov.FECHA) = ?
+             AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
         WHERE c.IND_CENTRO_FINALISTA = 1
         GROUP BY c.CENTRO_ID, c.DESC_CENTRO
         """
@@ -1018,7 +1018,7 @@ class IncentiveQueries:
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
             " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
+            " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0

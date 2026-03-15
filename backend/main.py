@@ -1965,7 +1965,7 @@ def analytics_fabrica(periodo: str = Query("2025-10", description="YYYY-MM o 'al
                     COUNT(CASE WHEN CUENTA_ID = '760024' THEN 1 END) as movimientos_banco
                 FROM MOVIMIENTOS_CONTRATOS
                 WHERE CUENTA_ID IN ('760024', '760025')
-                  AND strftime('%Y-%m', FECHA) = ?
+                  AND FECHA <= date(? || '-01', '+1 month', '-1 day')
             """
             r = eq(q, (per,), fetch_type="one")
             if not r:
@@ -1996,7 +1996,7 @@ def analytics_fabrica(periodo: str = Query("2025-10", description="YYYY-MM o 'al
             JOIN MAESTRO_CONTRATOS mc ON mov.CONTRATO_ID = mc.CONTRATO_ID
             JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
             WHERE mov.CUENTA_ID IN ('760024', '760025')
-              AND strftime('%Y-%m', mov.FECHA) = ?
+              AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             GROUP BY mov.CONTRATO_ID, mc.FECHA_ALTA, g.DESC_GESTOR
             ORDER BY cedido_gestora DESC
             LIMIT 50

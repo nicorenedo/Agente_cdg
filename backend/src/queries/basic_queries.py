@@ -584,7 +584,7 @@ class BasicQueries:
             FROM MOVIMIENTOS_CONTRATOS
             WHERE CONTRATO_ID IS NULL
               AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
-              AND strftime('%Y-%m', FECHA) = ?
+              AND FECHA <= date(? || '-01', '+1 month', '-1 day')
             """
             result = self.query_executor.execute_query(query, (periodo,), fetch_type="one")
         else:
@@ -620,7 +620,7 @@ class BasicQueries:
         Gastos directos:       cuentas 62/64/68/69xxxx asociados a contratos del gestor.
         Gastos redistribuidos: gastos centrales (CONTRATO_ID IS NULL) x proporcion contratos.
         """
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, gestor_id) if periodo else (gestor_id,)
 
         query = f"""
@@ -673,7 +673,7 @@ class BasicQueries:
     def get_gestor_clientes_con_metricas(self, gestor_id: int, periodo: Optional[str] = None) -> List[Dict[str, Any]]:
         """Clientes del gestor con métricas financieras.
         Redistribucion proporcional al numero de contratos de cada cliente."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, gestor_id) if periodo else (gestor_id,)
 
         query = f"""
@@ -722,7 +722,7 @@ class BasicQueries:
 
     def get_cliente_metricas(self, cliente_id: int, periodo: Optional[str] = None) -> Dict[str, Any]:
         """Métricas financieras de un cliente específico."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, cliente_id) if periodo else (cliente_id,)
 
         query = f"""
@@ -782,7 +782,7 @@ class BasicQueries:
     def get_cliente_contratos_con_metricas(self, cliente_id: int, periodo: Optional[str] = None) -> List[Dict[str, Any]]:
         """Contratos de un cliente con métricas financieras.
         Cada contrato recibe 1/total_finalistas de los gastos centrales del período."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, cliente_id) if periodo else (cliente_id,)
 
         query = f"""
@@ -828,7 +828,7 @@ class BasicQueries:
 
     def get_contrato_detalle_completo(self, contrato_id: int, periodo: Optional[str] = None) -> Dict[str, Any]:
         """Detalle completo de un contrato con métricas financieras."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, contrato_id) if periodo else (contrato_id,)
 
         query = f"""
@@ -881,7 +881,7 @@ class BasicQueries:
 
     def get_centro_metricas_financieras(self, centro_id: int, periodo: Optional[str] = None) -> Dict[str, Any]:
         """Métricas financieras de un centro. Redistribucion proporcional a contratos del centro."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, centro_id) if periodo else (centro_id,)
 
         query = f"""
@@ -926,7 +926,7 @@ class BasicQueries:
 
     def get_centro_gestores_con_metricas(self, centro_id: int, periodo: Optional[str] = None) -> List[Dict[str, Any]]:
         """Gestores de un centro con métricas financieras."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, centro_id) if periodo else (centro_id,)
 
         query = f"""
@@ -975,7 +975,7 @@ class BasicQueries:
 
     def get_segmento_metricas_financieras(self, segmento_id: str, periodo: Optional[str] = None) -> Dict[str, Any]:
         """Métricas financieras de un segmento."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
+        periodo_filter = "AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')" if periodo else ""
         params = (periodo, segmento_id) if periodo else (segmento_id,)
 
         query = f"""

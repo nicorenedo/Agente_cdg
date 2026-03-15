@@ -263,7 +263,7 @@ class ComparativeQueries:
             JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
             LEFT JOIN MAESTRO_CONTRATOS cont ON g.GESTOR_ID = cont.GESTOR_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON cont.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE c.IND_CENTRO_FINALISTA = 1
             GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO, s.DESC_SEGMENTO
             HAVING ingresos_total > 0
@@ -274,7 +274,7 @@ class ComparativeQueries:
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
             " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
+            " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
             (periodo,), fetch_type="one"
         )
         r_t = execute_query(
@@ -378,7 +378,7 @@ class ComparativeQueries:
                 LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
                 LEFT JOIN MAESTRO_CONTRATOS cont ON cl.CLIENTE_ID = cont.CLIENTE_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON cont.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO, s.DESC_SEGMENTO
                 HAVING COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) > 0
@@ -468,7 +468,7 @@ class ComparativeQueries:
             JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
             LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE c.IND_CENTRO_FINALISTA = 1
             GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO
             HAVING patrimonio_total IS NOT NULL AND patrimonio_total != 0
@@ -477,7 +477,7 @@ class ComparativeQueries:
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
             " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
+            " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
             (periodo,), fetch_type="one"
         )
         r_t = execute_query(
@@ -565,7 +565,7 @@ class ComparativeQueries:
                 LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 WHERE c.IND_CENTRO_FINALISTA = 1
-                    AND strftime('%Y-%m', COALESCE(mov.FECHA, mc.FECHA_ALTA)) <= ?
+                    AND COALESCE(mov.FECHA, mc.FECHA_ALTA) <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, c.DESC_CENTRO
             ),
             ingresos_gestores AS (
@@ -577,7 +577,7 @@ class ComparativeQueries:
                 LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
                 LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID
             ),
             gastos_gestores AS (
@@ -667,7 +667,7 @@ class ComparativeQueries:
             JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
             LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE c.IND_CENTRO_FINALISTA = 1
             GROUP BY c.CENTRO_ID, c.DESC_CENTRO
         """
@@ -675,7 +675,7 @@ class ComparativeQueries:
         r_c = execute_query(
             "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
             " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
+            " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
             (periodo,), fetch_type="one"
         )
         r_t = execute_query(
@@ -773,7 +773,7 @@ class ComparativeQueries:
                 LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
                 LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE c.IND_CENTRO_FINALISTA = 1
                 GROUP BY c.CENTRO_ID, c.DESC_CENTRO
             ),
@@ -1322,7 +1322,7 @@ class ComparativeQueries:
             LEFT JOIN MAESTRO_CLIENTES cl ON g.GESTOR_ID = cl.GESTOR_ID
             LEFT JOIN MAESTRO_CONTRATOS mc ON cl.CLIENTE_ID = mc.CLIENTE_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             GROUP BY s.SEGMENTO_ID, s.DESC_SEGMENTO
         ),
         gastos_segmento AS (
@@ -1403,13 +1403,13 @@ class ComparativeQueries:
                 g.DESC_GESTOR,
                 s.DESC_SEGMENTO,
                 c.DESC_CENTRO,
-                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-09'
+                COALESCE(SUM(CASE WHEN mov.FECHA <= '2025-09-30'
                              AND mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_sep,
-                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-10'
+                COALESCE(SUM(CASE WHEN mov.FECHA <= '2025-10-31'
                              AND mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_oct,
-                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-09'
+                COALESCE(SUM(CASE WHEN mov.FECHA <= '2025-09-30'
                              AND SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos_sep,
-                COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = '2025-10'
+                COALESCE(SUM(CASE WHEN mov.FECHA <= '2025-10-31'
                              AND SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos_oct,
                 COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
             FROM MAESTRO_GESTORES g
@@ -1428,7 +1428,7 @@ class ComparativeQueries:
             r = execute_query(
                 "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
                 " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-                " AND strftime('%Y-%m',FECHA)=?",
+                " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
                 (periodo,), fetch_type="one"
             )
             return float(r["t"]) if r else 0.0

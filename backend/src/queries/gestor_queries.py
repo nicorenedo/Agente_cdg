@@ -76,7 +76,7 @@ class GestorQueries:
             r = execute_query(
                 "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
                 " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-                " AND strftime('%Y-%m',FECHA)=?",
+                " AND FECHA <= date(? || '-01', '+1 month', '-1 day')",
                 (periodo,), fetch_type="one"
             )
         else:
@@ -103,7 +103,7 @@ class GestorQueries:
         Metricas financieras del gestor con KPIs bancarios.
         Ingresos = 76xxxx | Gastos directos = 62/64/68/69xxxx | Redistribuidos proporcionales.
         """
-        periodo_clause = f"AND strftime('%Y-%m', mov.FECHA) = '{periodo}'" if periodo else ""
+        periodo_clause = f"AND mov.FECHA <= date('{periodo}' || '-01', '+1 month', '-1 day')" if periodo else ""
 
         query = f"""
         SELECT
@@ -235,7 +235,7 @@ class GestorQueries:
             contracts AS (
                 SELECT mc.CONTRATO_ID, mc.PRODUCTO_ID
                 FROM MAESTRO_CONTRATOS mc
-                WHERE mc.GESTOR_ID = ? AND strftime('%Y-%m', mc.FECHA_ALTA) <= ?
+                WHERE mc.GESTOR_ID = ? AND mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day')
             ),
             cartera_datos AS (
                 SELECT
@@ -254,9 +254,9 @@ class GestorQueries:
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 JOIN MAESTRO_PRODUCTOS p ON mc.PRODUCTO_ID = p.PRODUCTO_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                     AND strftime('%Y-%m', mov.FECHA) = ?
+                     AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE g.GESTOR_ID = ?
-                  AND strftime('%Y-%m', mc.FECHA_ALTA) <= ?
+                  AND mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID, p.PRODUCTO_ID
             ),
             gastos_por_producto AS (
@@ -334,7 +334,7 @@ class GestorQueries:
             JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
             JOIN MAESTRO_PRODUCTOS p ON mc.PRODUCTO_ID = p.PRODUCTO_ID
             WHERE g.GESTOR_ID = ?
-              AND strftime('%Y-%m', mc.FECHA_ALTA) <= ?
+              AND mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day')
             GROUP BY g.GESTOR_ID, p.PRODUCTO_ID
             ORDER BY contratos_producto DESC
         """
@@ -380,7 +380,7 @@ class GestorQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE g.GESTOR_ID = ?
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
             ),
@@ -473,7 +473,7 @@ class GestorQueries:
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE g.GESTOR_ID = ?
             ),
             gastos_mantenimiento AS (
@@ -531,7 +531,7 @@ class GestorQueries:
                 COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
             FROM MAESTRO_CONTRATOS mc
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE mc.GESTOR_ID = ?
         """
 
@@ -592,7 +592,7 @@ class GestorQueries:
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE g.GESTOR_ID = ?
             ),
             gastos_mantenimiento AS (
@@ -649,7 +649,7 @@ class GestorQueries:
                 COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
             FROM MAESTRO_CONTRATOS mc
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE mc.GESTOR_ID = ?
         """
 
@@ -716,7 +716,7 @@ class GestorQueries:
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 WHERE g.GESTOR_ID = ?
-                  AND (? IS NULL OR strftime('%Y-%m', mov.FECHA) = ?)
+                  AND (? IS NULL OR mov.FECHA <= date(? || '-01', '+1 month', '-1 day'))
             ),
             gastos_mantenimiento AS (
                 SELECT COALESCE(SUM(pp.PRECIO_MANTENIMIENTO), 0) AS gasto_mantenimiento
@@ -814,7 +814,7 @@ class GestorQueries:
                 JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 WHERE mc.GESTOR_ID = ?
                   AND p.PRODUCTO_ID = '600100300300'
-                  AND strftime('%Y-%m', mov.FECHA) = ?
+                  AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                   AND mov.CUENTA_ID IN ('760025', '760024')
                 GROUP BY mc.CONTRATO_ID, mc.CLIENTE_ID, p.DESC_PRODUCTO
                 HAVING importe_total > 0
@@ -915,7 +915,7 @@ class GestorQueries:
                         FROM MAESTRO_GESTORES g
                         JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                         LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                            AND strftime('%Y-%m', mov.FECHA) = ?
+                            AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                         WHERE g.GESTOR_ID = ?
                         GROUP BY g.GESTOR_ID
                     ) sub
@@ -986,7 +986,7 @@ class GestorQueries:
                 JOIN MAESTRO_GESTORES g ON c.CENTRO_ID = g.CENTRO
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                     AND strftime('%Y-%m', mov.FECHA) = ?
+                     AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE (? IS NULL OR c.CENTRO_ID = ?)
                 GROUP BY c.CENTRO_ID, c.DESC_CENTRO, c.IND_CENTRO_FINALISTA
             ),
@@ -1055,7 +1055,7 @@ class GestorQueries:
                 JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                     AND strftime('%Y-%m', mov.FECHA) = ?
+                     AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE (? IS NULL OR s.SEGMENTO_ID = ?)
                 GROUP BY s.SEGMENTO_ID, s.DESC_SEGMENTO
             ),
@@ -1113,7 +1113,7 @@ class GestorQueries:
                 FROM MAESTRO_CONTRATOS mc
                 JOIN MAESTRO_PRODUCTOS p ON mc.PRODUCTO_ID = p.PRODUCTO_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                     AND strftime('%Y-%m', mov.FECHA) = ?
+                     AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE mc.GESTOR_ID = ?
                 GROUP BY p.PRODUCTO_ID, p.DESC_PRODUCTO
             ),
@@ -1207,7 +1207,7 @@ class GestorQueries:
             JOIN PRECIO_POR_PRODUCTO_STD ps ON mc.PRODUCTO_ID = ps.PRODUCTO_ID
                 AND g.SEGMENTO_ID = ps.SEGMENTO_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE mc.GESTOR_ID = ?
             GROUP BY mc.PRODUCTO_ID, g.SEGMENTO_ID
         """
@@ -1275,7 +1275,7 @@ class GestorQueries:
             JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
             LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE g.GESTOR_ID = ?
             GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
         ),
@@ -1455,7 +1455,7 @@ class GestorQueries:
             JOIN MAESTRO_CONTRATOS mc ON p.PRODUCTO_ID = mc.PRODUCTO_ID
             JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE mc.GESTOR_ID = ?
             GROUP BY p.PRODUCTO_ID, p.DESC_PRODUCTO, p.IND_FABRICA
         ),
@@ -1606,7 +1606,7 @@ class GestorQueries:
             JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
             JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             WHERE g.GESTOR_ID = ?
             GROUP BY g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, s.DESC_SEGMENTO
         ),
@@ -1653,7 +1653,7 @@ class GestorQueries:
                 FROM MAESTRO_GESTORES g, (SELECT SEGMENTO_ID FROM seg) seg2
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 WHERE g.GESTOR_ID != ?
                 GROUP BY g.GESTOR_ID, g.SEGMENTO_ID
             ) sub
@@ -1854,7 +1854,7 @@ class GestorQueries:
                 JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                    AND strftime('%Y-%m', mov.FECHA) = ?
+                    AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
                 GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
             ),
             gastos_gestores AS (
@@ -1939,7 +1939,7 @@ class GestorQueries:
             JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
             JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                AND strftime('%Y-%m', mov.FECHA) = ?
+                AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
             GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
             HAVING ingresos_total > 0
             ORDER BY ingresos_total DESC
