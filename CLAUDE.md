@@ -173,7 +173,7 @@
     ## 12. ESTADO ACTUAL DEL PROYECTO
 
     > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-    > Última actualización: 2026-03-15 (sesión 18)
+    > Última actualización: 2026-03-15 (sesión 20)
 
     ### ✅ Completado (sesiones 1-17)
 
@@ -208,19 +208,20 @@
 
     ---
 
-    ### 📊 Valores de referencia (post-sesión-17)
+    ### 📊 Valores de referencia (post-sesión-19)
 
     | Métrica | Valor |
     |---|---|
     | Total contratos | 220 (avg 7.33/gestor, StdDev 2.39, rango [4,12]) |
     | Total movimientos | ~2,900+ |
-    | Gastos centrales sep / oct | -€41,103 / -€45,677 |
+    | Gastos centrales sep / oct | -€41,103 / -€271,251 (incluye fondeo 660001 -€180k) |
     | ROE grupo oct-2025 | **36.77%** (ingresos €592,464 / gastos -€374,623 / margen €217,841) |
+    | Gestor 1 oct margen | **44.55%** (ingresos €32,238 / gastos directos -€3,079 / redistribuidos -€14,795) |
     | Avg Privada oct | €37,656 (2.01× Minorista €19,697) |
-    | Gestor 1 oct (referencia) | ingresos ~€32,238, gastos directos ~€3,079 |
-    | Modelo fábrica | ratio 5.6667 exacto en 125 pares contrato/período |
+    | Modelo fábrica oct | cedido gestora €116,857 (83.98%), retenido banco €22,294 (16.02%) |
     | Margen por segmento oct | Privada 91.8% > Minorista 85.7% > Empresas 80.9% > Personal 72.4% > Fondos 66.0% |
-    | Outlier aceptado | G8 Pablo Moreno (-57.4% sep): fondos lumpy, no corregible sin romper modelo fábrica |
+    | Evolucion gestores oct | 10 mejora / 8 estable / 12 retroceso (umbral ±5%) |
+    | Outlier aceptado | G8 Pablo Moreno (-57.4% sep): fondos lumpy |
 
     ---
 
@@ -239,10 +240,25 @@
     - Ratio gestora fábrica oct: **83.98%** (target 85%, desviación -1.02%)
     - Evolucion gestores oct: 10 mejora / 8 estable / 12 retroceso (umbral ±5%)
 
+    **Sesión 20 — completada (commit `d3788f9` + `.env`):**
+    - CLAUDE.md: filtro 66 corregido en secciones 5.5 y 9
+    - Diagnóstico 404: puerto 8000 tiene procesos zombie con código pre-S19. Se creó `frontend/.env` apuntando a puerto 8004 (código S19 correcto)
+    - Verificados todos los endpoints DireccionView en 8004: 9/9 OK ✅
+    - Valores de referencia confirmados: gestor 1 margen 44.55% ✅, ROE grupo 36.77% ✅, fábrica cedida 83.98% ✅
+
+    **Para iniciar el sistema (IMPORTANTE):**
+    ```bash
+    # Backend (usar cualquier puerto libre != 8000)
+    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8004
+    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8004 en frontend/.env)
+    cd frontend && npm start
+    ```
+    Si puerto 8000 queda libre (tras reinicio), cambiar `.env` a 8000 y arrancar en 8000.
+
     **Próximas acciones:**
-    1. **Prueba visual dashboards**: Iniciar frontend + backend, verificar KPIs gestor con margen 44.55%, ranking CDG Privada lidera en €, FabricaModelSection visible en DireccionView
-    2. **Re-test agente Q2 Gestor** (evolución sep→oct): margen ahora unificado, verificar que la respuesta sea coherente
-    3. **CDG Q1 semantica**: "mejor margen" puede significar % o €. Añadir pregunta de clarificación si ambiguo.
+    1. **Re-test visual completo**: Navegar DireccionView → verificar FabricaModelSection con datos reales, ranking Privada lidera, KPIs correctos
+    2. **Re-test agente Q2 Gestor** (evolución sep→oct): margen ahora unificado, verificar respuesta coherente
+    3. **CDG Q1 semántica**: "mejor margen" puede ser % o €. Añadir aclaración si ambiguo
 
     ---
 
