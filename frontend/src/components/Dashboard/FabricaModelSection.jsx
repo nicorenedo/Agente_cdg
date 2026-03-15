@@ -5,7 +5,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Row, Col, Statistic, Spin, Alert, Tag, Space } from 'antd';
-import { BankOutlined, PercentageOutlined, SwapOutlined, ContainerOutlined } from '@ant-design/icons';
+import { BankOutlined, EuroCircleOutlined, SwapOutlined, ContainerOutlined } from '@ant-design/icons';
 import { analytics } from '../../services/api';
 
 const fmt = (v) =>
@@ -93,7 +93,7 @@ const FabricaModelSection = ({ periodo = '2025-10' }) => {
             title={<span style={{ fontSize: 11, color: '#666' }}>Cedido Gestora (oct)</span>}
             value={oct.cedido_gestora || 0}
             formatter={(v) => fmt(v)}
-            prefix={<PercentageOutlined style={{ color: '#A100FF', fontSize: 12 }} />}
+            prefix={<EuroCircleOutlined style={{ color: '#A100FF', fontSize: 12 }} />}
             valueStyle={{ color: '#A100FF', fontWeight: 700, fontSize: 16 }}
           />
         </Col>
