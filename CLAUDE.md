@@ -192,7 +192,7 @@
     ## 12. ESTADO ACTUAL DEL PROYECTO
 
     > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-    > Última actualización: 2026-03-16 (sesión 23)
+    > Última actualización: 2026-03-16 (sesión 24)
 
     ### ✅ Completado (sesiones 1-17)
 
@@ -282,18 +282,24 @@
     - Labels ✅: `ROE Grupo`, `Ingresos del Mes`, `Cartera Activa`, TopBar "Mes seleccionado"
     - Prompts ✅: MoM model note en `gestor_agent._build_system_prompt` + `FINANCIAL_ANALYST_SYSTEM_PROMPT`
 
+    **Sesión 24 — completada (commits `5036b23`, `d5f8521`, `1e05f63`):**
+    - FIX ✅: `get_centro_metricas_financieras` aplica FECHA_ALTA. Sep 5 centros: 68+62+30+27+29=**216** ✓
+    - FIX ✅: `FabricaModelSection` usa período dinámico — sep muestra sep_2025, oct muestra oct_2025, títulos dinámicos
+    - FIX ✅: CDG agente: `get_contratos_nuevos_periodo` añadido. Agente responde "4 contratos nuevos en oct"
+    - DIAGNÓSTICO COMPLETO: ver tabla de bugs abajo
+
     **Para iniciar el sistema (IMPORTANTE):**
     ```bash
     # Backend (usar cualquier puerto libre != 8000)
-    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8008
-    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8008 en frontend/.env)
+    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8009
+    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8009 en frontend/.env)
     cd frontend && npm start
     ```
 
-    **Próximas acciones:**
-    1. **Re-test visual completo**: DireccionView → sep=216, oct=220, fábrica oct>sep, ROE oct>sep
-    2. **Re-test agente**: preguntar ROE/ingresos → responde MoM; preguntar contratos → responde cartera
-    3. **CDG Q1 semántica**: "mejor margen" puede ser % o €. Añadir aclaración si ambiguo
+    **Pendiente menor (no bloquea demo):**
+    - ROE KPICards = promedio aritmético de 5 centros (~32.6% sep) vs ROE grupo (35.94%). Diferencia por fórmula, no un error crítico
+    - `kpis_financieros.margen_neto_pct` en endpoint centro = 159% (bug fórmula, campo no usado en UI)
+    - Distribución contratos inconsistente entre `/kpis/centro/{id}/financieros` y `count_contratos_by_centro` (dos queries distintas)
 
     ---
 
