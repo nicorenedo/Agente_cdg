@@ -697,6 +697,17 @@ class CDGAgentV6:
             try:
                 summary = basic_queries.get_resumen_general()
                 if summary:
+                    # Enriquecer con contratos nuevos del período y cartera activa
+                    try:
+                        nuevos = basic_queries.get_contratos_nuevos_periodo(periodo)
+                        summary['contratos_nuevos_mes'] = nuevos.get('contratos_nuevos', 0)
+                        summary['cartera_activa_periodo'] = summary.get('total_contratos', 220)
+                        summary['nota_contratos'] = (
+                            f"total_contratos={summary.get('total_contratos',220)} es la cartera total. "
+                            f"contratos_nuevos_mes={summary.get('contratos_nuevos_mes',0)} son los firmados en {periodo}."
+                        )
+                    except Exception:
+                        pass
                     results['executive_summary'] = summary
                     data_sources.append('executive_summary')
             except Exception as e:

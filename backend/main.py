@@ -223,7 +223,7 @@ except Exception as e:
     def validate_chart_generator(): return {"status": "MOCK"}
     
     basic_queries = type("BQ", (), {
-        "get_resumen_general": staticmethod(lambda: {"total_gestores": 30, "total_clientes": 85, "total_contratos": 216, "total_centros": 5, "total_productos": 3}),
+        "get_resumen_general": staticmethod(lambda: {"total_gestores": 30, "total_clientes": 85, "total_contratos": 220, "total_centros": 5, "total_productos": 3}),
         "count_contratos_by_gestor": staticmethod(lambda: [{"DESC_GESTOR": "Mock Gestor 1", "num_contratos": 10}]),
         "count_clientes_by_gestor": staticmethod(lambda: [{"DESC_GESTOR": "Mock Gestor 1", "num_clientes": 6}]),
         "get_all_centros": staticmethod(lambda: [{"CENTRO_ID": 1, "DESC_CENTRO": "Mock Centro"}]),
