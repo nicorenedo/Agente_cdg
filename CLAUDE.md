@@ -159,4 +159,4 @@ cd frontend && npm start
 # frontend/.env: REACT_APP_API_BASE_URL=http://localhost:8009
 ```
 
-**Fase actual:** Fase 6 completada. S25 completada. Ver SESSIONS.md para próximos pasos y pendientes.
+**Fase actual:** Fase 6 completada. S26 completada. Ver SESSIONS.md para próximos pasos y pendientes.

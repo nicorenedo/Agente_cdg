@@ -73,6 +73,12 @@
 **S25 — completada:**
 - Split CLAUDE.md → CLAUDE.md (operativo, <6k chars) + SESSIONS.md (historial completo)
 
+**S26 — completada (commits `48465bc`, `13e1e89`, `229eee1`, `04b7a28`):**
+- B1 ✅ App.jsx ConfigProvider: `colorLink:'#A100FF'`, Tabs tokens (inkBarColor/itemSelectedColor), Button colorPrimary explicit
+- B2 ✅ KPICards: variation display as Tag (green #52c41a / red #E5002B), Tooltip per card with business descriptions, descriptions updated to spec
+- B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
+- B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
+
 ---
 
 ## 📊 Valores de referencia definitivos (post-sesión-24)
@@ -95,7 +101,7 @@
 
 ---
 
-## ⏭️ Próximo paso al retomar (post-S25)
+## ⏭️ Próximo paso al retomar (post-S26)
 
 **Para iniciar el sistema:**
 ```bash
