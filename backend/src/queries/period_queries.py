@@ -132,7 +132,7 @@ class PeriodQueries:
         FROM MAESTRO_GESTORES g
         LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
         LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
-            AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
+            AND strftime('%Y-%m', mov.FECHA) = ?
         """
 
         query_centrales = """
@@ -140,7 +140,7 @@ class PeriodQueries:
         FROM MOVIMIENTOS_CONTRATOS
         WHERE CONTRATO_ID IS NULL
           AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
-          AND FECHA <= date(? || '-01', '+1 month', '-1 day')
+          AND strftime('%Y-%m', FECHA) = ?
         """
 
         start_time = datetime.now()
@@ -252,7 +252,7 @@ class PeriodQueries:
         LEFT JOIN MAESTRO_GESTORES g ON s.SEGMENTO_ID = g.SEGMENTO_ID
         LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
         LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
-            AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
+            AND strftime('%Y-%m', mov.FECHA) = ?
         GROUP BY s.SEGMENTO_ID, s.DESC_SEGMENTO
         ORDER BY gastos_segmento ASC
         """
@@ -269,7 +269,7 @@ class PeriodQueries:
         FROM MAESTRO_PRODUCTOS pr
         LEFT JOIN MAESTRO_CONTRATOS co ON pr.PRODUCTO_ID = co.PRODUCTO_ID
         LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
-            AND mov.FECHA <= date(? || '-01', '+1 month', '-1 day')
+            AND strftime('%Y-%m', mov.FECHA) = ?
         GROUP BY pr.PRODUCTO_ID, pr.DESC_PRODUCTO
         ORDER BY gastos_producto ASC
         """
@@ -279,7 +279,7 @@ class PeriodQueries:
         FROM MOVIMIENTOS_CONTRATOS
         WHERE CONTRATO_ID IS NULL
           AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
-          AND FECHA <= date(? || '-01', '+1 month', '-1 day')
+          AND strftime('%Y-%m', FECHA) = ?
         """
 
         start_time = datetime.now()
