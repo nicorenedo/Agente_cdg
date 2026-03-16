@@ -881,15 +881,22 @@ class BasicQueries:
 
     def get_centro_metricas_financieras(self, centro_id: int, periodo: Optional[str] = None) -> Dict[str, Any]:
         """Métricas financieras de un centro. Redistribucion proporcional a contratos del centro."""
-        periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?" if periodo else ""
-        params = (periodo, centro_id) if periodo else (centro_id,)
+        if periodo:
+            # Contratos activos = cartera acumulada (FECHA_ALTA <= último día del período)
+            contratos_expr = "COUNT(DISTINCT CASE WHEN mc.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day') THEN mc.CONTRATO_ID END)"
+            periodo_filter = "AND strftime('%Y-%m', mov.FECHA) = ?"
+            params = (periodo, periodo, centro_id)
+        else:
+            contratos_expr = "COUNT(DISTINCT mc.CONTRATO_ID)"
+            periodo_filter = ""
+            params = (centro_id,)
 
         query = f"""
         SELECT
             c.CENTRO_ID, c.DESC_CENTRO, c.IND_CENTRO_FINALISTA,
             COUNT(DISTINCT g.GESTOR_ID)    AS total_gestores,
             COUNT(DISTINCT mc.CLIENTE_ID)  AS total_clientes,
-            COUNT(DISTINCT mc.CONTRATO_ID) AS total_contratos,
+            {contratos_expr}               AS total_contratos,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
                               THEN mov.IMPORTE ELSE 0 END), 0) AS ingresos_total,
             COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID, 1, 2) IN ('62','64','68','69')
@@ -1093,6 +1100,20 @@ class BasicQueries:
         logger.info(f"✅ Resumen general generado: {len(resumen)} métricas")
         return resumen
     
+    def get_contratos_nuevos_periodo(self, periodo: str) -> Dict[str, Any]:
+        """Contratos nuevos firmados en un período específico (por FECHA_ALTA)."""
+        query = """
+        SELECT
+            COUNT(*) AS contratos_nuevos,
+            ? AS periodo,
+            GROUP_CONCAT(DISTINCT g.DESC_GESTOR) AS gestores_con_altas
+        FROM MAESTRO_CONTRATOS mc
+        JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+        WHERE strftime('%Y-%m', mc.FECHA_ALTA) = ?
+        """
+        result = self.query_executor.execute_query(query, (periodo, periodo), fetch_type="one")
+        return result or {"contratos_nuevos": 0, "periodo": periodo, "gestores_con_altas": None}
+
     def get_ranking_gestores_por_contratos(self) -> List[Dict[str, Any]]:
         """Obtiene ranking de gestores por número de contratos"""
         query = """
@@ -1181,6 +1202,7 @@ def get_gestor_clientes_metricas(gestor_id, periodo=None): return basic_queries.
 def get_cliente_metricas(cliente_id, periodo=None): return basic_queries.get_cliente_metricas(cliente_id, periodo)
 def get_cliente_contratos_metricas(cliente_id, periodo=None): return basic_queries.get_cliente_contratos_con_metricas(cliente_id, periodo)
 def get_contrato_detalle(contrato_id): return basic_queries.get_contrato_detalle_completo(contrato_id)
+def get_contratos_nuevos_periodo(periodo: str): return basic_queries.get_contratos_nuevos_periodo(periodo)
 
 if __name__ == "__main__":
     # Ejemplo de uso
