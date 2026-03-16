@@ -52,6 +52,9 @@ import {
 } from '@ant-design/icons';
 import PropTypes from 'prop-types';
 
+// ✅ @ant-design/x chat components
+import { Bubble, Sender } from '@ant-design/x';
+
 // ✅ Services actualizados v12.0
 import chatService from '../../services/chatService';
 import reportService from '../../services/reportService';
@@ -1249,67 +1252,116 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         </div>
       )}
 
-      <div 
+      <div
         ref={messagesContainerRef}
-        style={{ 
+        style={{
           flex: 1,
-          padding: '20px',
           overflow: 'auto',
           backgroundColor: theme.colors?.backgroundLight || '#fafafa',
           maxHeight: isExpanded ? '75vh' : '500px',
-          minHeight: '350px'
+          minHeight: '350px',
+          padding: '8px 4px',
         }}
       >
         {messages.length === 0 ? (
-          <Empty 
+          <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="Inicia una conversación con el Agente CDG v12.0 + Confidencialidad"
             style={{ marginTop: 40 }}
           />
         ) : (
           <>
-            {messages.map(renderMessage)}
-            {isTyping && (
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'flex-start', 
-                marginBottom: 16,
-                alignItems: 'center'
-              }}>
-                <Avatar 
-                  icon={<RobotOutlined />} 
-                  style={{ 
-                    backgroundColor: theme.colors?.bmGreenPrimary,
-                    marginRight: 12
-                  }} 
-                  size="small"
-                />
-                <div style={{
-                  backgroundColor: theme.colors?.backgroundLight,
-                  padding: '12px 16px',
-                  borderRadius: 16,
-                  borderTopLeftRadius: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                }}>
-                  <Spin 
-                    indicator={<LoadingOutlined style={{ fontSize: 14 }} spin />} 
-                    size="small" 
-                  />
-                  <Text style={{ fontSize: 14, color: theme.colors?.textSecondary }}>
-                    Analizando con Perfect Integration + Confidencialidad...
-                  </Text>
-                  {isGeneratingReport && (
-                    <Tag size="small" color="blue">Generando reporte</Tag>
-                  )}
-                  <Tag size="small" color="green">
-                    <SecurityScanOutlined /> Validando
-                  </Tag>
-                </div>
-              </div>
-            )}
+            <Bubble.List
+              autoScroll
+              items={[
+                ...messages.map((msg) => {
+                  const isUser = msg.type === 'user';
+                  const recs = (msg.recommendations || []).slice(0, 4);
+                  return {
+                    key: msg.id,
+                    role: isUser ? 'user' : 'assistant',
+                    content: msg.content || '',
+                    messageRender: (content) => (
+                      <div style={{ wordBreak: 'break-word', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                        {!isUser
+                          ? String(content).split(/(\*\*[^*]+\*\*)/).map((p, i) =>
+                              p.startsWith('**') && p.endsWith('**')
+                                ? <strong key={i}>{p.slice(2, -2)}</strong>
+                                : <React.Fragment key={i}>{p}</React.Fragment>
+                            )
+                          : content}
+                      </div>
+                    ),
+                    footer: (
+                      <div>
+                        {msg.timestamp && (
+                          <Text type="secondary" style={{ fontSize: 10 }}>
+                            {msg.timestamp instanceof Date
+                              ? msg.timestamp.toLocaleTimeString()
+                              : new Date(msg.timestamp).toLocaleTimeString()}
+                          </Text>
+                        )}
+                        {recs.length > 0 && (
+                          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {recs.map((rec, i) => (
+                              <Tag
+                                key={i}
+                                style={{
+                                  cursor: 'pointer',
+                                  borderColor: theme.colors?.bmGreenLight,
+                                  color: theme.colors?.bmGreenPrimary,
+                                  fontSize: 11,
+                                }}
+                                onClick={() => handleSuggestion(rec)}
+                              >
+                                {rec}
+                              </Tag>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                  };
+                }),
+                ...(isTyping
+                  ? [{ key: 'typing', role: 'assistant', content: '', loading: true }]
+                  : []),
+              ]}
+              roles={{
+                user: {
+                  placement: 'end',
+                  avatar: {
+                    icon: <UserOutlined />,
+                    style: { backgroundColor: '#6B6B8A' },
+                    size: 'small',
+                  },
+                  styles: {
+                    content: {
+                      backgroundColor: '#A100FF',
+                      color: 'white',
+                      borderRadius: '16px 4px 16px 16px',
+                      boxShadow: '0 2px 8px rgba(161,0,255,0.2)',
+                    },
+                  },
+                },
+                assistant: {
+                  placement: 'start',
+                  avatar: {
+                    icon: <RobotOutlined />,
+                    style: { backgroundColor: '#A100FF' },
+                    size: 'small',
+                  },
+                  styles: {
+                    content: {
+                      backgroundColor: '#F3E8FF',
+                      borderLeft: '3px solid #A100FF',
+                      borderRadius: '4px 16px 16px 16px',
+                      color: '#1A1A2E',
+                    },
+                  },
+                },
+              }}
+            />
             <div ref={messagesEndRef} style={{ height: '1px' }} />
           </>
         )}
@@ -1340,37 +1392,21 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         </div>
       )}
 
-      <div style={{ 
-        padding: '16px 20px',
+      <div style={{
+        padding: '12px 16px',
         backgroundColor: 'white',
         borderTop: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`
       }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-          <TextArea
-            ref={inputRef}
-            placeholder={`💬 ${scope === 'direccion' ? 'Pregunta sobre KPIs corporativos, rankings, análisis ejecutivos...' : 'Pregunta sobre tu cartera, rendimiento, comparativas...'}`}
-            value={currentMessage}
-            onChange={(e) => setCurrentMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isSending || isGeneratingReport}
-            autoSize={{ minRows: 1, maxRows: 4 }}
-            style={{ flex: 1 }}
-          />
-          <Button
-            type="primary"
-            icon={isSending || isGeneratingReport ? <LoadingOutlined spin /> : <SendOutlined />}
-            onClick={handleSend}
-            disabled={!currentMessage.trim() || isSending || isGeneratingReport}
-            style={{
-              backgroundColor: theme.colors?.bmGreenPrimary,
-              borderColor: theme.colors?.bmGreenPrimary,
-              height: 36
-            }}
-            loading={isSending || isGeneratingReport}
-          >
-            Enviar
-          </Button>
-        </div>
+        <Sender
+          value={currentMessage}
+          onChange={setCurrentMessage}
+          onSubmit={() => handleSend()}
+          onCancel={() => { setIsSending(false); setIsTyping(false); }}
+          loading={isSending || isGeneratingReport}
+          disabled={isSending || isGeneratingReport}
+          placeholder={`💬 ${scope === 'direccion' ? 'Pregunta sobre KPIs corporativos, rankings, análisis ejecutivos...' : 'Pregunta sobre tu cartera, rendimiento, comparativas...'}`}
+          style={{ borderRadius: 8, borderColor: theme.colors?.bmGreenPrimary }}
+        />
         
         <div style={{ 
           marginTop: 8, 
