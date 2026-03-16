@@ -78,27 +78,22 @@
 
     ---
 
-    ## 5. MODELO TEMPORAL — YTD (Year-to-Date)
+    ## 5. MODELO TEMPORAL — MoM + Cartera Acumulada
 
-    **Lógica definitiva de la POC:** todos los KPIs son **acumulados desde el inicio del año hasta el período seleccionado**.
+    **Lógica definitiva de la POC:** ingresos/gastos/ROE son del **mes seleccionado (MoM)**. La cartera de contratos es **acumulada histórica**.
 
-    | Período | Filtro SQL | Contratos activos |
+    | Período | Filtro ingresos/gastos | Filtro contratos |
     |---|---|---|
-    | sep-2025 | `FECHA <= '2025-09-30'` | 216 |
-    | oct-2025 | `FECHA <= '2025-10-31'` | 220 (incluye sep+oct) |
+    | sep-2025 | `strftime('%Y-%m', FECHA) = '2025-09'` | `FECHA_ALTA <= '2025-09-30'` → **216** |
+    | oct-2025 | `strftime('%Y-%m', FECHA) = '2025-10'` | `FECHA_ALTA <= '2025-10-31'` → **220** |
 
-    **Fórmula SQL estándar:** `FECHA <= date(? || '-01', '+1 month', '-1 day')` donde `?` = `'YYYY-MM'`
+    **Fórmula contratos activos:** `COUNT(DISTINCT CASE WHEN co.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day') THEN co.CONTRATO_ID END)`
 
-    **Consecuencias:**
-    - Ingresos oct YTD (€1,192k) siempre > sep YTD (€599k) ✓
-    - ROE oct 36.35% ≈ ROE sep 35.94% (acumulación estable) ✓
-    - Gastos oct YTD incluye fondeo €180k + provisión €45k de oct **y** sep
-    - `get_evolucion_gestores_sep_oct`: sep = `FECHA <= '2025-09-30'` / oct = `FECHA <= '2025-10-31'`
-
-    **Excepciones NO YTD (mantienen filtro mensual):**
-    - `strftime('%Y-%m', FECHA_ALTA) = ?` → contratos_nuevos_periodo (métrica delta mensual)
-    - `strftime(...)` en GROUP BY / SELECT as periodo (proyecciones de tendencia)
-    - Queries de tendencia multi-mes con rangos `>= / <=` fijos (datos históricos)
+    **Valores de referencia definitivos (post-sesión-23):**
+    - Sep MoM ingresos: €599,759 | ROE 35.94% | 216 contratos
+    - Oct MoM ingresos: €624,000 | ROE 39.96% | 220 contratos (+4.04% oct vs sep ✓)
+    - Fábrica oct: cedido gestora €123,278 (84.01%), retenido banco €23,471
+    - FECHA_ALTA fix: 29 contratos tenían FECHA_ALTA incorrecta en oct → corregidos a `2025-09-01` en BD
 
     ---
 
@@ -197,7 +192,7 @@
     ## 12. ESTADO ACTUAL DEL PROYECTO
 
     > ⚠️ Esta sección debe actualizarse al final de cada sesión de trabajo.
-    > Última actualización: 2026-03-15 (sesión 20)
+    > Última actualización: 2026-03-16 (sesión 23)
 
     ### ✅ Completado (sesiones 1-17)
 
@@ -232,19 +227,18 @@
 
     ---
 
-    ### 📊 Valores de referencia (post-sesión-19)
+    ### 📊 Valores de referencia definitivos (post-sesión-23)
 
     | Métrica | Valor |
     |---|---|
-    | Total contratos | 220 oct / 216 sep (FECHA_ALTA filtra 4 contratos nuevos S16) |
+    | Total contratos | 220 oct / 216 sep (cartera acumulada FECHA_ALTA) |
     | Total movimientos | ~2,900+ |
-    | Gastos centrales sep / oct | -€41,103 / -€271,251 (incluye fondeo 660001 -€180k) |
-    | **Modelo temporal** | **YTD** — FECHA <= date(?||'-01','+1 month','-1 day') |
-    | Sep YTD ingresos | €599,759 / ROE 35.94% / 216 contratos |
-    | Oct YTD ingresos | **€1,192,223** / ROE **36.35%** / 220 contratos (oct>sep ✓) |
-    | Gestor 1 oct YTD | ingresos €65,209 / margen **46.96%** |
-    | Modelo fábrica oct YTD | cedido €234,783 (84.12%), retenido €44,588, desv -0.88% vs 85% |
-    | Gastos centrales YTD | sep -€278,410 / oct -€549,661 |
+    | **Modelo temporal** | **MoM** ingresos/gastos/ROE + **cartera acumulada** contratos |
+    | Sep MoM ingresos | €599,759 / ROE 35.94% / 216 contratos |
+    | Oct MoM ingresos | **€624,000** / ROE **39.96%** / 220 contratos (+4.04% oct>sep ✓) |
+    | Gastos centrales MoM | sep -€278,410 / oct -€271,251 (incluye fondeo 660001 -€180k) |
+    | Modelo fábrica oct | cedido €123,278 (84.01%), retenido €23,471, desv -0.99% vs 85% |
+    | Fábrica oct vs sep | +4.54% variación cedido gestora (sep €117,926) |
     | Margen por segmento oct | Privada 91.8% > Minorista 85.7% > Empresas 80.9% > Personal 72.4% > Fondos 66.0% |
     | Evolucion gestores oct | 10 mejora / 8 estable / 12 retroceso (umbral ±5%) |
     | Outlier aceptado | G8 Pablo Moreno (-57.4% sep): fondos lumpy |
@@ -272,32 +266,33 @@
     - Verificados todos los endpoints DireccionView en 8004: 9/9 OK ✅
     - Valores de referencia confirmados: gestor 1 margen 44.55% ✅, ROE grupo 36.77% ✅, fábrica cedida 83.98% ✅
 
-    **Sesión 22 — completada (commits `d66933c`, `510bb0a`, `95b9d23`):**
-    - Bug 1 ✅: `PercentageOutlined` → `EuroCircleOutlined` en FabricaModelSection cedido gestora
-    - Bug 2 ✅: backend en puerto 8007 con código YTD; frontend/.env → 8007
-    - YTD backend ✅: todos los filtros `strftime('%Y-%m',FECHA)=?` → `FECHA<=date(?||'-01','+1 month','-1 day')` en 6 archivos de queries + main.py `/analytics/fabrica`. Excepciones respetadas.
-    - YTD labels ✅: KPICards `ROE Grupo YTD`, `Ingresos YTD`, `Contratos Activos`; TopBar badge "Acumulado YTD"
-    - Nueva sección 5 en CLAUDE.md documenta modelo YTD
-
     **Sesión 21 — completada (commit `fe77403`):**
     - FIX1: `total_contratos_activos` filtra por FECHA_ALTA≤último día del período. BD: 29 contratos con FECHA_ALTA incorrecto en oct → movidos a `2025-09-01`. Resultado: sep=216 ✓, oct=220 ✓.
-    - FIX2 (análisis): ingresos sep €599,759 > oct €592,464 (1.22%, €7k). Aceptable para demo. Causa: ajuste narrativo P7 sesión 16. No se modifica BD.
-    - FIX3: `FabricaModelSection.jsx` compactado a banda ~140px. Eliminado gráfico de barras. Añadida variación oct vs sep como texto ▲/▼.
-    - FIX4: `DeviationAnalysis.jsx` sin `height:'100vh'` ni `minHeight:'95vh'`. Altura se adapta al contenido.
-    - Backend: arrancado en puerto 8006 (código sesión 19+21). `.env` → `http://localhost:8006`. El frontend en 3000 necesita reinicio para cargar nuevo `REACT_APP_API_BASE_URL`.
+    - FIX3: `FabricaModelSection.jsx` compactado a banda ~140px. Eliminado gráfico de barras. Variación oct vs sep como texto ▲/▼.
+    - FIX4: `DeviationAnalysis.jsx` sin `height:'100vh'` ni `minHeight:'95vh'`. Altura adaptativa.
+
+    **Sesión 22 — YTD implementado y luego revertido:**
+    - YTD backend implementado en commit `510bb0a`, luego revertido con `git revert 510bb0a` (commit `36ac179`) — decisión: MoM es el modelo correcto.
+    - Bug fix ✅: `PercentageOutlined` → `EuroCircleOutlined` en FabricaModelSection (commit `d66933c`, NO revertido).
+
+    **Sesión 23 — completada (commits `36ac179`, `e7dbf08`, `4d8b534`):**
+    - REVERT ✅: `git revert 510bb0a` → MoM restaurado en los 6 archivos de queries + main.py
+    - DB scaling ✅: 825 rows `76%` oct-2025 × 1.052806 → oct €624k (+4.04% vs sep €599k ✓)
+    - Fábrica oct ✅: cedido €123,278 (84.01%), variación +4.54% vs sep
+    - Labels ✅: `ROE Grupo`, `Ingresos del Mes`, `Cartera Activa`, TopBar "Mes seleccionado"
+    - Prompts ✅: MoM model note en `gestor_agent._build_system_prompt` + `FINANCIAL_ANALYST_SYSTEM_PROMPT`
 
     **Para iniciar el sistema (IMPORTANTE):**
     ```bash
     # Backend (usar cualquier puerto libre != 8000)
-    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8007
-    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8007 en frontend/.env)
+    cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8008
+    # Frontend (con REACT_APP_API_BASE_URL=http://localhost:8008 en frontend/.env)
     cd frontend && npm start
     ```
-    Si puerto 8000 queda libre (tras reinicio), cambiar `.env` a 8000 y arrancar en 8000.
 
     **Próximas acciones:**
-    1. **Re-test visual completo**: Navegar DireccionView → sep=216 contratos, oct=220, FabricaModelSection en banda compacta, DeviationAnalysis sin espacio vacío
-    2. **Re-test agente Q2 Gestor** (evolución sep→oct): margen ahora unificado, verificar respuesta coherente
+    1. **Re-test visual completo**: DireccionView → sep=216, oct=220, fábrica oct>sep, ROE oct>sep
+    2. **Re-test agente**: preguntar ROE/ingresos → responde MoM; preguntar contratos → responde cartera
     3. **CDG Q1 semántica**: "mejor margen" puede ser % o €. Añadir aclaración si ambiguo
 
     ---
