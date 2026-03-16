@@ -51,15 +51,16 @@ const FabricaModelSection = ({ periodo = '2025-10' }) => {
   );
   if (!data) return null;
 
-  const oct = data.oct_2025 || {};
-  const sep = data.sep_2025 || {};
+  const isSep = periodo === '2025-09';
+  const current = isSep ? (data.sep_2025 || {}) : (data.oct_2025 || {});
+  const periodoLabel = isSep ? 'sep' : 'oct';
   const desvRatio = data.desviacion_ratio_vs_target ?? null;
   const varCedido = data.variacion_cedido_pct ?? null;
 
   const ratioStatus = desvRatio == null ? null : Math.abs(desvRatio) < 1 ? 'success' : Math.abs(desvRatio) < 3 ? 'warning' : 'error';
   const ratioTagColor = ratioStatus === 'success' ? 'green' : ratioStatus === 'warning' ? 'orange' : 'red';
 
-  const varSepOct = varCedido != null
+  const varSepOct = (!isSep && varCedido != null)
     ? `${varCedido >= 0 ? '+' : ''}${varCedido}%`
     : null;
 
@@ -78,7 +79,7 @@ const FabricaModelSection = ({ periodo = '2025-10' }) => {
       styles={{ body: { padding: '8px 16px' } }}
       extra={
         <Tag color={ratioTagColor} style={{ fontSize: 11 }}>
-          Gestora: {oct.ratio_gestora_pct ?? '—'}%
+          Gestora: {current.ratio_gestora_pct ?? '—'}%
           {desvRatio != null && (
             <span style={{ marginLeft: 4 }}>
               ({desvRatio > 0 ? '+' : ''}{desvRatio}% vs 85%)
@@ -90,8 +91,8 @@ const FabricaModelSection = ({ periodo = '2025-10' }) => {
       <Row gutter={[12, 0]} align="middle">
         <Col xs={24} sm={7}>
           <Statistic
-            title={<span style={{ fontSize: 11, color: '#666' }}>Cedido Gestora (oct)</span>}
-            value={oct.cedido_gestora || 0}
+            title={<span style={{ fontSize: 11, color: '#666' }}>Cedido Gestora ({periodoLabel})</span>}
+            value={current.cedido_gestora || 0}
             formatter={(v) => fmt(v)}
             prefix={<EuroCircleOutlined style={{ color: '#A100FF', fontSize: 12 }} />}
             valueStyle={{ color: '#A100FF', fontWeight: 700, fontSize: 16 }}
@@ -99,8 +100,8 @@ const FabricaModelSection = ({ periodo = '2025-10' }) => {
         </Col>
         <Col xs={24} sm={7}>
           <Statistic
-            title={<span style={{ fontSize: 11, color: '#666' }}>Retenido Banco (oct)</span>}
-            value={oct.retenido_banco || 0}
+            title={<span style={{ fontSize: 11, color: '#666' }}>Retenido Banco ({periodoLabel})</span>}
+            value={current.retenido_banco || 0}
             formatter={(v) => fmt(v)}
             prefix={<BankOutlined style={{ color: '#7B00CC', fontSize: 12 }} />}
             valueStyle={{ color: '#7B00CC', fontWeight: 700, fontSize: 16 }}
@@ -109,7 +110,7 @@ const FabricaModelSection = ({ periodo = '2025-10' }) => {
         <Col xs={24} sm={5}>
           <Statistic
             title={<span style={{ fontSize: 11, color: '#666' }}>Contratos Fondo</span>}
-            value={oct.contratos_fondo || 0}
+            value={current.contratos_fondo || 0}
             prefix={<ContainerOutlined style={{ color: '#5500AA', fontSize: 12 }} />}
             valueStyle={{ color: '#5500AA', fontWeight: 700, fontSize: 16 }}
             suffix={<span style={{ fontSize: 11, color: '#999', fontWeight: 400 }}>ctos</span>}
