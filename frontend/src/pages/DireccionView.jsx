@@ -12,7 +12,8 @@ import {
   FloatButton,
   Button,
   Badge,
-  notification  // ✅ AÑADIR ESTA LÍNEA
+  Tabs,
+  notification
 } from 'antd';
 
 import {
@@ -34,6 +35,7 @@ import DrillDownView from '../components/Dashboard/DrillDownView';
 import ConversationalPivot from '../components/Dashboard/ConversationalPivot';
 import ChatInterface from '../components/Dashboard/ChatInterface';
 import FabricaModelSection from '../components/Dashboard/FabricaModelSection';
+import GestoresTable from '../components/Dashboard/GestoresTable';
 import Loader from '../components/common/Loader';
 import ErrorState from '../components/common/ErrorState';
 import api from '../services/api';
@@ -501,6 +503,23 @@ const DireccionView = () => {
             </Row>
 
             <FabricaModelSection periodo={periodo} />
+
+            {/* Tabla Detallada */}
+            <Card
+              style={{ marginTop: 24, borderRadius: 8, boxShadow: theme.shadows?.card }}
+              styles={{ body: { padding: 20 } }}
+            >
+              <Tabs
+                defaultActiveKey="tabla"
+                items={[
+                  {
+                    key: 'tabla',
+                    label: 'Tabla Detallada',
+                    children: <GestoresTable periodo={periodo} />,
+                  },
+                ]}
+              />
+            </Card>
           </Col>
 
           {/* Right column: sticky ConversationalPivot */}
