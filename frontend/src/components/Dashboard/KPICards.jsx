@@ -1,6 +1,6 @@
 // frontend/src/components/Dashboard/KPICards.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Row, Col, Card, Statistic, Badge, Tooltip, Space, Skeleton, Select } from 'antd';
+import { Row, Col, Card, Statistic, Badge, Tooltip, Space, Skeleton, Select, Tag } from 'antd';
 import {
   ArrowUpOutlined,
   ArrowDownOutlined,
@@ -95,14 +95,14 @@ const KPICards = ({
         label: 'ROE Grupo',
         icon: PercentageOutlined,
         color: theme.colors.bmGreenPrimary,
-        description: 'Rentabilidad del mes seleccionado'
+        description: 'Beneficio neto / ingresos totales del mes'
       },
       {
         key: 'total_clientes',
         label: 'Total Clientes',
         icon: UserOutlined,
         color: theme.colors.info,
-        description: 'Total clientes del grupo o centro'
+        description: 'Clientes con al menos un contrato activo'
       },
       {
         key: 'total_contratos',
@@ -116,7 +116,7 @@ const KPICards = ({
         label: 'Ingresos del Mes',
         icon: EuroCircleOutlined,
         color: theme.colors.success,
-        description: 'Ingresos generados en el mes seleccionado'
+        description: 'Ingresos generados por todos los gestores en el mes seleccionado'
       }
     ],
     gestor: [
@@ -565,6 +565,7 @@ const KPICards = ({
 
 
     return (
+      <Tooltip title={config.description} placement="top" mouseEnterDelay={0.5}>
       <Card
         hoverable={!!onKpiClick}
         onClick={handleClick}
@@ -655,35 +656,41 @@ const KPICards = ({
           />
 
 
-          {/* Variation */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {hasVariation && <TrendIcon style={{ fontSize: 14, color: variationColor }} />}
-              <span style={{
-                color: variationColor,
-                fontSize: 14,
-                fontWeight: 600
-              }}>
-                {hasVariation
-                  ? `${kpi.variation > 0 ? '+' : ''}${kpi.variation.toFixed(1)}%`
-                  : '—'}
-              </span>
-            </div>
+          {/* Variation MoM */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {hasVariation ? (
+              <Tag
+                icon={<TrendIcon style={{ fontSize: 11 }} />}
+                style={{
+                  margin: 0,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: isPositiveVariation ? '#52c41a' : '#E5002B',
+                  borderColor: isPositiveVariation ? '#52c41a' : '#E5002B',
+                  backgroundColor: isPositiveVariation ? '#f6ffed' : '#fff2f0',
+                }}
+              >
+                {kpi.variation > 0 ? '+' : ''}{kpi.variation.toFixed(1)}%
+              </Tag>
+            ) : (
+              <span style={{ color: theme.colors?.textLight || '#999', fontSize: 13 }}>—</span>
+            )}
           </div>
 
 
           {/* Description */}
           <div style={{ marginTop: 4 }}>
-            <span style={{ 
-              fontSize: 11, 
+            <span style={{
+              fontSize: 11,
               color: theme.colors?.textLight || '#999',
-              fontStyle: 'italic' 
+              fontStyle: 'italic'
             }}>
               {config.description}
             </span>
           </div>
         </Space>
       </Card>
+      </Tooltip>
     );
   };
 
