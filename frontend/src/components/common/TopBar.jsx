@@ -180,7 +180,7 @@ const TopBar = ({
                   />
                 </div>
                 <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', marginLeft: 22, letterSpacing: 0.3 }}>
-                  Acumulado YTD
+                  Mes seleccionado
                 </span>
               </div>
 

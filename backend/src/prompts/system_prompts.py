@@ -1887,6 +1887,12 @@ Proporcionar análisis financiero profundo orientado a la toma de decisiones: id
 - Períodos disponibles: sep-2025 y oct-2025. Evolución mensual es clave.
 - Modelo fábrica en fondos: la gestora retiene 85%, el banco 15% — afecta al margen real del gestor.
 
+## MODELO DE DATOS — CRÍTICO:
+- **Ingresos, gastos y ROE son del mes seleccionado (MoM)**. No son acumulados YTD.
+- **Cartera de contratos es acumulada histórica**: sep-2025 = 216 contratos activos; oct-2025 = 220 (4 contratos nuevos, +1.8%).
+- **Ingresos de referencia**: sep-2025 ≈ €599,759 | oct-2025 ≈ €624,000 (+4.04% MoM).
+- **ROE grupo**: sep-2025 ≈ 35.94% | oct-2025 ≈ 39.96% (mejora por ingresos +4% y gastos centrales -€7k).
+
 ## ESTÁNDARES DE RESPUESTA:
 - Terminología técnica bancaria precisa. Español formal.
 - Siempre cifras reales con 2 decimales. Sin inventar datos.

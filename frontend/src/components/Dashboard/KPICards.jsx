@@ -90,12 +90,12 @@ const KPICards = ({
   // Configuración de KPIs
   const kpiConfig = useMemo(() => ({
     direccion: [
-      { 
-        key: 'roe_grupo', 
-        label: 'ROE Grupo YTD',
+      {
+        key: 'roe_grupo',
+        label: 'ROE Grupo',
         icon: PercentageOutlined,
         color: theme.colors.bmGreenPrimary,
-        description: 'Rentabilidad acumulada enero→período seleccionado'
+        description: 'Rentabilidad del mes seleccionado'
       },
       {
         key: 'total_clientes',
@@ -106,17 +106,17 @@ const KPICards = ({
       },
       {
         key: 'total_contratos',
-        label: 'Contratos Activos',
+        label: 'Cartera Activa',
         icon: FileTextOutlined,
         color: theme.colors.bmGreenLight,
-        description: 'Contratos con FECHA_ALTA en o antes del período'
+        description: 'Contratos activos acumulados a cierre del período'
       },
       {
         key: 'ingresos_totales',
-        label: 'Ingresos YTD',
+        label: 'Ingresos del Mes',
         icon: EuroCircleOutlined,
         color: theme.colors.success,
-        description: 'Ingresos acumulados enero→período seleccionado'
+        description: 'Ingresos generados en el mes seleccionado'
       }
     ],
     gestor: [
