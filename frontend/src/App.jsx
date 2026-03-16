@@ -22,13 +22,14 @@ import DireccionView from './pages/DireccionView';
 
 const antdTheme = {
   token: {
-    colorPrimary: theme.colors.bmGreenPrimary,
-    colorSuccess: theme.colors.success,
+    colorPrimary: '#A100FF',
+    colorLink: '#A100FF',
+    colorSuccess: '#A100FF',
     colorWarning: theme.colors.warning,
     colorError: theme.colors.error,
     colorInfo: theme.colors.info,
     borderRadius: 8,
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     fontSize: 14,
     colorBgContainer: theme.colors.background,
     colorBgLayout: theme.colors.backgroundLight,
@@ -39,10 +40,15 @@ const antdTheme = {
   },
   components: {
     Button: {
+      colorPrimary: '#A100FF',
       borderRadius: 6,
       controlHeight: 36,
       colorPrimaryHover: theme.colors.bmGreenLight,
       fontWeight: 500,
+    },
+    Tabs: {
+      inkBarColor: '#A100FF',
+      itemSelectedColor: '#A100FF',
     },
     Card: {
       borderRadius: 12,
@@ -72,7 +78,7 @@ const antdTheme = {
       colorItemBg: 'transparent',
     },
     Badge: {
-      colorPrimary: theme.colors.bmGreenPrimary,
+      colorPrimary: '#A100FF',
     },
     Alert: {
       borderRadius: 8,
