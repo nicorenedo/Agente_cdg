@@ -79,6 +79,12 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S29 — completada (commits `0b41f73`, `86bef06`, `2a984a5`, `5bb50b1`):**
+- B1 ✅ InteractiveCharts: Card fondo `#120020→white`, leyenda/ticks `#A87BC8→#666`, grid `rgba(161,0,255,0.08)→#e8e8e8`. Tooltip dark mantenido.
+- B2 ✅ ChatInterface layout: `maxHeight`/`minHeight` eliminados del área de mensajes (`flex:1` controla), `flexShrink:0` en suggestions y footer, `padding 12px 16px` en mensajes. `maxWidth 75%/85%` en burbujas usuario/asistente.
+- B3 ✅ ROE gestor: `calculate_roe_gestor_enhanced` corregido: `abs(gastos)` + denominador `ingresos` (no `patrimonio_total`). G27 oct: ~61.8% (22,245/36,010). También corregido en `get_gestor_performance_enhanced`.
+- B4 ✅ Benchmarks eliminados: `kpi_calculator.py` strings "Top quartile sector bancario" → `'N/A'`. `gestor_agent.py` restricción explícita añadida: solo datos BD, sin clasificaciones externas.
+
 **S28 — completada (commits `0d4ddb6`, `d7b9685`):**
 - BLOQUE 1 ✅ Dark mode revertido en dashboards: `App.jsx` ConfigProvider tokens → claro (background/borderLight/textPrimary), `index.css` body sin background/color forzado. `DireccionView`+`GestorView` `backgroundColor` → `theme.colors.background`. `KPICards` card white + texto textPrimary/Secondary. `ChatInterface` área mensajes+input → fondo claro, burbujas asistente `#1A0033` mantenidas.
 - BLOQUE 2 ✅ LandingPage: nodos Three.js `size 0.07→0.25`, `maxDist 3.2→4.2`, líneas `opacity 0.12→0.25`. Botón Actualizar movido al top-right absoluto (`position: absolute, top: 20, right: 24`).
@@ -114,7 +120,7 @@
 
 ---
 
-## ⏭️ Próximo paso al retomar (post-S28)
+## ⏭️ Próximo paso al retomar (post-S29)
 
 **Para iniciar el sistema:**
 ```bash
