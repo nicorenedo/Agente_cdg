@@ -1,6 +1,7 @@
 // frontend/src/pages/DireccionView.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   Layout,
   Row,
@@ -340,7 +341,7 @@ const DireccionView = () => {
   // ✅ ESTADOS DE CARGA Y ERROR
   if (loading) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
           <Loader tip="Inicializando Dashboard de Dirección..." size="large" />
         </div>
@@ -350,7 +351,7 @@ const DireccionView = () => {
 
   if (error) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
           <ErrorState
             error={error}
@@ -365,9 +366,9 @@ const DireccionView = () => {
   }
 
   return (
-    <Layout style={{ 
-      minHeight: '100vh', 
-      backgroundColor: theme.colors?.background || '#fafafa',
+    <Layout style={{
+      minHeight: '100vh',
+      backgroundColor: '#0A0014',
       overflow: 'hidden'
     }}>
       {/* ✅ TopBar */}
@@ -381,11 +382,16 @@ const DireccionView = () => {
 
       {/* Contenido principal */}
       <Content style={{
-        marginTop: 64, // Altura del TopBar
+        marginTop: 64,
         padding: theme.spacing?.lg || 24,
         overflowY: 'auto',
         height: 'calc(100vh - 64px)'
       }}>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+        >
         {/* ✅ Header de la vista mejorado */}
         <div style={{ marginBottom: theme.spacing?.lg || 24 }}>
           <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -563,6 +569,7 @@ const DireccionView = () => {
             style={{ minHeight: 400 }}
           />
         </Card>
+        </motion.div>
       </Content>
 
       {/* ✅ CHAT FLOTANTE ACTUALIZADO CON NUEVAS PROPS */}

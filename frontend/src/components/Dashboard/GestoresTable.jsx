@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Table, Tag, Badge, Progress, Skeleton, Select, Space, Typography, Card } from 'antd';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 
 const { Text } = Typography;
@@ -270,18 +271,38 @@ const GestoresTable = ({ periodo }) => {
           {filteredData.length} gestores
         </Text>
       </Space>
-      <Table
-        columns={columns}
-        dataSource={filteredData}
-        size="small"
-        expandable={{
-          expandedRowRender,
-          onExpand: handleExpand,
-        }}
-        pagination={{ pageSize: 15, showSizeChanger: false }}
-        scroll={{ x: 820 }}
-        rowHoverable
-      />
+      <AnimatePresence>
+        <Table
+          columns={columns}
+          dataSource={filteredData}
+          size="small"
+          expandable={{
+            expandedRowRender,
+            onExpand: handleExpand,
+          }}
+          pagination={{ pageSize: 15, showSizeChanger: false }}
+          scroll={{ x: 820 }}
+          rowHoverable
+          components={{
+            body: {
+              row: ({ children, ...props }) => {
+                const idx = filteredData.findIndex((r) => r.key === props['data-row-key']);
+                return (
+                  <motion.tr
+                    {...props}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.25, delay: Math.min(idx * 0.04, 0.6) }}
+                  >
+                    {children}
+                  </motion.tr>
+                );
+              },
+            },
+          }}
+        />
+      </AnimatePresence>
     </div>
   );
 };

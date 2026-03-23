@@ -134,6 +134,7 @@ const TopBar = ({
       : `${theme.spacing.sm}px ${theme.spacing.md}px`,
     fontFamily: theme.token.fontFamily,
     boxShadow: '0 2px 16px rgba(161,0,255,0.35)',
+    borderBottom: '1px solid rgba(161,0,255,0.5)',
   };
 
   return (

@@ -1,6 +1,7 @@
 // frontend/src/pages/GestorView.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   Layout,
   Row,
@@ -548,7 +549,7 @@ const GestorView = () => {
   // ✅ Estados de carga y error
   if (loading) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'center', 
@@ -586,7 +587,7 @@ const GestorView = () => {
 
   if (error) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'center', 
@@ -606,9 +607,9 @@ const GestorView = () => {
   }
 
   return (
-    <Layout style={{ 
-      minHeight: '100vh', 
-      backgroundColor: theme.colors?.background || '#fafafa',
+    <Layout style={{
+      minHeight: '100vh',
+      backgroundColor: '#0A0014',
       overflow: 'hidden'
     }}>
       {/* ✅ TopBar */}
@@ -629,6 +630,11 @@ const GestorView = () => {
         overflowY: 'auto',
         height: 'calc(100vh - 64px)'
       }}>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+        >
         {/* ✅ Header personalizado mejorado */}
         <div style={{ marginBottom: theme.spacing?.lg || 24 }}>
           <Card style={{
@@ -849,6 +855,7 @@ const GestorView = () => {
             </Card>
           </div>
         )}
+        </motion.div>
       </Content>
 
       {/* ✅ CHAT FLOTANTE ACTUALIZADO CON NUEVAS PROPS */}
