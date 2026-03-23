@@ -154,9 +154,11 @@ Ver historial completo en **SESSIONS.md**.
 
 **Para iniciar:**
 ```bash
-cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8009
+cd backend && python main.py
+# o alternativamente:
+cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000
 cd frontend && npm start
-# frontend/.env: REACT_APP_API_BASE_URL=http://localhost:8009
+# frontend/.env: REACT_APP_API_BASE_URL=http://localhost:8000
 ```
 
-**Fase actual:** Fase 6 completada. S26 completada. Ver SESSIONS.md para próximos pasos y pendientes.
+**Fase actual:** Fase 6 completada. S27 completada. Ver SESSIONS.md para próximos pasos y pendientes.

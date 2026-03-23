@@ -114,11 +114,13 @@
 
 **Para iniciar el sistema:**
 ```bash
-# Backend (usar cualquier puerto libre != 8000)
-cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8009
-# Frontend (con REACT_APP_API_BASE_URL=http://localhost:8009 en frontend/.env)
+cd backend && python main.py
+# o: python -m uvicorn main:app --host 127.0.0.1 --port 8000
 cd frontend && npm start
 ```
+
+⚠️ Puerto: el backend arranca siempre en 8000 (definido en `.env` raíz y `main.py`).
+`frontend/.env` debe apuntar a `http://localhost:8000`.
 
 **Pendiente menor (no bloquea demo):**
 - ROE KPICards = promedio aritmético de 5 centros (~32.6% sep) vs ROE grupo (35.94%). Diferencia por fórmula, no un error crítico
