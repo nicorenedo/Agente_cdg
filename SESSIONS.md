@@ -79,6 +79,10 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S28 — completada (commits `0d4ddb6`, `d7b9685`):**
+- BLOQUE 1 ✅ Dark mode revertido en dashboards: `App.jsx` ConfigProvider tokens → claro (background/borderLight/textPrimary), `index.css` body sin background/color forzado. `DireccionView`+`GestorView` `backgroundColor` → `theme.colors.background`. `KPICards` card white + texto textPrimary/Secondary. `ChatInterface` área mensajes+input → fondo claro, burbujas asistente `#1A0033` mantenidas.
+- BLOQUE 2 ✅ LandingPage: nodos Three.js `size 0.07→0.25`, `maxDist 3.2→4.2`, líneas `opacity 0.12→0.25`. Botón Actualizar movido al top-right absoluto (`position: absolute, top: 20, right: 24`).
+
 **S27 — completada (WOW Visual Redesign):**
 - FIX ✅ Tooltip Recharts/ChartJS: `context.parsed.y||context.parsed.x` → discriminación correcta por `chartType === 'horizontal_bar'` → `context.parsed.x`; valores reales en tooltips
 - B1 ✅ Dark mode global: `theme.darkTheme` palette (#0A0014/#120020/#1A0033), `index.css` body dark + scrollbar + selection, `App.jsx` ConfigProvider tokens dark (colorBgContainer, colorBgLayout, colorBgElevated, colorBorder, colorText, Select/Table/Input/DatePicker/Dropdown/Tooltip/Tabs dark)
@@ -110,7 +114,7 @@
 
 ---
 
-## ⏭️ Próximo paso al retomar (post-S27)
+## ⏭️ Próximo paso al retomar (post-S28)
 
 **Para iniciar el sistema:**
 ```bash
