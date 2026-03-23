@@ -1252,6 +1252,7 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
           padding: '16px 20px',
           backgroundColor: 'rgba(161,0,255,0.05)',
           borderBottom: '1px solid rgba(161,0,255,0.15)',
+          flexShrink: 0,
         }}>
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text strong style={{ fontSize: 12, color: theme.colors?.textSecondary }}>
@@ -1299,9 +1300,7 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
           flex: 1,
           overflow: 'auto',
           backgroundColor: theme.colors?.backgroundLight || '#fafafa',
-          maxHeight: isExpanded ? '75vh' : '500px',
-          minHeight: '350px',
-          padding: '8px 4px',
+          padding: '12px 16px',
         }}
       >
         {messages.length === 0 ? (
@@ -1393,6 +1392,8 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
                       color: 'white',
                       borderRadius: '16px 4px 16px 16px',
                       boxShadow: '0 2px 8px rgba(161,0,255,0.2)',
+                      maxWidth: '75%',
+                      marginLeft: 'auto',
                     },
                   },
                 },
@@ -1410,6 +1411,7 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
                       borderRadius: '4px 16px 16px 16px',
                       color: '#F0E6FF',
                       boxShadow: '0 2px 8px rgba(161,0,255,0.15)',
+                      maxWidth: '85%',
                     },
                   },
                 },
@@ -1449,6 +1451,7 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         padding: '12px 16px',
         backgroundColor: 'white',
         borderTop: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`,
+        flexShrink: 0,
       }}>
         <Sender
           value={currentMessage}
