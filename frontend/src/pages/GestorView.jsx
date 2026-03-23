@@ -549,7 +549,7 @@ const GestorView = () => {
   // ✅ Estados de carga y error
   if (loading) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'center', 
@@ -587,7 +587,7 @@ const GestorView = () => {
 
   if (error) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'center', 
@@ -609,7 +609,7 @@ const GestorView = () => {
   return (
     <Layout style={{
       minHeight: '100vh',
-      backgroundColor: '#0A0014',
+      backgroundColor: theme.colors?.background || '#fafafa',
       overflow: 'hidden'
     }}>
       {/* ✅ TopBar */}

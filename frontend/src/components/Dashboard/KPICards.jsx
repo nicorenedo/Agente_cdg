@@ -608,17 +608,15 @@ const KPICards = ({
 
     const cardStyle = {
       borderRadius: 12,
-      border: `1px solid rgba(161,0,255,${hovered ? 0.5 : 0.25})`,
+      border: `1px solid ${hovered ? 'rgba(161,0,255,0.5)' : (theme.colors?.borderLight || '#e8e8e8')}`,
       transition: 'all 0.3s ease',
       cursor: onKpiClick ? 'pointer' : 'default',
       height: '100%',
-      background: 'rgba(18, 0, 32, 0.85)',
-      backdropFilter: 'blur(10px)',
-      WebkitBackdropFilter: 'blur(10px)',
+      background: '#ffffff',
       borderTop: '3px solid #A100FF',
       boxShadow: hovered
-        ? '0 0 30px rgba(161,0,255,0.25), 0 0 60px rgba(161,0,255,0.1)'
-        : '0 4px 16px rgba(161,0,255,0.12)',
+        ? '0 4px 20px rgba(161,0,255,0.15)'
+        : '0 2px 8px rgba(161,0,255,0.08)',
       position: 'relative',
       overflow: 'hidden',
     };
@@ -659,7 +657,7 @@ const KPICards = ({
                 }}
               />
               <span style={{
-                color: '#A87BC8',
+                color: theme.colors?.textSecondary || '#666',
                 fontSize: 14,
                 fontWeight: 500
               }}>
@@ -695,12 +693,10 @@ const KPICards = ({
             value={kpi.value}
             formatter={() => (
               <span style={{
-                color: '#F0E6FF',
+                color: theme.colors?.textPrimary || '#1A1A2E',
                 fontSize: 26,
                 fontWeight: 700,
                 fontFamily: theme.token?.fontFamily || 'inherit',
-                textShadow: hovered ? '0 0 12px rgba(161,0,255,0.5)' : 'none',
-                transition: 'text-shadow 0.3s ease',
               }}>
                 {formatValue(visible ? animatedRaw : (kpi.value ?? 0), kpi.format)}
               </span>
@@ -725,7 +721,7 @@ const KPICards = ({
                 {kpi.variation > 0 ? '+' : ''}{kpi.variation.toFixed(1)}%
               </Tag>
             ) : (
-              <span style={{ color: '#6B4F7A', fontSize: 13 }}>—</span>
+              <span style={{ color: theme.colors?.textLight || '#999', fontSize: 13 }}>—</span>
             )}
           </div>
 
@@ -733,7 +729,7 @@ const KPICards = ({
           <div style={{ marginTop: 4 }}>
             <span style={{
               fontSize: 11,
-              color: '#6B4F7A',
+              color: theme.colors?.textLight || '#999',
               fontStyle: 'italic'
             }}>
               {config.description}
@@ -754,7 +750,7 @@ const KPICards = ({
         <Row gutter={[16, 16]}>
           {[...Array(4)].map((_, i) => (
             <Col key={i} xs={24} sm={12} lg={6}>
-              <Card styles={{ body: { padding: '20px' } }} style={{ background: '#120020', border: '1px solid rgba(161,0,255,0.2)' }}>
+              <Card styles={{ body: { padding: '20px' } }}>
                 <Skeleton active paragraph={{ rows: 3 }} />
               </Card>
             </Col>

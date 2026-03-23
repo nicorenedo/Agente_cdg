@@ -341,7 +341,7 @@ const DireccionView = () => {
   // ✅ ESTADOS DE CARGA Y ERROR
   if (loading) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
           <Loader tip="Inicializando Dashboard de Dirección..." size="large" />
         </div>
@@ -351,7 +351,7 @@ const DireccionView = () => {
 
   if (error) {
     return (
-      <Layout style={{ minHeight: '100vh', backgroundColor: '#0A0014' }}>
+      <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors?.background || '#fafafa' }}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
           <ErrorState
             error={error}
@@ -368,7 +368,7 @@ const DireccionView = () => {
   return (
     <Layout style={{
       minHeight: '100vh',
-      backgroundColor: '#0A0014',
+      backgroundColor: theme.colors?.background || '#fafafa',
       overflow: 'hidden'
     }}>
       {/* ✅ TopBar */}

@@ -1298,7 +1298,7 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         style={{
           flex: 1,
           overflow: 'auto',
-          backgroundColor: '#0A0014',
+          backgroundColor: theme.colors?.backgroundLight || '#fafafa',
           maxHeight: isExpanded ? '75vh' : '500px',
           minHeight: '350px',
           padding: '8px 4px',
@@ -1447,8 +1447,8 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
 
       <div style={{
         padding: '12px 16px',
-        backgroundColor: '#120020',
-        borderTop: '1px solid rgba(161,0,255,0.2)',
+        backgroundColor: 'white',
+        borderTop: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`,
       }}>
         <Sender
           value={currentMessage}
@@ -1460,9 +1460,9 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
           placeholder={`💬 ${scope === 'direccion' ? 'Pregunta sobre KPIs corporativos, rankings, análisis ejecutivos...' : 'Pregunta sobre tu cartera, rendimiento, comparativas...'}`}
           style={{
             borderRadius: 8,
-            borderColor: 'rgba(161,0,255,0.3)',
-            background: '#0A0014',
-            color: '#F0E6FF',
+            borderColor: theme.colors?.bmGreenPrimary || '#A100FF',
+            background: 'white',
+            color: 'inherit',
           }}
         />
         
