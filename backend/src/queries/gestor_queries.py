@@ -151,7 +151,7 @@ class GestorQueries:
         patrimonio     = r['patrimonio_total'] or 1
 
         margen    = self.kpi_calc.calculate_margen_neto(ingresos, abs(gastos))
-        roe       = self.kpi_calc.calculate_roe(margen['beneficio_neto'], patrimonio)
+        roe       = self.kpi_calc.calculate_roe(margen['beneficio_neto'], ingresos)
         eficiencia = self.kpi_calc.calculate_ratio_eficiencia(ingresos, abs(gastos))
 
         enhanced = {
@@ -666,8 +666,8 @@ class GestorQueries:
         gastos          = round(gastos_directos + redistribuidos, 2)
         patrimonio      = r['patrimonio_total'] or 1
 
-        margen = self.kpi_calc.calculate_margen_neto(ingresos, gastos)
-        roe    = self.kpi_calc.calculate_roe(margen['beneficio_neto'], patrimonio)
+        margen = self.kpi_calc.calculate_margen_neto(ingresos, abs(gastos))
+        roe    = self.kpi_calc.calculate_roe(margen['beneficio_neto'], ingresos)
 
         out = {
             'ingresos': ingresos,
