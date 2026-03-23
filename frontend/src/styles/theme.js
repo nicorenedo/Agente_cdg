@@ -83,6 +83,23 @@ const theme = {
     fast:   '0.15s ease-in-out',
     normal: '0.2s ease',
     slow:   '0.3s ease-in-out'
+  },
+
+  darkTheme: {
+    background:         '#0A0014',
+    backgroundCard:     '#120020',
+    backgroundElevated: '#1A0033',
+    border:             'rgba(161, 0, 255, 0.2)',
+    borderHover:        'rgba(161, 0, 255, 0.5)',
+    textPrimary:        '#F0E6FF',
+    textSecondary:      '#A87BC8',
+    textMuted:          '#6B4F7A',
+    accentPrimary:      '#A100FF',
+    accentGlow:         'rgba(161, 0, 255, 0.15)',
+    accentMagenta:      '#E600C8',
+    success:            '#00FF88',
+    danger:             '#FF3366',
+    gridLine:           'rgba(161, 0, 255, 0.08)',
   }
 };
 

@@ -45,11 +45,21 @@ body {
   font-family: 'Inter', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  color: #333333;
-  background-color: #FAFAFA;
+  color: #F0E6FF;
+  background-color: #0A0014;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
+}
+
+/* Selección de texto purple */
+::selection {
+  background: rgba(161, 0, 255, 0.4);
+  color: #F0E6FF;
+}
+::-moz-selection {
+  background: rgba(161, 0, 255, 0.4);
+  color: #F0E6FF;
 }
 
 #root {
@@ -125,11 +135,11 @@ a:hover {
 }
 
 ::-webkit-scrollbar-track {
-  background: #FAFAFA;
+  background: #120020;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #CC66FF;
+  background: rgba(161, 0, 255, 0.4);
   border-radius: 4px;
 }
 
