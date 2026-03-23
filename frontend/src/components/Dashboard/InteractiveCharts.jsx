@@ -474,19 +474,28 @@ const InteractiveCharts = ({
           position: 'top',
           labels: {
             usePointStyle: true,
-            color: theme.colors?.textPrimary || '#333',
+            color: '#A87BC8',
             font: { size: 12, family: 'Inter, sans-serif' }
           }
         },
         tooltip: {
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          borderColor: theme.colors?.bmGreenPrimary || '#1b5e55',
+          backgroundColor: 'rgba(26,0,51,0.95)',
+          titleColor: '#A87BC8',
+          bodyColor: '#F0E6FF',
+          borderColor: 'rgba(161,0,255,0.4)',
           borderWidth: 1,
+          padding: { x: 14, y: 10 },
           callbacks: {
             label: (context) => {
-              const value = context.parsed.y || context.parsed.x || context.parsed;
+              // FIX: horizontal bars use x-axis for values; vertical use y-axis
+              let value;
+              if (context.parsed !== null && typeof context.parsed === 'object') {
+                value = config.chartType === 'horizontal_bar'
+                  ? context.parsed.x
+                  : (context.parsed.y ?? 0);
+              } else {
+                value = context.parsed ?? 0;
+              }
               return ` ${context.dataset.label}: ${formatBankingValue(value, config.metric)}`;
             }
           }
@@ -505,9 +514,9 @@ const InteractiveCharts = ({
     };
 
     const scaleOptions = {
-      grid: { color: 'rgba(0,0,0,0.1)' },
+      grid: { color: 'rgba(161,0,255,0.08)' },
       ticks: {
-        color: theme.colors?.textSecondary || '#666',
+        color: '#A87BC8',
         font: { size: 11 },
         callback: function(value) {
           return formatBankingValue(value, config.metric);
@@ -525,12 +534,12 @@ const InteractiveCharts = ({
               indexAxis: 'y',
               scales: {
                 x: { ...scaleOptions, beginAtZero: true },
-                y: { 
-                  grid: { display: false }, 
-                  ticks: { 
-                    color: '#333',
+                y: {
+                  grid: { display: false },
+                  ticks: {
+                    color: '#A87BC8',
                     font: { size: 11 }
-                  } 
+                  }
                 }
               }
             }}
@@ -685,10 +694,12 @@ const InteractiveCharts = ({
         }
         style={{
           height: height + 80,
-          boxShadow: '0 2px 8px rgba(161, 0, 255, 0.08)',
+          background: '#120020',
+          border: '1px solid rgba(161,0,255,0.2)',
+          boxShadow: '0 4px 20px rgba(161,0,255,0.12)',
           borderRadius: 8
         }}
-        styles={{ body: { height, padding: 16 } }}
+        styles={{ body: { height, padding: 16, background: '#120020' } }}
       >
         {loading && (
           <div style={{ height, padding: '16px 8px' }}>
