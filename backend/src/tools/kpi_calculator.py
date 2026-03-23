@@ -102,19 +102,19 @@ class KPICalculator:
             
             if roe_pct >= 15.0:
                 clasificacion = 'SOBRESALIENTE'
-                benchmark = 'Top quartile sector bancario'
+                benchmark = 'N/A'
             elif roe_pct >= 10.0:
                 clasificacion = 'BUENO'
-                benchmark = 'Por encima de media sectorial'
+                benchmark = 'N/A'
             elif roe_pct >= 5.0:
                 clasificacion = 'PROMEDIO'
-                benchmark = 'En línea con sector'
+                benchmark = 'N/A'
             elif roe_pct >= 0.0:
                 clasificacion = 'BAJO'
-                benchmark = 'Por debajo de media sectorial'
+                benchmark = 'N/A'
             else:
                 clasificacion = 'NEGATIVO'
-                benchmark = 'Destrucción de valor'
+                benchmark = 'N/A'
             
             return {
                 'roe_pct': roe_pct,
