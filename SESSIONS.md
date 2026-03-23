@@ -79,6 +79,15 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S27 — completada (WOW Visual Redesign):**
+- FIX ✅ Tooltip Recharts/ChartJS: `context.parsed.y||context.parsed.x` → discriminación correcta por `chartType === 'horizontal_bar'` → `context.parsed.x`; valores reales en tooltips
+- B1 ✅ Dark mode global: `theme.darkTheme` palette (#0A0014/#120020/#1A0033), `index.css` body dark + scrollbar + selection, `App.jsx` ConfigProvider tokens dark (colorBgContainer, colorBgLayout, colorBgElevated, colorBorder, colorText, Select/Table/Input/DatePicker/Dropdown/Tooltip/Tabs dark)
+- B2 ✅ LandingPage v6: Three.js CDN neural-network canvas (80 nodos, r134), CSS fallback `@keyframes`, `framer-motion` fade-in estalonado, glassmorphism cards (rgba(161,0,255,0.08) + backdrop-filter), glow title `text-shadow`, botones glassmorphism
+- B3 ✅ KPICards: `useCountUp` hook (rAF, ease-out cúbico), `IntersectionObserver` por card, dark glow style (rgba(18,0,32,0.85) + backdrop-filter, border rgba(161,0,255,0.25→0.5) hover, box-shadow glow), tags variación MoM en neón (#00FF88 positivo / #FF3366 negativo)
+- B4 ✅ InteractiveCharts: tooltip dark (rgba(26,0,51,0.95)), grid rgba(161,0,255,0.08), ejes #A87BC8, leyenda #A87BC8, cards dark #120020
+- B5 ✅ ChatInterface: pulsing green dot "Activo", typing dots CSS animation (3 spans bounce escalonado), mensajes asistente fondo #1A0033, área mensajes #0A0014, Sender dark border rgba(161,0,255,0.3), accessDenied banner dark red
+- B6 ✅ Animaciones: DireccionView+GestorView layout #0A0014 + `motion.div` fade-in Content (opacity 0→1, 0.4s), GestoresTable `motion.tr` row stagger (opacity/x -20→0, delay index×0.04), TopBar `border-bottom: 1px solid rgba(161,0,255,0.5)` glow
+
 ---
 
 ## 📊 Valores de referencia definitivos (post-sesión-24)
@@ -101,7 +110,7 @@
 
 ---
 
-## ⏭️ Próximo paso al retomar (post-S26)
+## ⏭️ Próximo paso al retomar (post-S27)
 
 **Para iniciar el sistema:**
 ```bash
