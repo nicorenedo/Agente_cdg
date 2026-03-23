@@ -797,6 +797,36 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
     ]
   };
 
+  // Inject dark chat CSS animations
+  useEffect(() => {
+    if (!document.getElementById('chat-dark-css')) {
+      const s = document.createElement('style');
+      s.id = 'chat-dark-css';
+      s.textContent = `
+@keyframes pulse-active {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(0,255,136,0.6); }
+  50% { opacity: 0.5; box-shadow: 0 0 12px rgba(0,255,136,0.9); }
+}
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}
+.cdg-typing-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #A100FF;
+  margin: 0 2px;
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+.cdg-typing-dot:nth-child(1) { animation-delay: 0s; }
+.cdg-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.cdg-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+      `;
+      document.head.appendChild(s);
+    }
+  }, []);
+
   // ✅ INICIALIZACIÓN
   useEffect(() => {
     if (initializationRef.current) return;
@@ -1052,7 +1082,7 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         header: {
           background: '#1A0033',
           borderRadius: '8px 8px 0 0',
-          borderBottom: '1px solid rgba(255,255,255,0.1)',
+          borderBottom: '1px solid rgba(161,0,255,0.2)',
         },
         body: {
           padding: 0,
@@ -1068,6 +1098,17 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
             <Title level={5} style={{ margin: 0, color: '#ffffff' }}>
               Copiloto CDG
             </Title>
+            {/* Pulsing active indicator */}
+            <span style={{
+              display: 'inline-block',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#00FF88',
+              animation: 'pulse-active 2s ease-in-out infinite',
+              boxShadow: '0 0 6px rgba(0,255,136,0.6)',
+            }} />
+            <Text style={{ color: '#6B4F7A', fontSize: 11 }}>Activo</Text>
             <Badge
               count={scope === 'direccion' ? 'Corporativo' : 'Personal'}
               style={{ backgroundColor: '#7B00CC' }}
@@ -1188,10 +1229,10 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
       </div>
 
       {accessDeniedCount > 0 && (
-        <div style={{ 
+        <div style={{
           padding: '12px 20px',
-          backgroundColor: '#fff2f0',
-          borderBottom: `1px solid #ffccc7`
+          backgroundColor: 'rgba(255,51,102,0.08)',
+          borderBottom: '1px solid rgba(255,51,102,0.2)'
         }}>
           <Alert
             message={`🔐 ${accessDeniedCount} consulta${accessDeniedCount > 1 ? 's' : ''} bloqueada${accessDeniedCount > 1 ? 's' : ''} por confidencialidad`}
@@ -1207,10 +1248,10 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
       )}
 
       {showSuggestions && activeSuggestions.length > 0 && (
-        <div style={{ 
+        <div style={{
           padding: '16px 20px',
-          backgroundColor: `${theme.colors?.bmGreenLight || '#52c41a'}06`,
-          borderBottom: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`
+          backgroundColor: 'rgba(161,0,255,0.05)',
+          borderBottom: '1px solid rgba(161,0,255,0.15)',
         }}>
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text strong style={{ fontSize: 12, color: theme.colors?.textSecondary }}>
@@ -1257,7 +1298,7 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         style={{
           flex: 1,
           overflow: 'auto',
-          backgroundColor: theme.colors?.backgroundLight || '#fafafa',
+          backgroundColor: '#0A0014',
           maxHeight: isExpanded ? '75vh' : '500px',
           minHeight: '350px',
           padding: '8px 4px',
@@ -1324,7 +1365,18 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
                   };
                 }),
                 ...(isTyping
-                  ? [{ key: 'typing', role: 'assistant', content: '', loading: true }]
+                  ? [{
+                      key: 'typing',
+                      role: 'assistant',
+                      content: '',
+                      messageRender: () => (
+                        <div style={{ padding: '4px 2px' }}>
+                          <span className="cdg-typing-dot" />
+                          <span className="cdg-typing-dot" />
+                          <span className="cdg-typing-dot" />
+                        </div>
+                      ),
+                    }]
                   : []),
               ]}
               roles={{
@@ -1353,10 +1405,11 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
                   },
                   styles: {
                     content: {
-                      backgroundColor: '#F3E8FF',
+                      backgroundColor: '#1A0033',
                       borderLeft: '3px solid #A100FF',
                       borderRadius: '4px 16px 16px 16px',
-                      color: '#1A1A2E',
+                      color: '#F0E6FF',
+                      boxShadow: '0 2px 8px rgba(161,0,255,0.15)',
                     },
                   },
                 },
@@ -1394,8 +1447,8 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
 
       <div style={{
         padding: '12px 16px',
-        backgroundColor: 'white',
-        borderTop: `1px solid ${theme.colors?.borderLight || '#f0f0f0'}`
+        backgroundColor: '#120020',
+        borderTop: '1px solid rgba(161,0,255,0.2)',
       }}>
         <Sender
           value={currentMessage}
@@ -1405,7 +1458,12 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
           loading={isSending || isGeneratingReport}
           disabled={isSending || isGeneratingReport}
           placeholder={`💬 ${scope === 'direccion' ? 'Pregunta sobre KPIs corporativos, rankings, análisis ejecutivos...' : 'Pregunta sobre tu cartera, rendimiento, comparativas...'}`}
-          style={{ borderRadius: 8, borderColor: theme.colors?.bmGreenPrimary }}
+          style={{
+            borderRadius: 8,
+            borderColor: 'rgba(161,0,255,0.3)',
+            background: '#0A0014',
+            color: '#F0E6FF',
+          }}
         />
         
         <div style={{ 
