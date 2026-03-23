@@ -79,6 +79,9 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S30 — completada (commit `09da03f`):**
+- FIX ✅ ChatInterface: Card `height: 85vh / maxHeight: 85vh / overflow: hidden`. Body `height: 100% / overflow: hidden`. Mensajes `flex:1 / overflowY:auto / minHeight:0` (crítico para flex scroll). `flexShrink:0` en header, accessDenied, suggestions y footer. `Empty` centrado con `height:100%`.
+
 **S29 — completada (commits `0b41f73`, `86bef06`, `2a984a5`, `5bb50b1`):**
 - B1 ✅ InteractiveCharts: Card fondo `#120020→white`, leyenda/ticks `#A87BC8→#666`, grid `rgba(161,0,255,0.08)→#e8e8e8`. Tooltip dark mantenido.
 - B2 ✅ ChatInterface layout: `maxHeight`/`minHeight` eliminados del área de mensajes (`flex:1` controla), `flexShrink:0` en suggestions y footer, `padding 12px 16px` en mensajes. `maxWidth 75%/85%` en burbujas usuario/asistente.
@@ -120,7 +123,7 @@
 
 ---
 
-## ⏭️ Próximo paso al retomar (post-S29)
+## ⏭️ Próximo paso al retomar (post-S30)
 
 **Para iniciar el sistema:**
 ```bash
