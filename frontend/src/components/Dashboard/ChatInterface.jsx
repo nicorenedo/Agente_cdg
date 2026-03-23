@@ -1071,10 +1071,11 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
     <Card
       className={className}
       style={{
-        height: isExpanded ? '90vh' : '70vh',
-        minHeight: '600px',
+        height: isExpanded ? '95vh' : '85vh',
+        maxHeight: isExpanded ? '95vh' : '85vh',
         display: 'flex',
         flexDirection: 'column',
+        overflow: 'hidden',
         transition: 'height 0.3s ease',
         ...style
       }}
@@ -1083,12 +1084,15 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
           background: '#1A0033',
           borderRadius: '8px 8px 0 0',
           borderBottom: '1px solid rgba(161,0,255,0.2)',
+          flexShrink: 0,
         },
         body: {
           padding: 0,
           flex: 1,
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
         }
       }}
       title={
@@ -1232,7 +1236,8 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         <div style={{
           padding: '12px 20px',
           backgroundColor: 'rgba(255,51,102,0.08)',
-          borderBottom: '1px solid rgba(255,51,102,0.2)'
+          borderBottom: '1px solid rgba(255,51,102,0.2)',
+          flexShrink: 0,
         }}>
           <Alert
             message={`🔐 ${accessDeniedCount} consulta${accessDeniedCount > 1 ? 's' : ''} bloqueada${accessDeniedCount > 1 ? 's' : ''} por confidencialidad`}
@@ -1298,16 +1303,25 @@ ${securityFeatures.map(f => `• ${f.replace('_', ' ')}`).join('\n') || '• Val
         ref={messagesContainerRef}
         style={{
           flex: 1,
-          overflow: 'auto',
+          overflowY: 'auto',
+          overflowX: 'hidden',
           backgroundColor: theme.colors?.backgroundLight || '#fafafa',
           padding: '12px 16px',
+          minHeight: 0,
         }}
       >
         {messages.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="Inicia una conversación con el Agente CDG v12.0 + Confidencialidad"
-            style={{ marginTop: 40 }}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '100%',
+              margin: 0,
+            }}
           />
         ) : (
           <>
