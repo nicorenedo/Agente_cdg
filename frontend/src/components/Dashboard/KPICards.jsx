@@ -1,5 +1,5 @@
 // frontend/src/components/Dashboard/KPICards.jsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Row, Col, Card, Statistic, Badge, Tooltip, Space, Skeleton, Select, Tag } from 'antd';
 import {
   ArrowUpOutlined,
@@ -24,6 +24,40 @@ import api from '../../services/api';
 import theme from '../../styles/theme';
 import ErrorState from '../common/ErrorState';
 
+
+/* ──────────────────────────────────────────────────────
+ * useCountUp — Animated counter with requestAnimationFrame
+ * ────────────────────────────────────────────────────── */
+const useCountUp = (target, duration = 1200, active = true) => {
+  const [count, setCount] = useState(0);
+  const frameRef = useRef(null);
+  const prevTarget = useRef(null);
+
+  useEffect(() => {
+    if (!active || target === null || target === undefined) return;
+    const end = Number(target);
+    if (isNaN(end)) return;
+    const start = prevTarget.current ?? 0;
+    prevTarget.current = end;
+
+    const startTime = performance.now();
+    const animate = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(start + (end - start) * eased);
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate);
+      } else {
+        setCount(end);
+      }
+    };
+    frameRef.current = requestAnimationFrame(animate);
+    return () => { if (frameRef.current) cancelAnimationFrame(frameRef.current); };
+  }, [target, duration, active]);
+
+  return count;
+};
 
 /**
  * KPICards - Tarjetas de KPIs mejoradas con selección Global/Centro y animación.
@@ -540,48 +574,64 @@ const KPICards = ({
     ingresos_totales: <EuroCircleOutlined style={{ fontSize: 18, color: 'rgba(161,0,255,0.25)' }} />,
   };
 
-  // ✅ CORREGIDO: Componente KPICard con Select mejorado
+  // KPICard with dark glow + count-up animation
   const KPICard = ({ kpi, config, filterKey, showFilter }) => {
     const hasVariation = kpi.variation !== null && kpi.variation !== undefined;
     const isPositiveVariation = kpi.variation > 0;
-    const variationColor = hasVariation
-      ? (isPositiveVariation ? '#A100FF' : theme.colors.error)
-      : (theme.colors?.textLight || '#999');
     const TrendIcon = kpi.variation >= 0 ? ArrowUpOutlined : ArrowDownOutlined;
-    const statusColor = kpi.status === 'excellent' ? '#A100FF' : theme.colors.bmGreenPrimary;
+    const [hovered, setHovered] = useState(false);
+    const [visible, setVisible] = useState(false);
+    const cardRef = useRef(null);
 
+    // IntersectionObserver to trigger count-up when card enters viewport
+    useEffect(() => {
+      const el = cardRef.current;
+      if (!el) return;
+      const obs = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) setVisible(true);
+      }, { threshold: 0.2 });
+      obs.observe(el);
+      return () => obs.disconnect();
+    }, []);
+
+    // Animated count value
+    const animatedRaw = useCountUp(kpi.value, 1200, visible);
 
     const handleClick = (e) => {
-      // Evitar que el click del select active el click del card
       if (e.target.closest('.ant-select')) return;
       if (onKpiClick) onKpiClick(kpi.key, kpi);
     };
 
-
     const handleSelectChange = (value) => {
-      console.log(`[KPICard] Changing ${filterKey} to:`, value);
       setCenterSelections(prev => ({ ...prev, [filterKey]: value }));
     };
 
+    const cardStyle = {
+      borderRadius: 12,
+      border: `1px solid rgba(161,0,255,${hovered ? 0.5 : 0.25})`,
+      transition: 'all 0.3s ease',
+      cursor: onKpiClick ? 'pointer' : 'default',
+      height: '100%',
+      background: 'rgba(18, 0, 32, 0.85)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
+      borderTop: '3px solid #A100FF',
+      boxShadow: hovered
+        ? '0 0 30px rgba(161,0,255,0.25), 0 0 60px rgba(161,0,255,0.1)'
+        : '0 4px 16px rgba(161,0,255,0.12)',
+      position: 'relative',
+      overflow: 'hidden',
+    };
 
     return (
       <Tooltip title={config.description} placement="top" mouseEnterDelay={0.5}>
+      <div ref={cardRef}>
       <Card
         hoverable={!!onKpiClick}
         onClick={handleClick}
-        style={{
-          ...animatedCardStyle,
-          borderRadius: theme.token?.borderRadius || 8,
-          border: `1px solid ${theme.colors?.borderLight || '#e8e8e8'}`,
-          transition: 'all 0.2s ease',
-          cursor: onKpiClick ? 'pointer' : 'default',
-          height: '100%',
-          background: '#ffffff',
-          borderTop: '3px solid #A100FF',
-          boxShadow: '0 2px 8px rgba(161,0,255,0.08)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={cardStyle}
         styles={{ body: { padding: '20px' } }}
       >
         {/* Decorative corner icon */}
@@ -601,17 +651,17 @@ const KPICards = ({
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: '32px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-              <config.icon 
-                style={{ 
-                  fontSize: 20, 
+              <config.icon
+                style={{
+                  fontSize: 20,
                   color: config.color,
-                  opacity: 0.9 
-                }} 
+                  opacity: 0.9
+                }}
               />
-              <span style={{ 
-                color: theme.colors?.textSecondary || '#666', 
+              <span style={{
+                color: '#A87BC8',
                 fontSize: 14,
-                fontWeight: 500 
+                fontWeight: 500
               }}>
                 {config.label}
               </span>
@@ -640,23 +690,25 @@ const KPICards = ({
           </div>
 
 
-          {/* Main value */}
+          {/* Main value — animated count-up */}
           <Statistic
             value={kpi.value}
-            formatter={(value) => (
-              <span style={{ 
-                color: theme.colors?.textPrimary || '#333',
+            formatter={() => (
+              <span style={{
+                color: '#F0E6FF',
                 fontSize: 26,
                 fontWeight: 700,
-                fontFamily: theme.token?.fontFamily || 'inherit'
+                fontFamily: theme.token?.fontFamily || 'inherit',
+                textShadow: hovered ? '0 0 12px rgba(161,0,255,0.5)' : 'none',
+                transition: 'text-shadow 0.3s ease',
               }}>
-                {formatValue(value, kpi.format)}
+                {formatValue(visible ? animatedRaw : (kpi.value ?? 0), kpi.format)}
               </span>
             )}
           />
 
 
-          {/* Variation MoM */}
+          {/* Variation MoM — neon colors */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {hasVariation ? (
               <Tag
@@ -665,24 +717,23 @@ const KPICards = ({
                   margin: 0,
                   fontSize: 12,
                   fontWeight: 600,
-                  color: isPositiveVariation ? '#52c41a' : '#E5002B',
-                  borderColor: isPositiveVariation ? '#52c41a' : '#E5002B',
-                  backgroundColor: isPositiveVariation ? '#f6ffed' : '#fff2f0',
+                  color: isPositiveVariation ? '#00FF88' : '#FF3366',
+                  borderColor: isPositiveVariation ? 'rgba(0,255,136,0.3)' : 'rgba(255,51,102,0.3)',
+                  backgroundColor: isPositiveVariation ? 'rgba(0,255,136,0.08)' : 'rgba(255,51,102,0.08)',
                 }}
               >
                 {kpi.variation > 0 ? '+' : ''}{kpi.variation.toFixed(1)}%
               </Tag>
             ) : (
-              <span style={{ color: theme.colors?.textLight || '#999', fontSize: 13 }}>—</span>
+              <span style={{ color: '#6B4F7A', fontSize: 13 }}>—</span>
             )}
           </div>
-
 
           {/* Description */}
           <div style={{ marginTop: 4 }}>
             <span style={{
               fontSize: 11,
-              color: theme.colors?.textLight || '#999',
+              color: '#6B4F7A',
               fontStyle: 'italic'
             }}>
               {config.description}
@@ -690,6 +741,7 @@ const KPICards = ({
           </div>
         </Space>
       </Card>
+      </div>
       </Tooltip>
     );
   };
@@ -702,7 +754,7 @@ const KPICards = ({
         <Row gutter={[16, 16]}>
           {[...Array(4)].map((_, i) => (
             <Col key={i} xs={24} sm={12} lg={6}>
-              <Card styles={{ body: { padding: '20px' } }}>
+              <Card styles={{ body: { padding: '20px' } }} style={{ background: '#120020', border: '1px solid rgba(161,0,255,0.2)' }}>
                 <Skeleton active paragraph={{ rows: 3 }} />
               </Card>
             </Col>
