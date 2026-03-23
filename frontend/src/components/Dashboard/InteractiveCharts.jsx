@@ -474,7 +474,7 @@ const InteractiveCharts = ({
           position: 'top',
           labels: {
             usePointStyle: true,
-            color: '#A87BC8',
+            color: '#666',
             font: { size: 12, family: 'Inter, sans-serif' }
           }
         },
@@ -514,9 +514,9 @@ const InteractiveCharts = ({
     };
 
     const scaleOptions = {
-      grid: { color: 'rgba(161,0,255,0.08)' },
+      grid: { color: '#e8e8e8' },
       ticks: {
-        color: '#A87BC8',
+        color: '#666',
         font: { size: 11 },
         callback: function(value) {
           return formatBankingValue(value, config.metric);
@@ -537,7 +537,7 @@ const InteractiveCharts = ({
                 y: {
                   grid: { display: false },
                   ticks: {
-                    color: '#A87BC8',
+                    color: '#666',
                     font: { size: 11 }
                   }
                 }
@@ -694,12 +694,12 @@ const InteractiveCharts = ({
         }
         style={{
           height: height + 80,
-          background: '#120020',
-          border: '1px solid rgba(161,0,255,0.2)',
-          boxShadow: '0 4px 20px rgba(161,0,255,0.12)',
+          background: 'white',
+          border: '1px solid rgba(161,0,255,0.15)',
+          boxShadow: '0 2px 8px rgba(161,0,255,0.08)',
           borderRadius: 8
         }}
-        styles={{ body: { height, padding: 16, background: '#120020' } }}
+        styles={{ body: { height, padding: 16, background: 'white' } }}
       >
         {loading && (
           <div style={{ height, padding: '16px 8px' }}>
