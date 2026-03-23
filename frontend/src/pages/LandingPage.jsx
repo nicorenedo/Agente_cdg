@@ -81,12 +81,12 @@ const ThreeJsCanvas = () => {
         posArr[i * 3 + 2] = p.z;
       });
       pointsGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-      const pointsMat = new THREE.PointsMaterial({ color: 0xa100ff, size: 0.07, transparent: true, opacity: 0.85 });
+      const pointsMat = new THREE.PointsMaterial({ color: 0xa100ff, size: 0.25, transparent: true, opacity: 0.9 });
       const points = new THREE.Points(pointsGeo, pointsMat);
 
       // Lines (connections)
       const lineVerts = [];
-      const maxDist = 3.2;
+      const maxDist = 4.2;
       for (let i = 0; i < nodeCount; i++) {
         for (let j = i + 1; j < nodeCount; j++) {
           const dx = nodePositions[i].x - nodePositions[j].x;
@@ -100,7 +100,7 @@ const ThreeJsCanvas = () => {
       }
       const lineGeo = new THREE.BufferGeometry();
       lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lineVerts), 3));
-      const lineMat = new THREE.LineBasicMaterial({ color: 0xa100ff, transparent: true, opacity: 0.12 });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xa100ff, transparent: true, opacity: 0.25 });
       const lines = new THREE.LineSegments(lineGeo, lineMat);
 
       const group = new THREE.Group();
@@ -271,6 +271,23 @@ const LandingPageContent = () => {
       {/* Three.js Canvas */}
       <ThreeJsCanvas />
 
+      {/* Botón Actualizar — top-right */}
+      <Tooltip title="Actualizar gestores">
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={fetchGestores}
+          loading={loadingGestores}
+          style={{
+            ...glassBtn,
+            position: 'absolute',
+            top: 20,
+            right: 24,
+            zIndex: 10,
+            minWidth: 44,
+          }}
+        />
+      </Tooltip>
+
       {/* Radial gradient overlay */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
@@ -354,37 +371,26 @@ const LandingPageContent = () => {
                   <Text style={{ color: '#A87BC8', fontSize: 12, marginBottom: 8, display: 'block' }}>
                     Seleccionar Gestor Comercial
                   </Text>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <Select
-                      showSearch
-                      placeholder="🔍 Buscar gestor…"
-                      value={selectedGestor}
-                      onChange={handleGestorChange}
-                      loading={loadingGestores}
-                      size="large"
-                      style={{ flex: 1 }}
-                      disabled={loadingGestores || gestores.length === 0}
-                      suffixIcon={<SearchOutlined />}
-                      optionFilterProp="children"
-                      filterOption={(input, option) =>
-                        option?.children?.toLowerCase().includes(input.toLowerCase())
-                      }
-                      notFoundContent={loadingGestores ? <Spin size="small" /> : 'Sin resultados'}
-                    >
-                      {gestores.map((g) => (
-                        <Option key={g.id} value={g.id}>{g.displayName}</Option>
-                      ))}
-                    </Select>
-                    <Tooltip title="Actualizar">
-                      <Button
-                        icon={<ReloadOutlined />}
-                        onClick={fetchGestores}
-                        loading={loadingGestores}
-                        size="large"
-                        style={{ ...glassBtn, minWidth: 44 }}
-                      />
-                    </Tooltip>
-                  </div>
+                  <Select
+                    showSearch
+                    placeholder="🔍 Buscar gestor…"
+                    value={selectedGestor}
+                    onChange={handleGestorChange}
+                    loading={loadingGestores}
+                    size="large"
+                    style={{ width: '100%' }}
+                    disabled={loadingGestores || gestores.length === 0}
+                    suffixIcon={<SearchOutlined />}
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      option?.children?.toLowerCase().includes(input.toLowerCase())
+                    }
+                    notFoundContent={loadingGestores ? <Spin size="small" /> : 'Sin resultados'}
+                  >
+                    {gestores.map((g) => (
+                      <Option key={g.id} value={g.id}>{g.displayName}</Option>
+                    ))}
+                  </Select>
                 </div>
 
                 {selectedGestorInfo && (
