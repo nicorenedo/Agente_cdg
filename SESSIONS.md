@@ -79,6 +79,49 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S36 — completada (commit `eff619d`):**
+- RENAME ✅ "Fondo Banca March" → "Fondo Renta Variable" en toda la aplicación:
+  - DB `MAESTRO_PRODUCTOS.DESC_PRODUCTO` (1 fila, PRODUCTO_ID 600100300300)
+  - DB `MAESTRO_CUENTAS.DESC_CUENTA` (3 filas: cuentas 760021, 760022, 760023)
+  - `backend/tests/test_comparative_queries.py` — comentario fixture
+  - `backend/tests/test_deviation_queries.py` — comentario fixture
+  - `backend/tests/test_dynamic_config.py` — mock data `DESC_PRODUCTO`
+  - `frontend/src/services/analyticsService.js` — label mapping `.replace('Fondo Banca March', 'Fondos CDG')` → `.replace('Fondo Renta Variable', 'Fondo RV')`
+- VERIFICADO ✅ API `/charts/productos-popularity?periodo=2025-10` devuelve `"Fondo Renta Variable"` correctamente
+- NOTA: Backups preservados en `notebooks/old/`, `notebooks/backups/`, `docs/` y `SESSIONS.md` (historial) — no afectan producción
+
+**S35 — completada (Gestor 1 demo validation):**
+- FASE 1 ✅ KPIs G1 oct-2025 verificados contra BD (ver tabla informe abajo)
+- FASE 2 ✅ KPI cards frontend mapeados correctamente: roe_gestor→roe_pct ✅, bonus_gestor→total_incentivos ✅, clientes_gestor→clientes.length (4) ✅, contratos_gestor→contratos.length (12) ✅
+- FASE 3 ✅ Pivot gestor arreglado: `/chat/gestor` ahora detecta intención de pivot y retorna `chart_config: {dimension: "producto", metric: "INGRESOS", gestor_id: "1"}` — igual que S34 para CDG
+- FASE 4 ✅ Desglose gastos correcto: valores exactos, sin "trimestre", tono comprensivo ante frustración
+
+**S34 — completada (pre-demo fixes):**
+- B1 ✅ Falsa alerta LOW_MARGIN corregida: en `cdg_agent.py` `_consolidate_key_metrics` y `_generate_business_alerts`, el campo `margen_neto_pct` no existía en los datos — el campo real es `margen_neto` (devuelto por `ranking_gestores_por_margen_enhanced`). Cambiado en ambos sitios. También corregidos los nombres de campo uppercase para gestores: `desc_gestor` → `DESC_GESTOR`. Resultado: alerta real "11 gestores con margen < 5%" con nombres correctos (antes era falsa "30/30").
+- B2 ✅ Pivot `chart_config` corregido: en `main.py` handler `POST /chat/message`, después de obtener `data`, se detecta intención de pivot (keywords: "cambia el gr", "grafico a", "pivot", "muestra por", etc.) y se llama `handle_chart_pivot_request` inyectando el resultado en `data['chart_config']`. Verificado: `chart_config null: False`, devuelve `{dimension: "segmento", metric: "INGRESOS"}`.
+- Verificaciones post-fix: margen_promedio = 39.96% ✅ | pivot chart_config no null ✅
+
+**S33 — completada:**
+- B1 ✅ Fix expand button: `ChatInterface` recibe `onToggleExpand` prop + `useEffect` sincroniza `isExpanded` con prop `expanded`. El botón llama `onToggleExpand` (padre) si existe, si no usa toggle interno. `DireccionView` pasa `onToggleExpand={() => setChatExpanded(prev => !prev)}`. `GestorView` pasa `onToggleExpand={handleChatToggleExpand}`. Al pulsar el botón, `chatConfig` del padre actualiza el contenedor a `80vw / 80vh`.
+- B2 Tests demo ejecutados (G1 oct, CDG retrocesos, CDG riesgo, pivot):
+  - TEST 1 ✅ Gastos G1: cifras exactas (directos €3,078.79 / redistribuidos €14,795.49 / total €17,874.28), explica prorratio centrales
+  - TEST 2 ✅ Retrocesos: top 5 idéntico a BD (Pablo Moreno -55.18%, Francesca Costa -10.12%, Carlos García -7.44%, Jordi Torra/Antonio Torres -7.35%)
+  - TEST 3 ⚠️ Concentración riesgo: macro correcto (85 clientes, 3 productos, 220 contratos), pero NO hace drill-down a G27 (3 clientes). Alerta falsa "30 gestores margen<5%" por bug en `key_metrics.margen_promedio=0` en backend
+  - TEST 4 ⚠️ Pivot chat: `/charts/pivot` endpoint funciona y devuelve `dimension: segmento, metric: INGRESOS` correctamente. Pero `/chat/message` devuelve `chart_config: null` — la UI no recibe el config para actualizar el gráfico
+
+**S32 — completada:**
+- B1 ✅ `get_mi_centro_benchmark` corregido: `centro_id` ya no es parámetro externo — se auto-resuelve llamando `basic_queries.get_gestor_metricas_completas` y extrayendo `datos['CENTRO']`. El LLM nunca pedirá el centro al usuario.
+- B2 ✅ `get_mi_reporte_personal` añadido: agrega KPIs (`calculate_roe_gestor_enhanced`), evolución (`compare_gestor_septiembre_octubre`), clientes (`get_gestor_clientes_con_metricas`) y desviaciones (`get_desviaciones_precio_gestor_enhanced`) en un único payload. El LLM presenta en 5 secciones (instrucción en system prompt).
+- System prompt actualizado: `RESTRICCIÓN COMPARATIVAS` → clarifica que `get_mi_centro_benchmark` no requiere parámetros. Bloque `REPORTE PERSONAL` → instrucción explícita de formato 5 secciones.
+
+**S31 — completada:**
+- B1 ✅ Headers redundantes eliminados: `DireccionView.jsx` + `GestorView.jsx` — quitado el `<div>` header exterior del chat flotante ("🤖 Asistente CDG Dirección/Personal"). Solo queda el header del `ChatInterface` Card ("Copiloto CDG · Activo · [badge]").
+- B2 ✅ `gestor_agent.py` — tres correcciones:
+  1. `get_mi_roe` tool añadido → llama `gestor_queries.calculate_roe_gestor_enhanced(gestor_id, periodo)` (ROE personal real, nunca datos de grupo)
+  2. `get_mi_centro_benchmark` tool añadido → llama `basic_queries.get_centro_metricas_financieras(centro_id, periodo)` (benchmark del centro anonimizado)
+  3. `get_resumen_periodo` eliminado → era `period_queries.get_periodo_metricas_financieras` (global, sin filtro gestor_id → devolvía €623,999 del grupo en lugar de ~€36,010 personal)
+  4. System prompt actualizado: bloque `ROE — CÓMO USARLO` + bloque `RESTRICCIÓN COMPARATIVAS`
+
 **S30 — completada (commit `09da03f`):**
 - FIX ✅ ChatInterface: Card `height: 85vh / maxHeight: 85vh / overflow: hidden`. Body `height: 100% / overflow: hidden`. Mensajes `flex:1 / overflowY:auto / minHeight:0` (crítico para flex scroll). `flexShrink:0` en header, accessDenied, suggestions y footer. `Empty` centrado con `height:100%`.
 
