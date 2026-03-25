@@ -41,7 +41,7 @@ class TestDynamicBusinessConfig:
         return [
             {"PRODUCTO_ID": "100100100100", "DESC_PRODUCTO": "Préstamo Hipotecario"},
             {"PRODUCTO_ID": "400200100100", "DESC_PRODUCTO": "Depósito Plazo Fijo"},
-            {"PRODUCTO_ID": "600100300300", "DESC_PRODUCTO": "Fondo Banca March"}
+            {"PRODUCTO_ID": "600100300300", "DESC_PRODUCTO": "Fondo Renta Variable"}
         ]
     
     @pytest.fixture

@@ -81,7 +81,7 @@ class TestComparativeQueries:
     @pytest.fixture
     def sample_producto_id(self):
         """Fixture con un producto_id de ejemplo de tu BD CDG - CORREGIDO"""
-        return "600100300300"  # Fondo Banca March (formato string correcto)
+        return "600100300300"  # Fondo Renta Variable (formato string correcto)
     
     @pytest.fixture
     def sample_segmento_id(self):

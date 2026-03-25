@@ -2864,7 +2864,7 @@ function transformPriceComparison(data = {}, options = {}) {
     return label
       .replace('Préstamo Hipotecario', 'Hipotecario')
       .replace('Depósito a Plazo Fijo en Euros', 'Depósito PF')
-      .replace('Fondo Banca March', 'Fondos CDG');
+      .replace('Fondo Renta Variable', 'Fondo RV');
   });
 
   return {
