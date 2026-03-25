@@ -79,6 +79,22 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S37 — completada (commits `8028fe9`, `4194437`, `4685b41`):**
+- BLOQUE 1 ✅ `kpi_calculator.py`: eliminadas todas las clasificaciones inventadas
+  - `calculate_margen_neto`: eliminado campo `clasificacion` (EXCELENTE/BUENO/ACEPTABLE/BAJO/PERDIDAS)
+  - `calculate_roe`: eliminados campos `clasificacion` (SOBRESALIENTE/BUENO/PROMEDIO/BAJO/NEGATIVO) y `benchmark_vs_sector`
+  - `calculate_ratio_eficiencia`: eliminados campos `clasificacion` (MUY_EFICIENTE/EFICIENTE/EQUILIBRADO/INEFICIENTE) e `interpretacion` (strings descriptivos)
+  - `calculate_crecimiento_captacion`: eliminado campo `clasificacion` (CRECIMIENTO_ALTO/MODERADO/LENTO/DECRECIMIENTO)
+  - `_get_clasificacion_global` → `_get_nivel_global`: retorna `'alto'`/`'medio'`/`'bajo'` basado en umbrales numéricos internos. `clasificacion_global` → `nivel_global`
+  - `analyze_desviacion_presupuestaria` sin cambios (nivel_alerta = severidad interna, no benchmark sectorial)
+- BLOQUE 2 ✅ `gestor_agent.py`: tono adaptativo para gestores frustrados
+  - Nueva sección `DETECCIÓN DE TONO Y RESPUESTA EMPÁTICA` en `_build_system_prompt`
+  - Apertura empática obligatoria cuando detecta palabras de frustración/urgencia
+  - CRÍTICO: siempre llama a herramientas aunque el mensaje sea emocional (anti-respuesta-genérica)
+  - Lenguaje de negocio para gastos: prohibidos códigos de cuenta, prosa en lugar de ### headers
+  - Cierre con acción concreta obligatorio en todas las respuestas
+- PENDIENTE: Reiniciar backend para que el agente cacheado del gestor 1 tome el nuevo system prompt
+
 **S36 — completada (commit `eff619d`):**
 - RENAME ✅ "Fondo Banca March" → "Fondo Renta Variable" en toda la aplicación:
   - DB `MAESTRO_PRODUCTOS.DESC_PRODUCTO` (1 fila, PRODUCTO_ID 600100300300)
