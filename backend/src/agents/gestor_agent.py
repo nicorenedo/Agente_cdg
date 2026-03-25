@@ -112,6 +112,29 @@ MODELO DE DATOS — IMPORTANTE:
 - La cartera de contratos es acumulada histórica (FECHA_ALTA <= fin del período).
 - En sep-2025 hay 216 contratos activos; en oct-2025 hay 220 (4 contratos nuevos, +1.8%).
 
+ROE — CÓMO USARLO:
+- El ROE del gestor es: beneficio_neto / ingresos_totales × 100 (no sobre patrimonio).
+- Usa siempre la herramienta get_mi_roe para obtenerlo. Nunca lo calcules manualmente.
+- El ROE refleja la rentabilidad de la cartera del gestor en el período seleccionado.
+
+RESTRICCIÓN COMPARATIVAS:
+- Para comparar con el centro, usa ÚNICAMENTE get_mi_centro_benchmark — NO requiere parámetros, el centro se resuelve automáticamente. NUNCA pidas el centro_id al usuario.
+- No uses datos globales ni datos de grupo (todos los gestores). Solo los tuyos y los de tu centro (anonimizados).
+- Si no tienes el dato comparativo, di explícitamente: "No dispongo del dato comparativo para este período."
+
+REPORTE PERSONAL:
+- Cuando el gestor pida su reporte personal: usa SIEMPRE get_mi_reporte_personal y presenta los datos en formato estructurado con secciones: 1) KPIs del período, 2) Evolución MoM (sep→oct), 3) Top clientes, 4) Alertas y desviaciones, 5) Recomendaciones.
+
+DETECCIÓN DE TONO Y RESPUESTA EMPÁTICA:
+- Si el gestor usa palabras de frustración o urgencia ("no entiendo", "por qué", "explícamelo", "no tiene sentido", "demasiado alto", "injusto", "inaceptable", "ya"), PRIMERO valida su preocupación con una frase breve y empática antes de dar los datos.
+- Ejemplos de apertura empática: "Entiendo tu preocupación, te lo explico con detalle." o "Tiene sentido que quieras claridad sobre esto, vamos paso a paso."
+- NUNCA empieces directamente con datos o cifras cuando el mensaje tiene carga emocional. El primer párrafo es siempre de reconocimiento.
+- Después de los datos, cierra SIEMPRE con una frase orientada a la acción: qué puede hacer el gestor con esa información.
+- Tono: profesional pero cercano. No distante ni robótico.
+- Para respuestas emocionales: usa párrafos fluidos con los datos integrados naturalmente. EVITA listas con ### headers.
+- Cuando el gestor pregunta por sus gastos: explica en lenguaje de negocio, no técnico. No digas "cuentas 62xxxx" — di "costes operativos de tu cartera". No digas "CONTRATO_ID IS NULL" — di "gastos de estructura del centro que se reparten entre todos los gestores proporcionalmente a tu actividad".
+- Los gastos distribuidos del centro NO son una penalización arbitraria: son el coste de los servicios compartidos (operaciones, back-office, tecnología) que soportan tu actividad comercial. Explícalo así cuando el gestor lo cuestione.
+
 TONO Y ESTILO:
 - Español profesional bancario. Directo y orientado a la acción.
 - Primero el diagnóstico (¿qué está pasando?), luego la causa (¿por qué?), luego la recomendación (¿qué hacer?).
@@ -230,22 +253,80 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
             return f"Error obteniendo clientes: {e}"
 
     @tool
-    def get_resumen_periodo(periodo_consulta: str = periodo) -> str:
+    def get_mi_roe(periodo_consulta: str = periodo) -> str:
         """
-        Obtiene el resumen financiero consolidado del período indicado para el gestor.
-        Incluye totales de ingresos, gastos directos y beneficio neto.
+        Devuelve el ROE del gestor: beneficio_neto / ingresos_totales × 100 del período.
+        Incluye ingresos, gastos directos, gastos redistribuidos, beneficio neto y ROE%.
+        Usa siempre esta herramienta cuando el gestor pregunte por su ROE o rentabilidad.
         """
         try:
-            result = period_queries.get_periodo_metricas_financieras(
-                periodo=periodo_consulta
+            result = gestor_queries.calculate_roe_gestor_enhanced(
+                gestor_id=str(gestor_id_int), periodo=periodo_consulta
             )
             data = _extract(result)
             if data:
-                return f"Resumen financiero del periodo {periodo_consulta}:\n{data}"
-            return f"Sin datos para el periodo {periodo_consulta}."
+                return f"ROE del gestor {gestor_id_int} ({periodo_consulta}):\n{data}"
+            return "Sin datos de ROE disponibles."
         except Exception as e:
-            logger.error(f"get_resumen_periodo error: {e}")
-            return f"Error obteniendo resumen: {e}"
+            logger.error(f"get_mi_roe error: {e}")
+            return f"Error obteniendo ROE: {e}"
+
+    @tool
+    def get_mi_centro_benchmark(periodo_consulta: str = periodo) -> str:
+        """
+        Devuelve las métricas financieras agregadas del centro al que pertenece este gestor.
+        Útil para comparar la performance propia con la media del centro (sin revelar datos individuales).
+        No requiere parámetros adicionales — el centro se obtiene automáticamente del perfil del gestor.
+        """
+        try:
+            metricas = basic_queries.get_gestor_metricas_completas(
+                gestor_id=str(gestor_id_int), periodo=periodo_consulta
+            )
+            datos = _extract(metricas)
+            centro_id = datos.get('CENTRO') if datos else None
+            if not centro_id:
+                return "No se pudo obtener el centro del gestor."
+            result = basic_queries.get_centro_metricas_financieras(
+                centro_id=int(centro_id), periodo=periodo_consulta
+            )
+            data = _extract(result)
+            if data:
+                return f"Métricas del centro {centro_id} ({periodo_consulta}):\n{data}"
+            return f"Sin datos del centro para el período {periodo_consulta}."
+        except Exception as e:
+            logger.error(f"get_mi_centro_benchmark error: {e}")
+            return f"Error obteniendo benchmark del centro: {e}"
+
+    @tool
+    def get_mi_reporte_personal(periodo_consulta: str = periodo) -> str:
+        """
+        Genera un reporte personal completo del gestor con: KPIs del período,
+        evolución sep→oct, top clientes por margen, desviaciones de precio y datos del centro.
+        Llama a esta herramienta cuando el gestor pida su reporte personal o resumen ejecutivo.
+        """
+        try:
+            kpis = _extract(gestor_queries.calculate_roe_gestor_enhanced(
+                gestor_id=str(gestor_id_int), periodo=periodo_consulta
+            ))
+            evolucion = _extract(gestor_queries.compare_gestor_septiembre_octubre(
+                gestor_id=str(gestor_id_int)
+            ))
+            clientes = _extract(basic_queries.get_gestor_clientes_con_metricas(
+                gestor_id=str(gestor_id_int), periodo=periodo_consulta
+            ))
+            desviaciones = _extract(gestor_queries.get_desviaciones_precio_gestor_enhanced(
+                gestor_id=str(gestor_id_int), periodo=periodo_consulta
+            ))
+            reporte = {
+                'kpis_periodo': kpis,
+                'evolucion_sep_oct': evolucion,
+                'clientes': clientes,
+                'desviaciones': desviaciones,
+            }
+            return f"Datos para reporte personal del gestor {gestor_id_int} ({periodo_consulta}):\n{reporte}"
+        except Exception as e:
+            logger.error(f"get_mi_reporte_personal error: {e}")
+            return f"Error generando reporte: {e}"
 
     return [
         get_mis_kpis,
@@ -253,7 +334,9 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
         get_mis_desviaciones,
         get_evolucion_sep_oct,
         get_mis_clientes,
-        get_resumen_periodo,
+        get_mi_roe,
+        get_mi_centro_benchmark,
+        get_mi_reporte_personal,
     ]
 
 
