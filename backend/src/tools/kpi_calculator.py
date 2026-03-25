@@ -35,27 +35,40 @@ class KPICalculator:
         """
         Cálculo estandarizado de margen neto bancario
         Fórmula: (Ingresos - Gastos) / Ingresos * 100
-
+        
         Returns:
-            Dict con margen_neto_pct, beneficio_neto, formula_aplicada
+            Dict con margen_neto_pct, beneficio_neto, clasificacion
         """
         try:
             ingresos = float(ingresos) if ingresos is not None else 0.0
             gastos = float(gastos) if gastos is not None else 0.0
-
+            
             if not ingresos or ingresos <= 0:
                 return {
                     'margen_neto_pct': 0.0,
                     'beneficio_neto': 0.0,
+                    'clasificacion': 'SIN_INGRESOS',
                     'formula_aplicada': 'División por cero evitada'
                 }
-
+            
             beneficio_neto = round(ingresos - gastos, 2)
             margen_neto_pct = round((beneficio_neto / ingresos) * 100, 2)
-
+            
+            if margen_neto_pct >= 20.0:
+                clasificacion = 'EXCELENTE'
+            elif margen_neto_pct >= 15.0:
+                clasificacion = 'BUENO'
+            elif margen_neto_pct >= 8.0:
+                clasificacion = 'ACEPTABLE'
+            elif margen_neto_pct >= 0.0:
+                clasificacion = 'BAJO'
+            else:
+                clasificacion = 'PERDIDAS'
+            
             return {
                 'margen_neto_pct': margen_neto_pct,
                 'beneficio_neto': beneficio_neto,
+                'clasificacion': clasificacion,
                 'formula_aplicada': f'({ingresos} - {gastos}) / {ingresos} * 100'
             }
         except Exception as e:
@@ -63,6 +76,7 @@ class KPICalculator:
             return {
                 'margen_neto_pct': 0.0,
                 'beneficio_neto': 0.0,
+                'clasificacion': 'ERROR',
                 'formula_aplicada': f'Error: {str(e)}'
             }
     
@@ -79,19 +93,41 @@ class KPICalculator:
             if not patrimonio or patrimonio <= 0:
                 return {
                     'roe_pct': 0.0,
+                    'clasificacion': 'SIN_PATRIMONIO',
+                    'benchmark_vs_sector': 'N/A',
                     'formula_aplicada': f'{beneficio_neto} / {patrimonio} * 100 (patrimonio inválido)'
                 }
-
+            
             roe_pct = round((beneficio_neto / patrimonio) * 100, 4)
-
+            
+            if roe_pct >= 15.0:
+                clasificacion = 'SOBRESALIENTE'
+                benchmark = 'N/A'
+            elif roe_pct >= 10.0:
+                clasificacion = 'BUENO'
+                benchmark = 'N/A'
+            elif roe_pct >= 5.0:
+                clasificacion = 'PROMEDIO'
+                benchmark = 'N/A'
+            elif roe_pct >= 0.0:
+                clasificacion = 'BAJO'
+                benchmark = 'N/A'
+            else:
+                clasificacion = 'NEGATIVO'
+                benchmark = 'N/A'
+            
             return {
                 'roe_pct': roe_pct,
+                'clasificacion': clasificacion,
+                'benchmark_vs_sector': benchmark,
                 'formula_aplicada': f'{beneficio_neto} / {patrimonio} * 100'
             }
         except Exception as e:
             logger.error(f"Error calculando ROE: {e}")
             return {
-                'roe_pct': 0.0,
+                'roe_pct': 0.0, 
+                'clasificacion': 'ERROR',
+                'benchmark_vs_sector': 'Error en cálculo',
                 'formula_aplicada': f'Error: {str(e)}'
             }
     
@@ -111,18 +147,34 @@ class KPICalculator:
             if not gastos or gastos <= 0:
                 return {
                     'ratio_eficiencia': 999999.99,
-                    'formula_aplicada': 'Sin gastos operativos'
+                    'clasificacion': 'GASTOS_NULOS',
+                    'interpretacion': 'Sin gastos operativos'
                 }
-
+            
             ratio = round(ingresos / gastos, 2)
-
+            
+            if ratio >= 2.0:
+                clasificacion = 'MUY_EFICIENTE'
+                interpretacion = 'Excelente control de costes'
+            elif ratio >= 1.5:
+                clasificacion = 'EFICIENTE'
+                interpretacion = 'Buena gestión operativa'
+            elif ratio >= 1.0:
+                clasificacion = 'EQUILIBRADO'
+                interpretacion = 'Balance aceptable ingresos/gastos'
+            else:
+                clasificacion = 'INEFICIENTE'
+                interpretacion = 'Gastos exceden ingresos'
+            
             return {
                 'ratio_eficiencia': ratio,
+                'clasificacion': clasificacion,
+                'interpretacion': interpretacion,
                 'formula_aplicada': f'{ingresos} / {gastos}'
             }
         except Exception as e:
             logger.error(f"Error calculando ratio eficiencia: {e}")
-            return {'ratio_eficiencia': 0.0}
+            return {'ratio_eficiencia': 0.0, 'clasificacion': 'ERROR'}
     
     # =================================================================
     # 3. MÉTRICAS DE CAPTACIÓN Y FIDELIZACIÓN
@@ -139,20 +191,31 @@ class KPICalculator:
                     'crecimiento_absoluto': clientes_fin,
                     'crecimiento_pct': 100.0 if clientes_fin > 0 else 0.0,
                     'tasa_captacion_diaria': round(clientes_fin / periodo_dias, 2),
+                    'clasificacion': 'ARRANQUE'
                 }
-
+            
             crecimiento_absoluto = clientes_fin - clientes_ini
             crecimiento_pct = round((crecimiento_absoluto / clientes_ini) * 100, 2)
             tasa_diaria = round(crecimiento_absoluto / periodo_dias, 2)
-
+            
+            if crecimiento_pct >= 20.0:
+                clasificacion = 'CRECIMIENTO_ALTO'
+            elif crecimiento_pct >= 10.0:
+                clasificacion = 'CRECIMIENTO_MODERADO'
+            elif crecimiento_pct >= 0.0:
+                clasificacion = 'CRECIMIENTO_LENTO'
+            else:
+                clasificacion = 'DECRECIMIENTO'
+            
             return {
                 'crecimiento_absoluto': crecimiento_absoluto,
                 'crecimiento_pct': crecimiento_pct,
                 'tasa_captacion_diaria': tasa_diaria,
+                'clasificacion': clasificacion
             }
         except Exception as e:
             logger.error(f"Error calculando crecimiento captación: {e}")
-            return {'crecimiento_pct': 0.0}
+            return {'crecimiento_pct': 0.0, 'clasificacion': 'ERROR'}
     
     # =================================================================
     # 4. ANÁLISIS DE DESVIACIONES PRESUPUESTARIAS
@@ -255,7 +318,7 @@ class KPICalculator:
                     'margen_neto_pct': margen_result['margen_neto_pct'],
                     'roe_pct': roe_result['roe_pct'],
                     'ratio_eficiencia': eficiencia_result['ratio_eficiencia'],
-                    'nivel_global': self._get_nivel_global(margen_result, roe_result, eficiencia_result)
+                    'clasificacion_global': self._get_clasificacion_global(margen_result, roe_result, eficiencia_result)
                 }
             }
         except Exception as e:
@@ -263,20 +326,22 @@ class KPICalculator:
             logger.error(f"Data row recibida: {data_row}")
             return {'error': str(e)}
     
-    def _get_nivel_global(self, margen_result: Dict, roe_result: Dict, eficiencia_result: Dict) -> str:
-        """Nivel global basado en umbrales numéricos internos (alto/medio/bajo)"""
-        margen_pct = margen_result.get('margen_neto_pct', 0)
-        roe_pct = roe_result.get('roe_pct', 0)
-        ratio = eficiencia_result.get('ratio_eficiencia', 0)
-
-        puntos_altos = sum([margen_pct >= 20, roe_pct >= 15, ratio >= 2.0])
-        puntos_bajos = sum([margen_pct < 8, roe_pct < 5, ratio < 1.0])
-
-        if puntos_altos >= 2:
-            return 'alto'
-        elif puntos_bajos >= 2:
-            return 'bajo'
-        return 'medio'
+    def _get_clasificacion_global(self, margen_result: Dict, roe_result: Dict, eficiencia_result: Dict) -> str:
+        """Clasificación global basada en todos los KPIs"""
+        clasificaciones = [
+            margen_result.get('clasificacion', ''),
+            roe_result.get('clasificacion', ''),
+            eficiencia_result.get('clasificacion', '')
+        ]
+        
+        if 'EXCELENTE' in clasificaciones or 'SOBRESALIENTE' in clasificaciones:
+            return 'HIGH_PERFORMER'
+        elif 'BUENO' in clasificaciones:
+            return 'GOOD_PERFORMER'
+        elif 'PROMEDIO' in clasificaciones or 'ACEPTABLE' in clasificaciones:
+            return 'AVERAGE_PERFORMER'
+        else:
+            return 'NEEDS_IMPROVEMENT'
 
     # =================================================================
     # 6. FUNCIÓN ESPECIAL PARA USAR DATOS DE GESTOR_QUERIES
@@ -311,7 +376,7 @@ class KPICalculator:
                     'margen_neto_pct': margen_result['margen_neto_pct'],
                     'roe_pct': roe_result['roe_pct'],
                     'ratio_eficiencia': eficiencia_result['ratio_eficiencia'],
-                    'nivel_global': self._get_nivel_global(margen_result, roe_result, eficiencia_result)
+                    'clasificacion_global': self._get_clasificacion_global(margen_result, roe_result, eficiencia_result)
                 }
             }
         except Exception as e:
