@@ -312,6 +312,7 @@ class AnalysisType(Enum):
     GLOBAL_KPI = "global_kpi"
     EVOLUCION_GESTORES = "evolucion_gestores"
     GENERAL_QUERY = "general_query"  # S42: catch-all para preguntas no previstas
+    CENTRO_ANALYSIS = "centro_analysis"  # S48: análisis de centro(s) específico(s)
 
 @dataclass
 class CDGRequest:
@@ -477,6 +478,17 @@ class CDGAgentV6:
         """
         msg = user_message.lower()
 
+        # ── BLOQUE 0: Análisis de centro(s) específico(s) ────────────
+        # (S48: antes de cualquier otro bloque para que "Bilbao" no caiga en GENERAL_QUERY)
+        if any(t in msg for t in [
+            'bilbao', 'madrid', 'palma', 'barcelona', 'malaga',
+            'oficina de', 'centro de', 'sucursal',
+            'compara centros', 'comparar centros', 'centros finalistas',
+            'rendimiento por centro', 'rendimiento de los centros',
+            'qué centro', 'que centro', 'cuál es el mejor centro', 'cual es el mejor centro',
+        ]):
+            return AnalysisType.CENTRO_ANALYSIS
+
         # ── BLOQUE 1: Evolución sep→oct entre gestores ────────────────
         # (frases explícitas — antes que GLOBAL_KPI para evitar que
         #  "variación del grupo" acabe en EVOLUCION)
@@ -580,6 +592,7 @@ class CDGAgentV6:
             AnalysisType.GLOBAL_KPI: self._global_kpi_analysis,
             AnalysisType.EVOLUCION_GESTORES: self._evolucion_gestores_analysis,
             AnalysisType.GENERAL_QUERY: self._general_query_analysis,  # S42
+            AnalysisType.CENTRO_ANALYSIS: self._centro_analysis,  # S48
         }
         
         handler = handlers.get(analysis_type, self._business_intelligence_analysis)
@@ -986,6 +999,51 @@ class CDGAgentV6:
         except Exception as e:
             logger.error(f"Error en general_query_analysis: {e}")
             return await self._business_intelligence_analysis(request)
+
+    async def _centro_analysis(self, request: CDGRequest) -> Dict[str, Any]:
+        """
+        S48: Análisis de KPIs financieros por centro(s) específico(s).
+        Usa get_centro_metricas_financieras existente — no genera SQL dinámico.
+        """
+        _CENTRO_MAP = {
+            'madrid': 1, 'palma': 2, 'barcelona': 3, 'malaga': 4, 'málaga': 4, 'bilbao': 5,
+        }
+        try:
+            periodo = request.periodo or '2025-10'
+            msg = request.user_message.lower()
+            results = {}
+            data_sources = []
+
+            # Detectar qué centros pide el mensaje
+            centros_pedidos = {nombre: cid for nombre, cid in _CENTRO_MAP.items() if nombre in msg}
+
+            # Si no hay centro específico → devolver los 5 finalistas para comparativa
+            if not centros_pedidos:
+                centros_pedidos = _CENTRO_MAP
+
+            for nombre_centro, centro_id in centros_pedidos.items():
+                try:
+                    kpis = basic_queries.get_centro_metricas_financieras(centro_id, periodo)
+                    if kpis:
+                        results[nombre_centro] = kpis
+                        data_sources.append(f'centro_{centro_id}')
+                except Exception as e:
+                    logger.warning(f"[CENTRO_ANALYSIS] centro {centro_id}: {e}")
+
+            logger.info(
+                f"[CENTRO_ANALYSIS] '{request.user_message[:60]}' → "
+                f"centros={list(centros_pedidos.keys())}, periodo={periodo}"
+            )
+            return {
+                'analysis_type': 'centro_analysis',
+                'periodo': periodo,
+                'results': results,
+                'data_sources': data_sources,
+                'confidence_score': 0.95 if data_sources else 0.3,
+            }
+        except Exception as e:
+            logger.error(f"Error en centro_analysis: {e}")
+            return {'error': str(e), 'confidence_score': 0.0}
 
     async def _executive_reporting_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         return await self._business_intelligence_analysis(request)
