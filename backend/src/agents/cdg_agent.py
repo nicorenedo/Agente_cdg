@@ -717,21 +717,11 @@ class CDGAgentV6:
             results = {}
             data_sources = []
 
-            # S49-B1: si pregunta por ingresos, añadir ranking por ingresos
-            if any(t in msg for t in ['ingreso', 'revenue', 'factura', 'genera', 'vende']):
-                try:
-                    ingresos_ranking = basic_queries.ranking_gestores_por_ingresos(periodo)
-                    results['ranking_ingresos'] = ingresos_ranking or []
-                    data_sources.append('ingresos_ranking')
-                except Exception as e:
-                    logger.warning(f"Error en ranking ingresos: {e}")
-
             # Ranking por múltiples métricas
             try:
                 margen_ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
                 roe_ranking = comparative_queries.compare_roe_gestores_enhanced(periodo)
                 eficiencia_ranking = comparative_queries.compare_eficiencia_centro_enhanced(periodo)
-
 
                 results['rankings'] = {
                     'margen': margen_ranking.data if margen_ranking and hasattr(margen_ranking, 'data') else [],
@@ -741,6 +731,17 @@ class CDGAgentV6:
                 data_sources.extend(['margen_ranking', 'roe_ranking', 'eficiencia_ranking'])
             except Exception as e:
                 logger.warning(f"Error en rankings: {e}")
+                results.setdefault('rankings', {})
+
+            # S49-B1: si pregunta por ingresos, añadir ranking en rankings.ingresos (visible al formatter)
+            if any(t in msg for t in ['ingreso', 'revenue', 'factura', 'genera', 'vende']):
+                try:
+                    ingresos_ranking = basic_queries.ranking_gestores_por_ingresos(periodo)
+                    results.setdefault('rankings', {})['ingresos'] = ingresos_ranking or []
+                    data_sources.append('ingresos_ranking')
+                    logger.info(f"[B1] ranking_ingresos: {len(ingresos_ranking)} gestores")
+                except Exception as e:
+                    logger.warning(f"Error en ranking ingresos: {e}")
             
             # Análisis de correlaciones
             try:
