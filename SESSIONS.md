@@ -79,6 +79,25 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+## Plan de refactorización S40-S44 — COMPLETADO
+- S40: Router determinista — 0 LLM calls en routing (antes hasta 6)
+- S41: Caché GestorAgent — invalida automáticamente con período y prompt
+- S42: Dispatcher CDG — sin overlaps, catch-all GENERAL_QUERY
+- S43: Split system_prompts.py — prompts separados por agente, schema SQL corregido
+- S44: Response validation — reintento si respuesta sin cifras concretas
+Resultado: arquitectura más fiable, latencia reducida, respuestas con datos reales
+
+---
+
+**S44 — completada:**
+- GUARDIA FORMAT_RESPONSE ✅ `BankingResponseFormatter._has_concrete_numbers()`: detecta €, %, o números de 4+ dígitos en la respuesta.
+- GUARDIA FORMAT_RESPONSE ✅ `format_response()`: si la respuesta LLM no tiene cifras y hay datos reales, reintenta una vez con instrucción explícita. Temperature 0.2 en retry. Máximo 1 reintento — si el retry tampoco tiene cifras, devuelve igualmente sin bloquear.
+- GUARDIA INSIGHTS ✅ `_generate_ai_insights()` en `cdg_agent.py`: si la respuesta del LLM no contiene cifras concretas, reintenta una vez con instrucción explícita antes de parsear los insights.
+- LOGGING ✅ Ambas guardias loggean `[S44 GUARD]` con estado (activado/resultado del retry).
+- VERIFICADO ✅ Pregunta "como esta la concentracion de riesgo en la cartera": respuesta con 220 contratos, 85 clientes, 11 gestores con margen bajo, cifras exactas.
+- VERIFICADO ✅ 4 tests estándar: GestorAgent KPIs (€33,940), CDG ROE 39.96%, ranking gestores (Javier F. 76.91%), evolución sep→oct — todos con cifras concretas.
+- ARCHIVOS TOCADOS: `chat_agent.py` (BankingResponseFormatter), `cdg_agent.py` (_generate_ai_insights).
+
 **S43 — completada (commit `14eae5f`):**
 - NUEVOS ARCHIVOS ✅ `cdg_prompts.py`: 4 prompts del CDGAgent extraídos de system_prompts (FINANCIAL_ANALYST, FINANCIAL_REPORT, COMPARATIVE_ANALYSIS, DEVIATION_ANALYSIS).
 - NUEVOS ARCHIVOS ✅ `chat_prompts.py`: 6 CATALOG_PROMPTS acortados de ~1,220 líneas a ~50 (desde S40 el DeterministicQueryRouter reemplazó el uso LLM de estos catálogos; se mantienen por compatibilidad).
