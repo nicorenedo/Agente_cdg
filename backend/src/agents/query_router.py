@@ -53,12 +53,16 @@ class DeterministicQueryRouter:
             'params_keys': [],
         },
 
-        # Ranking / comparativa de gestores por margen (CDG, no personal)
+        # Ranking / comparativa de gestores por margen (CDG, no personal) — español e inglés
         {
             'keywords': [
                 'ranking gestores', 'top gestores', 'mejor gestor', 'peor gestor',
                 'comparativa gestores', 'comparar gestores', 'gestores por margen',
                 'gestores ordenados', 'lista de gestores',
+                # S46: keywords en inglés (substrings que matchean de verdad)
+                'top manager', 'best manager', 'worst manager',
+                'manager ranking', 'revenue ranking', 'what manager', 'which manager',
+                'managers by', 'by revenue',
             ],
             'require_personal': False,
             'catalog': 'comparative',

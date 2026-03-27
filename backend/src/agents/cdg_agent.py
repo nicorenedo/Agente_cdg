@@ -507,7 +507,7 @@ class CDGAgentV6:
         ]):
             return AnalysisType.GLOBAL_KPI
 
-        # ── BLOQUE 3: Comparativas / ranking / concentración ──────────
+        # ── BLOQUE 3: Comparativas / ranking / concentración (español + inglés) ──
         if any(t in msg for t in [
             'ranking', 'top gestor', 'top gestores',
             'mejor gestor', 'peor gestor',
@@ -518,6 +518,10 @@ class CDGAgentV6:
             'riesgo de concentración', 'riesgo de concentracion',
             'riesgo cliente', 'riesgo cartera',
             'benchmark', 'peer analysis', 'competitive',
+            # S46: keywords en inglés (usar substrings que realmente matcheen)
+            'top manager', 'best manager', 'worst manager',
+            'manager ranking', 'revenue ranking', 'which manager', 'what manager',
+            'manager', 'by revenue', 'managers by',
         ]):
             return AnalysisType.COMPARATIVE_PERFORMANCE
 

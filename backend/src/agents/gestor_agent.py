@@ -137,6 +137,20 @@ DETECCIÓN DE TONO Y RESPUESTA EMPÁTICA:
 - Cuando el gestor pregunta por sus gastos: explica en lenguaje de negocio, no técnico. No digas "cuentas 62xxxx" — di "costes operativos de tu cartera". No digas "CONTRATO_ID IS NULL" — di "gastos de estructura del centro que se reparten entre todos los gestores proporcionalmente a tu actividad".
 - Los gastos distribuidos del centro NO son una penalización arbitraria: son el coste de los servicios compartidos (operaciones, back-office, tecnología) que soportan tu actividad comercial. Explícalo así cuando el gestor lo cuestione.
 
+REGLA ABSOLUTA — TOOL CALLING:
+Antes de responder CUALQUIER pregunta sobre tu cartera, resultados, gastos, ingresos, clientes o rendimiento,
+DEBES llamar al menos una herramienta para obtener datos reales de la base de datos.
+Esta regla aplica independientemente del tono o estilo de la pregunta:
+- "oye que tal voy" → llama get_mis_kpis
+- "estoy bien o mal" → llama get_mis_kpis
+- "cómo me va" → llama get_mis_kpis
+- "resúmeme todo" → llama get_mi_reporte_personal
+- "qué tal el mes" → llama get_mis_kpis
+Si no llamas una herramienta, tu respuesta será incorrecta porque no tendrás datos reales.
+NUNCA respondas sobre métricas financieras usando solo el contexto conversacional — los números cambian
+cada mes y solo la base de datos tiene los valores correctos.
+- Cuando el gestor pregunte por productos o qué producto priorizar: usa get_mis_productos_detalle (no get_mis_desviaciones).
+
 TONO Y ESTILO:
 - Español profesional bancario. Directo y orientado a la acción.
 - Primero el diagnóstico (¿qué está pasando?), luego la causa (¿por qué?), luego la recomendación (¿qué hacer?).
@@ -330,6 +344,36 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
             logger.error(f"get_mi_reporte_personal error: {e}")
             return f"Error generando reporte: {e}"
 
+    @tool
+    def get_mis_productos_detalle(periodo_consulta: str = periodo) -> str:
+        """
+        Devuelve el mix de productos del gestor: qué productos tiene contratados,
+        cuántos contratos por producto y los KPIs de rentabilidad del período.
+        Usa esta herramienta cuando el gestor pregunte por productos, qué producto
+        priorizar, mix de productos, o rendimiento por tipo de producto.
+        No uses get_mis_desviaciones para preguntas de estrategia de producto.
+        """
+        try:
+            contratos = basic_queries.get_contratos_by_gestor(gestor_id=gestor_id_int)
+            contratos_data = _extract(contratos) or []
+            # Agrupar por producto
+            producto_counts: Dict[str, int] = {}
+            for c in contratos_data:
+                desc = c.get('DESC_PRODUCTO', c.get('PRODUCTO_ID', 'Desconocido'))
+                producto_counts[desc] = producto_counts.get(desc, 0) + 1
+            mix = [f"  - {prod}: {cnt} contratos" for prod, cnt in sorted(producto_counts.items(), key=lambda x: -x[1])]
+            kpis = _extract(gestor_queries.get_gestor_performance_enhanced(
+                gestor_id=str(gestor_id_int), periodo=periodo_consulta
+            ))
+            return (
+                f"Mix de productos del gestor {gestor_id_int} (contratos acumulados):\n"
+                + "\n".join(mix)
+                + f"\n\nKPIs período {periodo_consulta}:\n{kpis}"
+            )
+        except Exception as e:
+            logger.error(f"get_mis_productos_detalle error: {e}")
+            return f"Error obteniendo detalle de productos: {e}"
+
     return [
         get_mis_kpis,
         get_mi_cartera,
@@ -339,6 +383,7 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
         get_mi_roe,
         get_mi_centro_benchmark,
         get_mi_reporte_personal,
+        get_mis_productos_detalle,
     ]
 
 
@@ -477,6 +522,37 @@ class GestorAgent:
                     m.name for m in result["messages"]
                     if hasattr(m, "name") and m.name and m.__class__.__name__ == "ToolMessage"
                 ]
+
+                # S46 FIX1: si no se llamó ninguna tool y la pregunta parece financiera,
+                # reintentar una vez con instrucción explícita para forzar el tool call.
+                _NON_FINANCIAL = {"hola", "gracias", "ok", "vale", "bien", "sí", "no",
+                                  "perfecto", "entendido", "de nada", "bye", "adios"}
+                _msg_lower = message.lower().strip()
+                _is_casual_reply = len(_msg_lower) < 8 or _msg_lower in _NON_FINANCIAL
+                if not used_tools and not _is_casual_reply:
+                    logger.info("[S46 RETRY] Sin tools en respuesta — reintentando sin historial para forzar tool call")
+                    _force_msg = (
+                        f"[INSTRUCCIÓN OBLIGATORIA DEL SISTEMA]: Para responder a la pregunta del gestor, "
+                        f"DEBES llamar a al menos una herramienta ANTES de redactar cualquier respuesta. "
+                        f"Empieza tu respuesta llamando a get_mis_kpis si la pregunta es sobre rendimiento, "
+                        f"get_mis_productos_detalle si es sobre productos, o get_mi_reporte_personal para resúmenes.\n\n"
+                        f"Pregunta del gestor: {message}"
+                    )
+                    # Sin historial previo: el LLM no tiene contexto y DEBE llamar tools
+                    _messages_retry = [HumanMessage(content=_force_msg)]
+                    _result_retry = await self._agent_executor.ainvoke({"messages": _messages_retry})
+                    _last_retry = _result_retry["messages"][-1]
+                    _response_retry = _last_retry.content if hasattr(_last_retry, "content") else str(_last_retry)
+                    _tools_retry = [
+                        m.name for m in _result_retry["messages"]
+                        if hasattr(m, "name") and m.name and m.__class__.__name__ == "ToolMessage"
+                    ]
+                    if _tools_retry:
+                        logger.info(f"[S46 RETRY] Reintento exitoso — tools: {_tools_retry}")
+                        response_text = _response_retry
+                        used_tools = _tools_retry
+                    else:
+                        logger.warning("[S46 RETRY] Reintento tampoco llamo tools — usando respuesta original")
 
                 # Actualizar historial
                 self.conversation_history.append({"role": "user", "content": message})
