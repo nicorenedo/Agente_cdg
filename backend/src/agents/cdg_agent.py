@@ -1256,7 +1256,27 @@ class CDGAgentV6:
             )
             
             ai_response = response.choices[0].message.content.strip()
-            
+
+            # S44: guardia — si la respuesta no contiene cifras concretas, retry una vez
+            if not re.search(r'€|%|\d{4,}', ai_response) and content:
+                logger.info("[S44 GUARD] Insights sin cifras concretas — reintentando con instruccion explicita")
+                retry_prompt = (
+                    insight_prompt
+                    + "\n\n⚠️ REINTENTO: Los insights anteriores no contenían cifras concretas. "
+                    "Incluye valores numéricos exactos de los DATOS (€, %, cantidades) en cada insight."
+                )
+                retry_resp = self.llm_client.chat.completions.create(
+                    model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                    messages=[
+                        {"role": "system", "content": CHAT_FINANCIAL_ANALYSIS_SYSTEM_PROMPT},
+                        {"role": "user", "content": retry_prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=400
+                )
+                ai_response = retry_resp.choices[0].message.content.strip()
+                logger.info(f"[S44 GUARD] Reintento insights — cifras presentes: {bool(re.search(r'€|%|\\d{{4,}}', ai_response))}")
+
             # Parsear insights (dividir por líneas numeradas)
             insights = []
             for line in ai_response.split('\n'):
@@ -1264,7 +1284,7 @@ class CDGAgentV6:
                     clean_insight = re.sub(r'^\d+\.\s*', '', line.strip()).strip('- •')
                     if clean_insight:
                         insights.append(clean_insight)
-            
+
             return insights[:5] if insights else ["Análisis completado - Datos procesados correctamente"]
             
         except Exception as e:

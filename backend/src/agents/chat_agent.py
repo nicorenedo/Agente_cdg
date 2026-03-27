@@ -1452,9 +1452,14 @@ class EnhancedQueryBuilder:
 
 class BankingResponseFormatter:
     """Formateador especializado en contexto bancario CON PERSONALIZACIÓN"""
-    
+
     def __init__(self):
         self.llm_client = iniciar_agente_llm()
+
+    @staticmethod
+    def _has_concrete_numbers(text: str) -> bool:
+        """S44: Detecta si el texto contiene cifras concretas (€, %, números 4+ dígitos)."""
+        return bool(re.search(r'€|%|\d{4,}', text))
     
     async def format_response(self, data: Any, query: str, context: Dict = None) -> str:
         """
@@ -1555,7 +1560,28 @@ class BankingResponseFormatter:
                     temperature=0.3,
                     max_tokens=900  # ✅ Aumentado para respuestas personalizadas
                 )
-                return response.choices[0].message.content.strip()
+                result = response.choices[0].message.content.strip()
+                # S44: guardia — si no hay cifras concretas y hay datos reales, retry una vez
+                if not self._has_concrete_numbers(result) and data:
+                    logger.info("[S44 GUARD] Respuesta sin cifras concretas — reintentando con instruccion explicita")
+                    retry_prompt = (
+                        banking_prompt
+                        + "\n\n⚠️ REINTENTO OBLIGATORIO: Tu respuesta anterior no contenía ninguna cifra concreta. "
+                        "DEBES incluir los números exactos que aparecen en DATOS REALES (€, %, valores numéricos). "
+                        "No uses frases vagas como 'alrededor de' o 'aproximadamente'. Incluye los valores tal como están en los datos."
+                    )
+                    retry_response = self.llm_client.chat.completions.create(
+                        model=settings.AZURE_OPENAI_DEPLOYMENT_ID,
+                        messages=[
+                            {"role": "system", "content": CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT},
+                            {"role": "user", "content": retry_prompt}
+                        ],
+                        temperature=0.2,
+                        max_tokens=900
+                    )
+                    result = retry_response.choices[0].message.content.strip()
+                    logger.info(f"[S44 GUARD] Reintento completado — cifras presentes: {self._has_concrete_numbers(result)}")
+                return result
             else:
                 return self._format_personal_fallback(data, query, gestor_id, is_personal)
 
