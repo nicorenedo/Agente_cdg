@@ -89,6 +89,31 @@ Resultado: arquitectura más fiable, latencia reducida, respuestas con datos rea
 
 ---
 
+**S46 — completada (commit `5bfaf27`):**
+
+FIX 1 — GestorAgent no llama tools con lenguaje informal:
+- REGLA ABSOLUTA ✅ Bloque explícito en `_build_system_prompt()` mapeando frases informales → tool concreta.
+- RETRY ARQUITECTURAL ✅ `process_message()`: si `used_tools == []` y la pregunta no es una respuesta casual (len<8 / saludos), re-invoca LangGraph sin historial previo + instrucción de sistema forzada. Sin historial, el LLM no puede responder desde contexto y DEBE llamar tools.
+- VERIFICADO ✅: "oye que tal voy este mes" (gestor 1) → tools=['get_mi_reporte_personal'], 14.4s (2 calls). "como me va el negocio" (gestor 3) → tools=['get_mi_reporte_personal'], 8.6s.
+- CAUSA RAÍZ: conversation_history acumulado de sesiones previas hacía que el LLM respondiera sin tools incluso con instrucciones explícitas. Fix: retry con historial vacío.
+
+FIX 2 — Pregunta en inglés no enrutaba al handler correcto:
+- KEYWORDS INGLÉS ✅ `cdg_agent.py` BLOQUE 3: añadidos `'manager'`, `'by revenue'`, `'managers by'` (substrings que matchean "managers" en texto).
+- KEYWORDS INGLÉS ✅ `query_router.py`: ranking route ampliada con mismas keywords.
+- RESULTADO ⚠️: routing CDG_AGENT correcto + dispatch a COMPARATIVE_PERFORMANCE. Pero `ranking_gestores_por_margen_enhanced` es ranking por MARGEN, no por ingresos — el LLM responde honestamente "no tengo datos de revenue específico". Fix completo requeriría una nueva query `ranking_gestores_por_ingresos`.
+
+FIX 3 — Recomendación de producto usa datos inventados:
+- NEW TOOL ✅ `get_mis_productos_detalle`: combina `get_contratos_by_gestor` (mix real por producto) + `get_gestor_performance_enhanced` (KPIs). System prompt actualizado: "para preguntas de productos usa get_mis_productos_detalle (no get_mis_desviaciones)".
+- RETRY APLICA ⚠️: el retry de FIX 1 también corre para preguntas de producto (13s = 2 calls). GPT-4o sigue respondiendo desde la historia de desviaciones para preguntas de estrategia. Limitación del modelo.
+- NOTA: la tool existe y está disponible; el problema es que GPT-4o no la usa para preguntas de "recomendación estratégica" aunque sí para preguntas de "datos de mis productos".
+
+ARCHIVOS TOCADOS: `gestor_agent.py`, `cdg_agent.py`, `query_router.py`.
+
+**S45 — sesión de tests (solo diagnóstico, sin cambios de código):**
+- 13 tests ejecutados: 3✅, 6⚠️, 4❌.
+- Hallazgos clave: (1) A3 — LLM no llama tools con lenguaje informal (corregido en S46). (2) B2/B4 — CDGAgent sin query de KPIs por CENTRO_ID. (3) C2 — no hay contexto conversacional de charts en CDGAgent. (4) C1 — punto 5 (alertas precio) incorrecto: dice "sin alertas" cuando hay desviaciones >15%.
+- Listo para demo: A1, A4, A5a, B5, C1 puntos 1-3.
+
 **S44 — completada:**
 - GUARDIA FORMAT_RESPONSE ✅ `BankingResponseFormatter._has_concrete_numbers()`: detecta €, %, o números de 4+ dígitos en la respuesta.
 - GUARDIA FORMAT_RESPONSE ✅ `format_response()`: si la respuesta LLM no tiene cifras y hay datos reales, reintenta una vez con instrucción explícita. Temperature 0.2 en retry. Máximo 1 reintento — si el retry tampoco tiene cifras, devuelve igualmente sin bloquear.
