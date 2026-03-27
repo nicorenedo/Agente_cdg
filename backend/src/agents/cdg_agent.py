@@ -307,6 +307,7 @@ class AnalysisType(Enum):
     CHART_ADVANCED_GENERATION = "chart_advanced_generation"
     GLOBAL_KPI = "global_kpi"
     EVOLUCION_GESTORES = "evolucion_gestores"
+    GENERAL_QUERY = "general_query"  # S42: catch-all para preguntas no previstas
 
 @dataclass
 class CDGRequest:
@@ -457,65 +458,103 @@ class CDGAgentV6:
     
     def _determine_analysis_type(self, user_message: str, context: Dict) -> AnalysisType:
         """
-        🎯 DETERMINA TIPO DE ANÁLISIS ESPECIALIZADO
+        S42: Dispatcher sin overlaps, ordenado de más específico a menos específico.
+
+        Orden de bloques:
+          1. EVOLUCION_GESTORES  — frases comparativas sep→oct explícitas
+          2. GLOBAL_KPI          — métricas del grupo/banco (no por gestor)
+          3. COMPARATIVE_PERFORMANCE — ranking, concentración, comparativas
+          4. DEVIATION_DETECTION — precio real vs STD, anomalías
+          5. INCENTIVE_CALCULATION — incentivos, bonus, comisiones
+          6. DEEP_GESTOR_ANALYSIS — análisis profundo de un gestor
+          7. PREDICTIVE_ANALYSIS  — tendencias, proyecciones
+          8. EXECUTIVE_REPORTING  — reportes ejecutivos
+          9. GENERAL_QUERY        — catch-all: llama múltiples engines
         """
-        message_lower = user_message.lower()
+        msg = user_message.lower()
 
-        # ROE / KPIs consolidados del grupo (alta prioridad)
-        if any(term in message_lower for term in [
-            'roe', 'rentabilidad global', 'rentabilidad consolidada', 'rentabilidad del grupo',
-            'margen grupo', 'margen global', 'kpis globales', 'kpis consolidado',
-            'resultados globales', 'resultados del grupo', 'resultados consolidado',
-            'consolidado', 'grupo en octubre', 'grupo en septiembre',
-        ]):
-            return AnalysisType.GLOBAL_KPI
-
-        # Evolución sep→oct por gestores
-        if any(term in message_lower for term in [
-            'evoluci', 'mejorado', 'empeorado', 'retrocedido', 'retroceso',
+        # ── BLOQUE 1: Evolución sep→oct entre gestores ────────────────
+        # (frases explícitas — antes que GLOBAL_KPI para evitar que
+        #  "variación del grupo" acabe en EVOLUCION)
+        if any(t in msg for t in [
             'quién mejoró', 'quien mejoró', 'quién empeoró', 'quien empeoró',
-            'sep.*oct', 'septiembre.*octubre', 'variaci', 'cambio mensual',
+            'quién avanzó', 'quien avanzó', 'quién retrocedió', 'quien retrocedió',
+            'gestores que mejoraron', 'gestores que retrocedieron',
+            'gestores han mejorado', 'gestores han empeorado',
+            'evolución gestores', 'evolucion gestores',
+            'sep vs oct', 'sep/oct', 'sep-oct',
+            'septiembre vs octubre', 'de septiembre a octubre',
+            'mes a mes gestores', 'cambio de gestores',
         ]):
             return AnalysisType.EVOLUCION_GESTORES
 
-        # Detección de desviaciones (alta prioridad — incluye español)
-        if any(term in message_lower for term in [
-            'desviaci', 'anomalía', 'outlier', 'alert', 'critical',
-            'critica', 'crítica', 'precio est', 'precio std',
+        # ── BLOQUE 2: KPIs / ROE consolidados del grupo ───────────────
+        # (solo frases que incluyen "grupo", "global" o "consolidado"
+        #  para no capturar "roe" a secas que podría ser personal)
+        if any(t in msg for t in [
+            'kpis globales', 'kpis consolidado', 'kpi global', 'kpi consolidado',
+            'roe del grupo', 'roe grupo', 'roe global', 'roe consolidado',
+            'rentabilidad global', 'rentabilidad consolidada', 'rentabilidad del grupo',
+            'margen grupo', 'margen global', 'margen consolidado',
+            'resultados globales', 'resultados del grupo', 'resultados consolidado',
+            'ingresos del grupo', 'ingresos globales',
+            'cómo está el banco', 'como está el banco', 'situación del banco',
+            'consolidado del grupo', 'grupo en octubre', 'grupo en septiembre',
         ]):
-            return AnalysisType.DEVIATION_DETECTION
+            return AnalysisType.GLOBAL_KPI
 
-        # Análisis profundo de gestor específico
-        if any(term in message_lower for term in ['performance completo', 'análisis profundo', 'deep dive']):
-            return AnalysisType.DEEP_GESTOR_ANALYSIS
-
-        # Comparativas: ranking, margen, mejor, peor, comparar gestores
-        elif any(term in message_lower for term in [
+        # ── BLOQUE 3: Comparativas / ranking / concentración ──────────
+        if any(t in msg for t in [
+            'ranking', 'top gestor', 'top gestores',
+            'mejor gestor', 'peor gestor',
+            'qué gestor', 'que gestor', 'quién tiene', 'quien tiene',
+            'comparar gestores', 'comparativa gestores', 'gestores por margen',
+            'gestores ordenados', 'lista de gestores',
+            'concentración', 'concentracion',
+            'riesgo de concentración', 'riesgo de concentracion',
+            'riesgo cliente', 'riesgo cartera',
             'benchmark', 'peer analysis', 'competitive',
-            'ranking', 'mejor gestor', 'peor gestor',
-            'qué gestor', 'que gestor', 'quien tiene', 'quién tiene',
-            'comparar gestores', 'comparativa', 'top gestor',
         ]):
             return AnalysisType.COMPARATIVE_PERFORMANCE
 
-        # Business Intelligence avanzado
-        elif any(term in message_lower for term in ['tendencias', 'proyección', 'forecasting', 'predicción']):
-            return AnalysisType.PREDICTIVE_ANALYSIS
+        # ── BLOQUE 4: Desviaciones precio real vs estándar ────────────
+        if any(t in msg for t in [
+            'desviaci', 'desviación', 'desviacion',
+            'precio real', 'precio estándar', 'precio estandar', 'precio std',
+            'anomalía', 'anomalia', 'outlier',
+            'sobreprecio', 'precio fuera', 'precio por encima', 'precio por debajo',
+        ]):
+            return AnalysisType.DEVIATION_DETECTION
 
-        # Reportes ejecutivos
-        elif any(term in message_lower for term in ['executive', 'c-level', 'directivo', 'board']):
-            return AnalysisType.EXECUTIVE_REPORTING
-
-        # Análisis de incentivos complejos
-        elif any(term in message_lower for term in ['incentive structure', 'bonus calculation', 'commission', 'incentivo', 'incentivos']):
+        # ── BLOQUE 5: Incentivos / bonus / comisiones ─────────────────
+        if any(t in msg for t in [
+            'incentivo', 'incentivos', 'bonus', 'comisión', 'comision',
+            'premio', 'cumplimiento de objetivos', 'cumplimiento objetivos',
+        ]):
             return AnalysisType.INCENTIVE_CALCULATION
 
-        # Gráficos avanzados
-        elif any(term in message_lower for term in ['dashboard', 'visualization', 'interactive']):
-            return AnalysisType.CHART_ADVANCED_GENERATION
+        # ── BLOQUE 6: Análisis profundo de gestor específico ──────────
+        if any(t in msg for t in [
+            'análisis profundo', 'analisis profundo',
+            'performance completo', 'deep dive', 'análisis completo', 'analisis completo',
+        ]):
+            return AnalysisType.DEEP_GESTOR_ANALYSIS
 
-        # Por defecto: Business Intelligence
-        return AnalysisType.BUSINESS_INTELLIGENCE
+        # ── BLOQUE 7: Tendencias / proyecciones ───────────────────────
+        if any(t in msg for t in [
+            'tendencia', 'proyección', 'proyeccion',
+            'forecasting', 'predicción', 'prediccion',
+        ]):
+            return AnalysisType.PREDICTIVE_ANALYSIS
+
+        # ── BLOQUE 8: Reportes ejecutivos ─────────────────────────────
+        if any(t in msg for t in ['executive', 'c-level', 'directivo', 'board']):
+            return AnalysisType.EXECUTIVE_REPORTING
+
+        # ── BLOQUE 9: Catch-all ───────────────────────────────────────
+        # No coincide con ningún tipo específico → GENERAL_QUERY
+        # _general_query_analysis llama 3 engines y responde con LLM
+        return AnalysisType.GENERAL_QUERY
     
     async def _execute_specialized_analysis(self, request: CDGRequest, analysis_type: AnalysisType) -> Dict[str, Any]:
         """
@@ -532,6 +571,7 @@ class CDGAgentV6:
             AnalysisType.CHART_ADVANCED_GENERATION: self._advanced_chart_generation,
             AnalysisType.GLOBAL_KPI: self._global_kpi_analysis,
             AnalysisType.EVOLUCION_GESTORES: self._evolucion_gestores_analysis,
+            AnalysisType.GENERAL_QUERY: self._general_query_analysis,  # S42
         }
         
         handler = handlers.get(analysis_type, self._business_intelligence_analysis)
@@ -882,12 +922,69 @@ class CDGAgentV6:
             logger.error(f"Error en evolucion_gestores_analysis: {e}")
             return {'error': str(e), 'confidence_score': 0.0}
     
+    async def _general_query_analysis(self, request: CDGRequest) -> Dict[str, Any]:
+        """
+        S42: Catch-all para preguntas no previstas en el dispatcher.
+
+        Llama múltiples engines y expone todos los datos al LLM para que
+        responda con contexto real. No falla silenciosamente.
+        """
+        try:
+            periodo = request.periodo or '2025-10'
+            results = {}
+            data_sources = []
+
+            # Resumen general de la entidad
+            try:
+                resumen = basic_queries.get_resumen_general()
+                if resumen:
+                    results['resumen_general'] = resumen
+                    data_sources.append('resumen_general')
+            except Exception as e:
+                logger.warning(f"[GENERAL_QUERY] resumen_general: {e}")
+
+            # Métricas financieras del período
+            try:
+                metricas = period_queries.get_periodo_metricas_financieras(periodo)
+                if metricas and hasattr(metricas, 'data') and metricas.data:
+                    results['metricas_periodo'] = metricas.data[0]
+                    data_sources.append('metricas_periodo')
+            except Exception as e:
+                logger.warning(f"[GENERAL_QUERY] metricas_periodo: {e}")
+
+            # Top 10 gestores por margen (contexto comparativo)
+            try:
+                ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
+                if ranking and hasattr(ranking, 'data') and ranking.data:
+                    results['ranking_gestores'] = ranking.data[:10]
+                    data_sources.append('ranking_gestores')
+            except Exception as e:
+                logger.warning(f"[GENERAL_QUERY] ranking_gestores: {e}")
+
+            logger.info(
+                f"[GENERAL_QUERY] '{request.user_message[:60]}' → "
+                f"{len(data_sources)} engines ({', '.join(data_sources)})"
+            )
+
+            return {
+                'analysis_type': 'general_query',
+                'user_message': request.user_message,
+                'periodo': periodo,
+                'results': results,
+                'data_sources': data_sources,
+                'confidence_score': 0.7 if len(data_sources) >= 2 else 0.3,
+                'note': 'Respuesta consolidada — pregunta sin tipo de análisis específico',
+            }
+        except Exception as e:
+            logger.error(f"Error en general_query_analysis: {e}")
+            return await self._business_intelligence_analysis(request)
+
     async def _executive_reporting_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         return await self._business_intelligence_analysis(request)
-    
+
     async def _predictive_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         return await self._business_intelligence_analysis(request)
-    
+
     async def _advanced_chart_generation(self, request: CDGRequest) -> Dict[str, Any]:
         return await self._business_intelligence_analysis(request)
     
@@ -1018,7 +1115,7 @@ class CDGAgentV6:
             try:
                 ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
                 if ranking and hasattr(ranking, 'data') and ranking.data:
-                    margenes = [g.get('margen_neto_pct', 0) for g in ranking.data if g.get('margen_neto_pct')]
+                    margenes = [g.get('margen_neto', 0) for g in ranking.data if g.get('margen_neto')]
                     metrics['margen_promedio'] = round(sum(margenes) / len(margenes), 2) if margenes else 0
                 else:
                     metrics['margen_promedio'] = 15.2  # fallback
@@ -1043,13 +1140,13 @@ class CDGAgentV6:
             try:
                 ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
                 if ranking and hasattr(ranking, 'data') and ranking.data:
-                    low_margin_gestores = [g for g in ranking.data if g.get('margen_neto_pct', 0) < 5]
+                    low_margin_gestores = [g for g in ranking.data if g.get('margen_neto', 0) < 5]
                     if low_margin_gestores:
                         alerts.append({
                             'type': 'LOW_MARGIN',
                             'severity': 'HIGH',
                             'message': f'{len(low_margin_gestores)} gestores con margen < 5%',
-                            'gestores': [g.get('desc_gestor', f"Gestor {g.get('gestor_id')}") for g in low_margin_gestores[:3]],
+                            'gestores': [g.get('DESC_GESTOR', f"Gestor {g.get('GESTOR_ID')}") for g in low_margin_gestores[:3]],
                             'recommended_action': 'Revisar estrategia de precios y estructura de costes'
                         })
             except Exception as e:
