@@ -158,6 +158,16 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
+# Router determinista S40 — sin LLM
+try:
+    from agents.query_router import DeterministicQueryRouter
+except ImportError:
+    try:
+        from query_router import DeterministicQueryRouter
+    except ImportError:
+        DeterministicQueryRouter = None
+        logger.warning("⚠️ DeterministicQueryRouter no disponible — usando LLM catalog search")
+
 # ============================================================================
 # 🔐 SISTEMA DE ROLES Y PERMISOS BANCARIOS - NUEVA FUNCIONALIDAD v11.0
 # ============================================================================
@@ -422,6 +432,8 @@ class IntelligentQueryClassifier:
     
     def __init__(self):
         self.llm_client = iniciar_agente_llm()
+        # S40: Router determinista (reemplaza 6 LLM calls de catálogo)
+        self.router = DeterministicQueryRouter() if DeterministicQueryRouter else None
         # 🎯 CATÁLOGOS DE QUERIES INTEGRADOS (6 CATÁLOGOS COMPLETOS)
         self.query_catalogs = {
             'basic': BASIC_QUERIES_CATALOG_PROMPT,
@@ -490,7 +502,9 @@ class IntelligentQueryClassifier:
             
             # 🔥 NUEVA LÓGICA: Decisión inteligente basada en el intent
             intent = initial_classification.get('intent', '')
-            is_personal = initial_classification.get('is_personal', False)
+            # S40 fix: el LLM devuelve 'is_personal_query', no 'is_personal'
+            is_personal = initial_classification.get('is_personal_query',
+                          initial_classification.get('is_personal', False))
             confidence = initial_classification.get('confidence', 0.0)
             
             logger.info(f"🎯 Clasificación: intent={intent}, is_personal={is_personal}, confidence={confidence}")
@@ -505,9 +519,9 @@ class IntelligentQueryClassifier:
             
             if is_personal and intent in personal_data_intents:
                 logger.info(f"🎯 Consulta personal de datos detectada → PREDEFINED_QUERY (intent: {intent})")
-                
+
                 # Buscar query predefinida para este intent
-                predefined_match = await self._find_predefined_query(user_message, context)
+                predefined_match = await self._find_predefined_query(user_message, context, is_personal=True)
                 
                 if predefined_match['found']:
                     return {
@@ -564,7 +578,7 @@ class IntelligentQueryClassifier:
             # 🎯 REGLA 3: Consultas con requires_sql pero NO personales → Buscar query predefinida
             if initial_classification.get('requires_sql', False):
                 logger.info("🎯 Consulta requiere SQL → Buscando query predefinida")
-                predefined_match = await self._find_predefined_query(user_message, context)
+                predefined_match = await self._find_predefined_query(user_message, context, is_personal=False)
                 if predefined_match['found']:
                     return {
                         'flow_type': 'PREDEFINED_QUERY',
@@ -590,7 +604,7 @@ class IntelligentQueryClassifier:
             
             # 🎯 DEFAULT: Si no encaja en ninguno, buscar query predefinida
             logger.info(f"🎯 Intent {intent} no encaja en reglas específicas → Buscando query predefinida")
-            predefined_match = await self._find_predefined_query(user_message, context)
+            predefined_match = await self._find_predefined_query(user_message, context, is_personal=is_personal)
             
             if predefined_match['found']:
                 return {
@@ -700,50 +714,33 @@ class IntelligentQueryClassifier:
             return self._fallback_classification(user_message)
 
     
-    async def _find_predefined_query(self, user_message: str, context: Dict = None) -> Dict[str, Any]:
+    async def _find_predefined_query(
+        self,
+        user_message: str,
+        context: Dict = None,
+        is_personal: bool = None,
+    ) -> Dict[str, Any]:
         """
-        🎯 BÚSQUEDA SECUENCIAL ESTRICTA - UN CATÁLOGO A LA VEZ
-        Previene mezcla de catálogos y asegura selección correcta
+        S40: Usa DeterministicQueryRouter en lugar de 6 LLM calls secuenciales.
+        El router mapea keywords → (catalog, function, params) en O(n) sin LLM.
         """
         try:
-            # 🔥 ORDEN INTELIGENTE CON ROLES: Empezar por el más probable
-            catalog_priority = self._determine_catalog_priority(user_message, context)
+            if self.router is not None:
+                result = self.router.route(user_message, context, is_personal=is_personal)
+                if result['found']:
+                    logger.info(
+                        f"✅ [ROUTER DETERMINISTA] {result['catalog']}.{result['function_name']} "
+                        f"| params={result['parameters']}"
+                    )
+                return result
 
-            logger.info(f"🔍 Búsqueda secuencial en orden: {catalog_priority}")
-
-            # 🔥 BUSCAR UNO POR UNO - NUNCA MEZCLAR
-            for catalog_name in catalog_priority:
-                catalog_content = self.query_catalogs.get(catalog_name)
-                if not catalog_content:
-                    continue
-
-                logger.info(f"🔎 Buscando SOLO en: {catalog_name}")
-
-                # 🎯 BÚSQUEDA EXCLUSIVA EN UN SOLO CATÁLOGO
-                match_result = await self._search_exclusive_catalog(
-                    user_message, 
-                    catalog_name, 
-                    catalog_content,
-                    context
-                )
-
-                if match_result['found'] and match_result['confidence'] > 0.75:
-                    logger.info(f"✅ MATCH exclusivo en {catalog_name}: {match_result['function_name']}")
-                    return {
-                        'found': True,
-                        'catalog': catalog_name,  # 🔥 GARANTIZADO CORRECTO
-                        'function_name': match_result['function_name'],
-                        'parameters': match_result.get('parameters', {}),
-                        'confidence': match_result['confidence'],
-                        'reasoning': f"Función exclusiva de {catalog_name}: {match_result['reasoning']}"
-                    }
-
-            # No se encontró en ningún catálogo
-            logger.info("❌ No se encontró función específica en ningún catálogo")
+            # Fallback: si el router no está disponible, devolver not-found
+            # (evita los 6 LLM calls del sistema anterior)
+            logger.warning("⚠️ Router no disponible — devolviendo not-found")
             return {'found': False, 'confidence': 0.0}
 
         except Exception as e:
-            logger.error(f"Error en búsqueda secuencial: {e}")
+            logger.error(f"Error en router determinista: {e}")
             return {'found': False, 'confidence': 0.0}
 
     def _determine_catalog_priority(self, user_message: str, context: Dict = None) -> List[str]:
