@@ -297,3 +297,38 @@ cd frontend && npm start
 - `GET /basic/precios-std` y `GET /prices/comparison` — devuelven 404; no se usan en ningún flujo activo
 - `analyticsService.js:2857` — `.replace('Fondo Banca March', 'Fondos CDG')` mantiene el string del nombre real en BD (no es UI-visible, no se toca)
 - `BM_CONTABILIDAD_CDG_backup_20260315.db` — backup de la BD pre-corrección, mantener hasta confirmar que el sistema arranca correctamente
+
+---
+
+## ✅ S48 — completada (commits `966984f`, `f33feb1`, `87d1dd6`)
+
+**Objetivo:** Tres fixes de bajo riesgo aprobados en S47.
+
+**B1 ✅ CENTRO_ANALYSIS handler en CDGAgent:**
+- `AnalysisType.CENTRO_ANALYSIS` añadido al enum en `cdg_agent.py`
+- BLOQUE 0 en `_determine_analysis_type()`: detecta 'bilbao', 'madrid', 'palma', 'barcelona', 'malaga', 'oficina de', 'centro de', etc. — ANTES que cualquier otro bloque
+- Nuevo método `_centro_analysis()`: extrae centros del mensaje, llama `basic_queries.get_centro_metricas_financieras(centro_id, periodo)` para cada centro detectado. Si no hay centro específico → devuelve los 5 finalistas
+- Reutiliza query existente (Bilbao: 29 contratos, €105k ingresos, margen 57.18% validado en Python)
+- `_execute_specialized_analysis()` dispatch actualizado con `CENTRO_ANALYSIS: self._centro_analysis`
+- No se añadió entrada en `query_router.py` (la función requiere `centro_id` que el router no puede extraer; las queries de centro llegan via CDG_AGENT, no via predefined query path)
+
+**B2 ✅ Session TTL en GestorAgent:**
+- `self._last_session_id: str = ""` añadido a `GestorAgent.__init__()`
+- Al inicio de `process_message()`: si `session_id` cambia respecto a `_last_session_id`, resetea `conversation_history = []` y actualiza `_last_session_id`
+- Protege contra historial contaminado entre sesiones de usuario distintas (bug raíz identificado en S47)
+- `session_id` ya venía en `GestorChatRequest` y ya se pasaba a `process_message()` desde `main.py`
+
+**B3 ✅ Keywords de productos en REGLA ABSOLUTA:**
+- En `_build_system_prompt()` de `gestor_agent.py`: añadidos 6 ejemplos explícitos para products en REGLA ABSOLUTA:
+  - "cuántas hipotecas tengo" → llama get_mis_productos_detalle
+  - "cuántos depósitos tengo" → llama get_mis_productos_detalle
+  - "qué productos tengo" → llama get_mis_productos_detalle
+  - "mi mix de productos" → llama get_mis_productos_detalle
+  - "qué producto priorizar" → llama get_mis_productos_detalle
+  - "cuántos fondos gestiono" → llama get_mis_productos_detalle
+
+**Verificación estática (Python):** BLOQUE 0 firma correctamente para "bilbao" y "centro de". `CENTRO_ANALYSIS` enum presente. `_centro_analysis()` devuelve datos reales (Bilbao: 29 contratos, €105,363, margen 57.18%).
+
+**⚠️ Nota backend:** WatchFiles no detectó los cambios en `src/` durante la sesión. Los tests en caliente fallaron mostrando `analysis_type: business_intelligence` (código anterior en memoria). **Requiere reinicio manual del backend** para que B1 entre en efecto.
+
+**Próxima sesión:** S49 — "Handlers Faltantes" (período ad-hoc, producto global CDG, gestor individual como CDG). Considerar si DYNAMIC_SQL puede habilitarse como fallback seguro post-S43.
