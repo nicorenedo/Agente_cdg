@@ -75,6 +75,7 @@ const ChatInterface = ({
   onNewChart = () => {},
   onCommand = () => {},
   onReportGenerated = () => {},
+  onToggleExpand = null,
   suggestions = null,
   expanded = false,
   className = '',
@@ -92,6 +93,7 @@ const ChatInterface = ({
   const [useWebSocket, setUseWebSocket] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isExpanded, setIsExpanded] = useState(expanded);
+  useEffect(() => { setIsExpanded(expanded); }, [expanded]);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [lastAnalysisType, setLastAnalysisType] = useState(null);
@@ -709,16 +711,20 @@ ${data.suggestions ? data.suggestions.map(s => `• ${s}`).join('\n') : '• Con
   }, [initializeWebSocket]);
 
   const handleToggleExpansion = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    if (onToggleExpand) {
+      onToggleExpand();
+    } else {
+      setIsExpanded(prev => !prev);
+    }
     setTimeout(() => {
       if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'end' 
+        messagesEndRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'end'
         });
       }
     }, 300);
-  }, []);
+  }, [onToggleExpand]);
 
   // ✅ MENU DE ACCIONES ACTUALIZADO
   const advancedActionsMenu = {

@@ -586,43 +586,6 @@ const DireccionView = () => {
           display: 'flex',
           flexDirection: 'column'
         }}>
-          {/* Header del chat mejorado */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            borderBottom: '1px solid #f0f0f0',
-            backgroundColor: theme.colors?.bmGreenPrimary || '#1890ff',
-            borderRadius: chatExpanded ? '6px 6px 0 0' : `${theme.token?.borderRadius || 8}px ${theme.token?.borderRadius || 8}px 0 0`
-          }}>
-            <Space>
-              <Text strong style={{ color: 'white', fontSize: 14 }}>
-                🤖 Asistente CDG Dirección
-              </Text>
-              <Badge count="Dashboard Corporativo" size="small" style={{ backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            </Space>
-            <Space>
-              <Button
-                type="text"
-                size="small"
-                icon={chatExpanded ? <CompressOutlined /> : <ExpandOutlined />}
-                onClick={() => setChatExpanded(prev => !prev)}
-                style={{ color: 'white' }}
-                title={chatExpanded ? 'Contraer chat' : 'Expandir chat'}
-              />
-              <Button
-                type="text"
-                size="small"
-                onClick={() => setShowChat(false)}
-                style={{ color: 'white', padding: 0, minWidth: 'auto' }}
-                title="Cerrar chat"
-              >
-                ✕
-              </Button>
-            </Space>
-          </div>
-          
           {/* ✅ CONTENIDO DEL CHAT CON NUEVAS PROPS */}
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <ChatInterface
@@ -635,6 +598,7 @@ const DireccionView = () => {
               onSettingsChange={handleChatSettingsChange}
               onClear={handleChatClear}
               expanded={chatExpanded}
+              onToggleExpand={() => setChatExpanded(prev => !prev)}
               allowModelSelection={true}
               showSystemInfo={true}
               maxTokens={2000}

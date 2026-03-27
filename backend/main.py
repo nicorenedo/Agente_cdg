@@ -586,12 +586,31 @@ async def chat_message(req: ChatRequest):
         )
         
         resp = await chat_agent.process_chat_message(msg)
-        
+
         if hasattr(resp, "__dict__"):
             data = resp.__dict__
         else:
             data = {"response": str(resp)}
-        
+
+        # Detectar intención de pivot y generar chart_config si falta
+        if CHART_GENERATOR_AVAILABLE and not data.get('chart_config'):
+            pivot_keywords = ['cambia el gr', 'grafico a', 'gráfico a', 'pivot', 'muestra por',
+                              'ingresos por', 'margen por', 'cambiar gr', 'ver por']
+            mensaje_lower = req.message.lower()
+            if any(kw in mensaje_lower for kw in pivot_keywords):
+                try:
+                    user_role_str = req.user_role or 'control_gestion'
+                    pivot_result = handle_chart_pivot_request(
+                        user_message=req.message,
+                        chart_config=req.current_chart_config or {},
+                        user_role=user_role_str,
+                        user_context={'userid': req.user_id, 'gestor_id': req.gestor_id}
+                    )
+                    if pivot_result and pivot_result.get('status') == 'success':
+                        data['chart_config'] = pivot_result.get('new_config', {})
+                except Exception as pivot_err:
+                    logger.warning(f"Pivot auto-generation failed: {pivot_err}")
+
         return ok(data, meta={"source": "chat_agent_v11", "integration": "perfect_with_confidentiality"})
         
     except Exception as e:
@@ -715,6 +734,26 @@ async def gestor_chat(req: GestorChatRequest):
             message=req.message,
             session_id=req.session_id,
         )
+
+        # Detectar intención de pivot y generar chart_config si falta
+        if CHART_GENERATOR_AVAILABLE and not result.get('chart_config'):
+            pivot_keywords = ['cambia el gr', 'grafico a', 'gráfico a', 'pivot', 'muestra por',
+                              'ingresos por', 'margen por', 'cambiar gr', 'ver por', 'mostrame']
+            mensaje_lower = req.message.lower()
+            if any(kw in mensaje_lower for kw in pivot_keywords):
+                try:
+                    pivot_result = handle_chart_pivot_request(
+                        user_message=req.message,
+                        chart_config={},
+                        user_role='GESTOR',
+                        user_context={'userid': req.gestor_id, 'gestor_id': req.gestor_id}
+                    )
+                    if pivot_result and pivot_result.get('status') == 'success':
+                        new_cfg = pivot_result.get('new_config', {})
+                        new_cfg['gestor_id'] = req.gestor_id
+                        result['chart_config'] = new_cfg
+                except Exception as pivot_err:
+                    logger.warning(f"Pivot auto-generation (gestor) failed: {pivot_err}")
 
         return ok(result, meta={
             "agent": "gestor_agent",

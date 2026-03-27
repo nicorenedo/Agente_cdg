@@ -872,41 +872,6 @@ const GestorView = () => {
           display: 'flex',
           flexDirection: 'column'
         }}>
-          {/* Header del chat */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            borderBottom: '1px solid #f0f0f0',
-            backgroundColor: theme.colors?.bmGreenPrimary || '#1890ff',
-            borderRadius: chatExpanded ? '6px 6px 0 0' : `${theme.token?.borderRadius || 8}px ${theme.token?.borderRadius || 8}px 0 0`
-          }}>
-            <Space>
-              <Text strong style={{ color: 'white', fontSize: 14 }}>
-                🤖 Asistente CDG Personal
-              </Text>
-              <Badge count="Dashboard Gestor" size="small" style={{ backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            </Space>
-            <Space>
-              <Button
-                type="text"
-                size="small"
-                icon={chatExpanded ? <CompressOutlined /> : <ExpandOutlined />}
-                onClick={handleChatToggleExpand}
-                style={{ color: 'white' }}
-              />
-              <Button
-                type="text"
-                size="small"
-                onClick={() => setShowChat(false)}
-                style={{ color: 'white', padding: 0, minWidth: 'auto' }}
-              >
-                ✕
-              </Button>
-            </Space>
-          </div>
-          
           {/* ✅ CONTENIDO DEL CHAT CON NUEVAS PROPS PARA GESTOR */}
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <ChatInterface
@@ -920,6 +885,7 @@ const GestorView = () => {
               onSettingsChange={handleChatSettingsChange}
               onClear={handleChatClear}
               expanded={chatExpanded}
+              onToggleExpand={handleChatToggleExpand}
               allowModelSelection={false}
               showSystemInfo={false}
               maxTokens={1000}
