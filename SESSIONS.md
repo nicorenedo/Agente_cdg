@@ -79,6 +79,17 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S42 — completada (commit `c876d91`):**
+- DISPATCHER ✅ `_determine_analysis_type()` reescrito: 9 bloques ordenados de más a menos específico, sin overlaps. Antes: orden frágil con `elif` mezclados e `if` independientes.
+- BUG FIX ✅ Patterns regex usados como substrings: `'sep.*oct'` y `'septiembre.*octubre'` nunca matcheaban en el original (`in` es substring, no regex). Reemplazados por frases literales explícitas.
+- BUG FIX ✅ `'roe'` removido de GLOBAL_KPI: era demasiado genérico. Reemplazado por `'roe del grupo'`, `'roe global'`, `'roe consolidado'`. "roe" a secas ya no captura queries personales o ambiguas.
+- BUG FIX ✅ `'evoluci'` y `'variaci'` (truncaciones) removidos: demasiado anchos — capturaban "variación de costes" como EVOLUCION. Reemplazados por frases completas.
+- BUG FIX ✅ `'alert'` (inglés) removido de DEVIATION_DETECTION: overlapeaba con cualquier string que contenga "alert".
+- NUEVO ✅ Keywords `'concentracion'`, `'riesgo de concentracion'`, `'riesgo cartera'` añadidas a COMPARATIVE_PERFORMANCE.
+- NUEVO ✅ `AnalysisType.GENERAL_QUERY` añadido + `_general_query_analysis()`: catch-all que llama 3 engines (resumen_general + metricas_periodo + ranking_gestores) en lugar de fallar silenciosamente. Antes el fallback era BUSINESS_INTELLIGENCE que puede no tener el contexto correcto.
+- VERIFICADO ✅ 6 tests: evolución gestores / concentración cartera / desviaciones precio / ROE grupo / ranking gestores / pregunta no prevista → todos al handler correcto.
+- ARCHIVOS: solo `cdg_agent.py` modificado.
+
 **S41 — completada (commit `fa8dfb8`):**
 - CACHE KEY ✅ `gestor_agent.py`: nueva función `_compute_agent_key(gestor_id, nombre, segmento, centro, periodo)` → cache key = `f"{gestor_id}:{md5(nombre|segmento|centro|periodo)[:8]}"`. Antes: key era solo `str(gestor_id)` → el período pasado en cada request era ignorado si el gestor ya estaba en caché. Ahora: período diferente = hash diferente = nueva instancia con tools correctamente bakeados.
 - TRACEBACK ✅ `process_message()`: exception handler ahora incluye `exc_info=True` → el traceback completo aparece en los logs cuando LangGraph lanza una excepción. Antes: solo el mensaje de error, sin stack trace.
