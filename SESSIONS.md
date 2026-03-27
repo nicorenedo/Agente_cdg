@@ -79,6 +79,32 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S49 — completada (commits `0394cde`, `feea66a`..`f3e8a6e`):**
+
+B1 ✅ Ranking por ingresos en COMPARATIVE_PERFORMANCE:
+- NEW QUERY ✅ `basic_queries.ranking_gestores_por_ingresos(periodo, limit=15)`: SQL con JOIN MAESTRO_GESTORES/CENTROS/SEGMENTOS/CONTRATOS/MOVIMIENTOS. Filtra solo centros finalistas (IND_CENTRO_FINALISTA=1) y gestores con ingresos > 0. ORDER BY ingresos_total DESC. Validado: G1=Javier Fernández Sánchez €45,265.
+- KEYWORDS ✅ BLOQUE 3 ampliado: `'gestores por ingreso'`, `'por ingresos'` → dispatch a COMPARATIVE_PERFORMANCE.
+- HANDLER ✅ `_comparative_performance_analysis()`: detecta keywords de ingresos en el mensaje y añade `results['rankings']['ingresos']` con el ranking. Estructura bajo `rankings` dict para que el LLM formatter lo agregue junto con margen/roe/eficiencia.
+- VERIFICADO ✅ "dame el top 5 gestores por ingresos en octubre" → flow=CDG_AGENT, analysis_type=comparative_performance, confidence=0.85. Top 3: Javier Fernández €45,265 / Rafael Jiménez €39,790 / Francisco Martínez €38,160.
+
+B2 ✅ PRODUCTO_ANALYSIS handler para análisis global por tipo de producto:
+- NEW ENUM ✅ `AnalysisType.PRODUCTO_ANALYSIS = "producto_analysis"` añadido en cdg_agent.py.
+- NEW QUERY ✅ `basic_queries.get_producto_kpis_global(periodo)`: KPIs por producto (ingresos, gastos directos, beneficio_neto, margen_neto_pct, n_contratos, n_clientes). Validado: Fondo Renta Variable €302,355 margen 98.04%.
+- BLOQUE 0b ✅ `_determine_analysis_type()`: detecta fondos/hipotecario/deposito/que producto/mix de productos → PRODUCTO_ANALYSIS. Antes de BLOQUE 3 para no caer en ranking gestores.
+- HANDLER ✅ `_producto_analysis()`: llama `get_producto_kpis_global`, retorna `results.productos`, confidence=0.95.
+- DISPATCH ✅ `AnalysisType.PRODUCTO_ANALYSIS: self._producto_analysis` en handlers dict.
+- VERIFICADO ✅ "que producto genera mas margen en octubre" → analysis_type=producto_analysis, 3 productos con datos reales. LLM formatea tabla ordenada: Préstamo Hipotecario 98.85% / Fondo RV 98.04% / Depósito -254.64%.
+
+B3 DYNAMIC_SQL — Veredicto: ❌ NO habilitar como fallback:
+- Test1: "cuantos contratos nuevos en octubre 2025" → CDG_AGENT responde 220 (total, no los 4 nuevos). INCORRECTO.
+- Test2: "cuantos gestores tienen mas de 10 contratos activos" → CDG_AGENT responde "ninguno". INCORRECTO (hay 3 con 12).
+- Test3: "ingreso promedio por gestor en octubre" → CDG_AGENT responde €20,800 (€624k/30). PLAUSIBLE pero el sistema ya tiene esta info.
+- Conclusión: estos queries caen al catch-all GENERAL_QUERY que no tiene contexto para responderlos con precisión. La solución correcta es añadir predefined handlers específicos (S50 o posterior), no DYNAMIC_SQL.
+
+ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (AnalysisType sin CENTRO_ANALYSIS/PRODUCTO_ANALYSIS). El uvicorn reload=True no detectaba cambios de os.utime(). Solución: matar todos los procesos python3.13 y relanzar el backend. Verificado con `/agent/specializations`: ahora aparecen CENTRO_ANALYSIS y PRODUCTO_ANALYSIS.
+
+ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
+
 ## Plan de refactorización S40-S44 — COMPLETADO
 - S40: Router determinista — 0 LLM calls en routing (antes hasta 6)
 - S41: Caché GestorAgent — invalida automáticamente con período y prompt
