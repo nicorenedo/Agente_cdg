@@ -79,6 +79,12 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S41 — completada (commit `fa8dfb8`):**
+- CACHE KEY ✅ `gestor_agent.py`: nueva función `_compute_agent_key(gestor_id, nombre, segmento, centro, periodo)` → cache key = `f"{gestor_id}:{md5(nombre|segmento|centro|periodo)[:8]}"`. Antes: key era solo `str(gestor_id)` → el período pasado en cada request era ignorado si el gestor ya estaba en caché. Ahora: período diferente = hash diferente = nueva instancia con tools correctamente bakeados.
+- TRACEBACK ✅ `process_message()`: exception handler ahora incluye `exc_info=True` → el traceback completo aparece en los logs cuando LangGraph lanza una excepción. Antes: solo el mensaje de error, sin stack trace.
+- BACKWARD COMPAT ✅ `get_gestor_agent(gestor_id)`: actualizado para buscar por prefijo `f"{gestor_id}:"` en lugar de exact match. Devuelve la instancia más reciente para ese gestor_id. Usado por endpoints de status/reset en main.py.
+- ARCHIVOS: solo `gestor_agent.py` modificado. `main.py` sin cambios (ya pasaba `periodo_default=req.periodo`).
+
 **S40 — completada (commit `1318755`):**
 - ROUTER ✅ `query_router.py`: nuevo `DeterministicQueryRouter` con 20 reglas keyword → (catalog, function, params). Reemplaza los 6 LLM calls secuenciales de `_find_predefined_query()` por matching determinista O(n). Unit tests: 7/7 OK.
 - WIRING ✅ `chat_agent.py`: `_find_predefined_query()` reescrita — delega al router, elimina `_search_exclusive_catalog()` (que hacía hasta 6 LLM calls). Instancia `self.router` en `IntelligentQueryClassifier.__init__()`.
