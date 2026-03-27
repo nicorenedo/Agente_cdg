@@ -415,6 +415,7 @@ class GestorAgent:
         self.centro = centro
         self.periodo_default = periodo_default
         self.conversation_history: List[Dict[str, str]] = []
+        self._last_session_id: str = ""  # S48: TTL de historial por sesión
         self._agent_executor: Optional[Any] = None
         self._initialized = False
 
@@ -498,6 +499,12 @@ class GestorAgent:
                 "gestor_id": self.gestor_id,
                 "blocked": True,
             }
+
+        # S48: Reset historial si cambia el session_id (nueva sesión de usuario)
+        if session_id and session_id != self._last_session_id:
+            self.conversation_history = []
+            self._last_session_id = session_id
+            logger.info(f"[S48 SESSION RESET] Historial limpiado para gestor {self.gestor_id}, sesión {session_id}")
 
         # ── LangGraph path ───────────────────────────────────────────
         if self._initialized and self._agent_executor is not None:
