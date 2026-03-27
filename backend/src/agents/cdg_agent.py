@@ -313,6 +313,7 @@ class AnalysisType(Enum):
     EVOLUCION_GESTORES = "evolucion_gestores"
     GENERAL_QUERY = "general_query"  # S42: catch-all para preguntas no previstas
     CENTRO_ANALYSIS = "centro_analysis"  # S48: análisis de centro(s) específico(s)
+    PRODUCTO_ANALYSIS = "producto_analysis"  # S49: análisis global por tipo de producto
 
 @dataclass
 class CDGRequest:
@@ -489,6 +490,17 @@ class CDGAgentV6:
         ]):
             return AnalysisType.CENTRO_ANALYSIS
 
+        # ── BLOQUE 0b: Análisis por producto (CDG global) ────────────
+        # (S49: antes de BLOQUE 3 comparativas para que "por producto" no caiga en ranking gestores)
+        if any(t in msg for t in [
+            'fondo renta variable', 'hipotecario', 'deposito', 'depósito',
+            'producto más rentable', 'producto mas rentable',
+            'qué producto', 'que producto', 'mix de productos',
+            'por tipo de producto', 'por producto',
+            'cómo van los fondos', 'como van los fondos', 'fondos de la entidad',
+        ]):
+            return AnalysisType.PRODUCTO_ANALYSIS
+
         # ── BLOQUE 1: Evolución sep→oct entre gestores ────────────────
         # (frases explícitas — antes que GLOBAL_KPI para evitar que
         #  "variación del grupo" acabe en EVOLUCION)
@@ -526,6 +538,7 @@ class CDGAgentV6:
             'qué gestor', 'que gestor', 'quién tiene', 'quien tiene',
             'comparar gestores', 'comparativa gestores', 'gestores por margen',
             'gestores ordenados', 'lista de gestores',
+            'gestores por ingreso', 'por ingresos',  # S49-B1: ranking por ingresos
             'concentración', 'concentracion',
             'riesgo de concentración', 'riesgo de concentracion',
             'riesgo cliente', 'riesgo cartera',
@@ -593,6 +606,7 @@ class CDGAgentV6:
             AnalysisType.EVOLUCION_GESTORES: self._evolucion_gestores_analysis,
             AnalysisType.GENERAL_QUERY: self._general_query_analysis,  # S42
             AnalysisType.CENTRO_ANALYSIS: self._centro_analysis,  # S48
+            AnalysisType.PRODUCTO_ANALYSIS: self._producto_analysis,  # S49
         }
         
         handler = handlers.get(analysis_type, self._business_intelligence_analysis)
@@ -698,17 +712,27 @@ class CDGAgentV6:
         """🎯 ANÁLISIS COMPARATIVO AVANZADO"""
         try:
             periodo = request.periodo or '2025-10'
-            
+            msg = request.user_message.lower()
+
             results = {}
             data_sources = []
-            
+
+            # S49-B1: si pregunta por ingresos, añadir ranking por ingresos
+            if any(t in msg for t in ['ingreso', 'revenue', 'factura', 'genera', 'vende']):
+                try:
+                    ingresos_ranking = basic_queries.ranking_gestores_por_ingresos(periodo)
+                    results['ranking_ingresos'] = ingresos_ranking or []
+                    data_sources.append('ingresos_ranking')
+                except Exception as e:
+                    logger.warning(f"Error en ranking ingresos: {e}")
+
             # Ranking por múltiples métricas
             try:
                 margen_ranking = comparative_queries.ranking_gestores_por_margen_enhanced(periodo)
                 roe_ranking = comparative_queries.compare_roe_gestores_enhanced(periodo)
                 eficiencia_ranking = comparative_queries.compare_eficiencia_centro_enhanced(periodo)
 
-                
+
                 results['rankings'] = {
                     'margen': margen_ranking.data if margen_ranking and hasattr(margen_ranking, 'data') else [],
                     'roe': roe_ranking.data if roe_ranking and hasattr(roe_ranking, 'data') else [],
@@ -999,6 +1023,29 @@ class CDGAgentV6:
         except Exception as e:
             logger.error(f"Error en general_query_analysis: {e}")
             return await self._business_intelligence_analysis(request)
+
+    async def _producto_analysis(self, request: CDGRequest) -> Dict[str, Any]:
+        """
+        S49-B2: Análisis de KPIs financieros por tipo de producto para toda la entidad.
+        Usa get_producto_kpis_global existente — no genera SQL dinámico.
+        """
+        try:
+            periodo = request.periodo or '2025-10'
+            kpis = basic_queries.get_producto_kpis_global(periodo)
+            logger.info(
+                f"[PRODUCTO_ANALYSIS] '{request.user_message[:60]}' → "
+                f"{len(kpis)} productos, periodo={periodo}"
+            )
+            return {
+                'analysis_type': 'producto_analysis',
+                'periodo': periodo,
+                'results': {'productos': kpis or []},
+                'data_sources': ['producto_kpis_global'],
+                'confidence_score': 0.95 if kpis else 0.3,
+            }
+        except Exception as e:
+            logger.error(f"Error en producto_analysis: {e}")
+            return {'error': str(e), 'confidence_score': 0.0}
 
     async def _centro_analysis(self, request: CDGRequest) -> Dict[str, Any]:
         """

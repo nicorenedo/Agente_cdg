@@ -1145,6 +1145,69 @@ class BasicQueries:
     # ANÁLISIS CON PANDAS
     # =====================================
     
+    # =====================================
+    # S49: RANKING POR INGRESOS + PRODUCTO GLOBAL
+    # =====================================
+
+    def ranking_gestores_por_ingresos(self, periodo: str, limit: int = 15) -> List[Dict[str, Any]]:
+        """
+        S49-B1: Ranking de gestores ordenados por ingresos totales del período.
+        Ingresos = SUM(IMPORTE) WHERE CUENTA_ID LIKE '76%'
+        """
+        query = """
+            SELECT
+                g.GESTOR_ID,
+                g.DESC_GESTOR,
+                c.DESC_CENTRO,
+                s.DESC_SEGMENTO,
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) AS ingresos_total,
+                COUNT(DISTINCT co.CONTRATO_ID) AS n_contratos,
+                COUNT(DISTINCT co.CLIENTE_ID) AS n_clientes
+            FROM MAESTRO_GESTORES g
+            JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
+            JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
+            LEFT JOIN MAESTRO_CONTRATOS co ON g.GESTOR_ID = co.GESTOR_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+                AND strftime('%Y-%m', mov.FECHA) = ?
+            WHERE c.IND_CENTRO_FINALISTA = 1
+            GROUP BY g.GESTOR_ID, g.DESC_GESTOR, c.DESC_CENTRO, s.DESC_SEGMENTO
+            HAVING ingresos_total > 0
+            ORDER BY ingresos_total DESC
+            LIMIT ?
+        """
+        return execute_query(query, (periodo, limit))
+
+    def get_producto_kpis_global(self, periodo: str) -> List[Dict[str, Any]]:
+        """
+        S49-B2: KPIs por producto para toda la entidad en un período.
+        Devuelve: producto, contratos, clientes, ingresos, gastos directos, beneficio_neto, margen_neto_pct.
+        """
+        query = """
+            SELECT
+                p.PRODUCTO_ID,
+                p.DESC_PRODUCTO,
+                p.IND_FABRICA,
+                COUNT(DISTINCT co.CONTRATO_ID) AS n_contratos,
+                COUNT(DISTINCT co.CLIENTE_ID) AS n_clientes,
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) AS ingresos_total,
+                COALESCE(ABS(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                                   AND co.CONTRATO_ID IS NOT NULL
+                                   THEN mov.IMPORTE ELSE 0 END)), 0) AS gastos_directos
+            FROM MAESTRO_PRODUCTOS p
+            LEFT JOIN MAESTRO_CONTRATOS co ON p.PRODUCTO_ID = co.PRODUCTO_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON co.CONTRATO_ID = mov.CONTRATO_ID
+                AND strftime('%Y-%m', mov.FECHA) = ?
+            GROUP BY p.PRODUCTO_ID, p.DESC_PRODUCTO, p.IND_FABRICA
+            ORDER BY ingresos_total DESC
+        """
+        rows = execute_query(query, (periodo,))
+        for row in rows:
+            ingresos = row.get('ingresos_total', 0) or 0
+            gastos = row.get('gastos_directos', 0) or 0
+            row['beneficio_neto'] = round(ingresos - gastos, 2)
+            row['margen_neto_pct'] = round((ingresos - gastos) / ingresos * 100, 2) if ingresos > 0 else 0
+        return rows
+
     def get_dataframe_movimientos(self, fecha_inicio: str = None, fecha_fin: str = None) -> pd.DataFrame:
         """Obtiene DataFrame de movimientos para análisis avanzado"""
         base_query = """
