@@ -7,6 +7,7 @@ Acceso estrictamente limitado: solo puede consultar datos de su propio gestor_id
 Patrón: Tool Pattern + Agentic Pattern (decide qué herramientas usar)
 """
 
+import hashlib
 import logging
 import os
 import sys
@@ -490,7 +491,10 @@ class GestorAgent:
                 }
 
             except Exception as e:
-                logger.error(f"GestorAgent LangGraph error: {e}")
+                logger.error(
+                    f"GestorAgent LangGraph error [{type(e).__name__}]: {e}",
+                    exc_info=True,
+                )
                 # Fall through al modo degradado
 
         # ── Fallback sin LangChain ───────────────────────────────────
@@ -537,10 +541,28 @@ class GestorAgent:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Caché de instancias por gestor_id
+# Caché de instancias — key incluye hash de los params del system prompt
 # ═══════════════════════════════════════════════════════════════════
 
 _agent_cache: Dict[str, GestorAgent] = {}
+
+
+def _compute_agent_key(
+    gestor_id: str,
+    nombre: str,
+    segmento: str,
+    centro: str,
+    periodo: str,
+) -> str:
+    """
+    S41: Cache key = gestor_id + hash(nombre, segmento, centro, periodo).
+
+    Garantiza que cualquier cambio en el system prompt (nombre, centro, período)
+    produce una nueva instancia en lugar de reutilizar la obsoleta.
+    """
+    payload = f"{nombre}|{segmento}|{centro}|{periodo}"
+    h = hashlib.md5(payload.encode()).hexdigest()[:8]
+    return f"{gestor_id}:{h}"
 
 
 def create_gestor_agent(
@@ -553,23 +575,36 @@ def create_gestor_agent(
 ) -> GestorAgent:
     """
     Devuelve un GestorAgent para el gestor_id dado.
-    Reutiliza instancia cacheada si ya existe (a menos que force_new=True).
+    Reutiliza instancia cacheada si los parámetros del system prompt no han cambiado.
+    Invalida automáticamente cuando cambia el período, nombre, segmento o centro.
     """
-    key = str(gestor_id)
+    key = _compute_agent_key(gestor_id, nombre, segmento, centro, periodo_default)
     if force_new or key not in _agent_cache:
+        logger.info(f"[CACHE MISS] Creando GestorAgent key={key} (gestor={gestor_id}, periodo={periodo_default})")
         _agent_cache[key] = GestorAgent(
-            gestor_id=key,
+            gestor_id=str(gestor_id),
             nombre=nombre,
             segmento=segmento,
             centro=centro,
             periodo_default=periodo_default,
         )
+    else:
+        logger.debug(f"[CACHE HIT] Reutilizando GestorAgent key={key}")
     return _agent_cache[key]
 
 
 def get_gestor_agent(gestor_id: str) -> Optional[GestorAgent]:
-    """Devuelve el agente cacheado para gestor_id, o None si no existe."""
-    return _agent_cache.get(str(gestor_id))
+    """
+    Devuelve el agente cacheado más reciente para gestor_id.
+    Busca por prefijo porque la key ahora incluye hash de parámetros.
+    """
+    prefix = f"{gestor_id}:"
+    # Python 3.7+ dict preserva orden de inserción → último insertado = más reciente
+    match = None
+    for k, v in _agent_cache.items():
+        if k.startswith(prefix):
+            match = v
+    return match
 
 
 async def process_gestor_message(
