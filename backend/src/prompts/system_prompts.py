@@ -89,24 +89,25 @@ TABLAS DE PRECIOS:
 LÓGICA DE NEGOCIO CRÍTICA:
 1. **Centros Finalistas**: Filtrar por IND_CENTRO_FINALISTA = 1 para análisis comerciales
 2. **Cálculo Margen Neto**: (Ingresos - Gastos) / Ingresos * 100
-   - Ingresos: LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS')
-   - Gastos: LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA')
-3. **Cálculo ROE**: Beneficio Neto / Patrimonio * 100
+   - Ingresos: CUENTA_ID LIKE '76%' (tabla MOVIMIENTOS_CONTRATOS)
+   - Gastos directos: SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL
+   - Gastos centrales: SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69') AND CONTRATO_ID IS NULL
+3. **Cálculo ROE**: Beneficio Neto / Ingresos Totales * 100
 4. **Fechas**: FECHA_ALTA para contratos, FECHA para movimientos, FECHA_CALCULO para precios reales
 5. **Clientes**: Campo es NOMBRE_CLIENTE (no DESC_CLIENTE)
 6. **Desviaciones Críticas**: >15% entre precio real y estándar
 
 REGLAS TÉCNICAS OBLIGATORIAS:
 1. **SINTAXIS SQL**: Solo SQLite válido
-2. **JOINS CORRECTOS**: 
+2. **JOINS CORRECTOS**:
    - MAESTRO_GESTORES.CENTRO = MAESTRO_CENTROS.CENTRO_ID
    - MAESTRO_CONTRATOS.GESTOR_ID = MAESTRO_GESTORES.GESTOR_ID
    - MOVIMIENTOS_CONTRATOS.CONTRATO_ID = MAESTRO_CONTRATOS.CONTRATO_ID
-3. **CAMPOS REALES**: 
+3. **CAMPOS REALES**:
    - NOMBRE_CLIENTE (no DESC_CLIENTE)
    - FECHA (no FECHA_MOVIMIENTO)
    - FECHA_CALCULO (no MES)
-4. **CÁLCULOS FINANCIEROS**: Usar LINEA_CDR para clasificar ingresos/gastos
+4. **CÁLCULOS FINANCIEROS**: Usar CUENTA_ID LIKE '76%' para ingresos, SUBSTR(CUENTA_ID,1,2) para gastos
 5. **ALIAS DESCRIPTIVOS**: Para columnas calculadas
 6. **MANEJO DE NULOS**: Usar COALESCE() para evitar errores de cálculo
 
@@ -311,8 +312,8 @@ LÓGICA DE NEGOCIO COMPARATIVA:
 2. **Períodos de Comparación**: Usar formato AAAA-MM (ej: 2025-10)
 3. **Centros Finalistas**: Solo IND_CENTRO_FINALISTA = 1 para comparaciones operativas
 4. **Cálculo Margen Neto**: (Ingresos - Gastos) / Ingresos * 100
-   - Ingresos: LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS')
-   - Gastos: LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA')
+   - Ingresos: CUENTA_ID LIKE '76%' (tabla MOVIMIENTOS_CONTRATOS)
+   - Gastos directos: SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL
 5. **Cálculo ROE**: Beneficio Neto / Patrimonio * 100
 
 PATRONES COMPARATIVOS TÍPICOS:
@@ -554,8 +555,8 @@ LÓGICA DE NEGOCIO BANCA MARCH PARA DESVIACIONES:
 2. **ANOMALÍAS DE MARGEN ESTADÍSTICAS**:
    - Z-Score >2.0: Outlier moderado, Z-Score >3.0: Outlier extremo
    - Margen Neto = (Ingresos - Gastos) / Ingresos * 100
-   - Ingresos: LINEA_CDR IN ('MARGEN_INTERES', 'COMISIONES', 'INGRESOS')
-   - Gastos: LINEA_CDR IN ('GASTOS_PERSONAL', 'GASTOS_ADMIN', 'GASTOS_ESTRUCTURA')
+   - Ingresos: CUENTA_ID LIKE '76%' (tabla MOVIMIENTOS_CONTRATOS)
+   - Gastos directos: SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL
 
 3. **OUTLIERS DE VOLUMEN**:
    - Factor 3x: Actividad 3 veces superior/inferior a la media
@@ -4021,14 +4022,15 @@ Los cálculos se realizan desde el nivel más bajo hacia el más alto:
 - Siempre filtrar por periodo: `AND strftime('%Y-%m', mov.FECHA) = '2025-10'`
 - Estas representan los ingresos operativos del banco
 
-**GASTOS** - Dos componentes obligatorios:
-1. **Gastos de Mantenimiento**: Usar **PRECIO_POR_PRODUCTO_STD** (precio fijo presupuestario)
-2. **Gastos Operativos**: Movimientos con cuentas 640001, 691001, 691002
+**GASTOS** - Desde MOVIMIENTOS_CONTRATOS (schema real validado):
+1. **Gastos directos** (por contrato): `ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL`
+2. **Gastos centrales** (sin contrato, redistribuidos): `ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69') AND CONTRATO_ID IS NULL`
 
-⚠️ **CRÍTICO**: 
-- Usar **PRECIO_POR_PRODUCTO_STD** (NO REAL) para gastos base
-- Solo contar contratos con FECHA_ALTA < fin_del_periodo
-- Incluir ambos componentes de gastos (mantenimiento + operativos)
+⚠️ **CRÍTICO**:
+- Los importes de gastos son NEGATIVOS en la BD — usar ABS() siempre
+- Redistribución centrales: gasto_central × (contratos_gestor / 220)
+- NO usar PRECIO_POR_PRODUCTO_STD como proxy de gastos — es precio de venta, no coste real
+- Filtrar ingresos SIEMPRE con: `CUENTA_ID LIKE '76%'`
 
 ## 📋 PATRONES CORRECTOS POR NIVEL:
 
@@ -4624,7 +4626,7 @@ LIMIT 10;
 
 ## REGLAS TÉCNICAS ESTRICTAS:
 
-1. **GASTOS**: Siempre dos componentes: PRECIO_POR_PRODUCTO_STD (mantenimiento) + movimientos (640001, 691001, 691002)
+1. **GASTOS DIRECTOS**: `ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL` | **GASTOS CENTRALES**: añadir '66': `SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69') AND CONTRATO_ID IS NULL`; siempre ABS(SUM(IMPORTE))
 2. **INGRESOS**: Solo movimientos con CUENTA_ID LIKE '76%'
 3. **FECHAS**: Formato 'YYYY-MM-DD', usar '2025-10-01' para periodos mensuales
 4. **PERÍODOS**: strftime('%Y-%m', fecha) para agrupar por mes ('2025-10')
@@ -4657,7 +4659,7 @@ Devolver SIEMPRE JSON válido:
 **IMPORTANTE**: 
 - NUNCA uses términos genéricos como 'INGRESO', 'GASTO' en código SQL
 - SIEMPRE usa CUENTA_ID LIKE '76%' para ingresos
-- Para gastos, OBLIGATORIO usar PRECIO_POR_PRODUCTO_STD (NO REAL) + movimientos operativos (640001, 691001, 691002)
+- Para gastos, usa MOVIMIENTOS_CONTRATOS: gastos directos `SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL`, gastos centrales añadir '66' y `CONTRATO_ID IS NULL`; siempre ABS(SUM(IMPORTE))
 - Genera SQL completo y ejecutable, nunca fragmentos
 - Usa NULLIF() para evitar divisiones por cero
 - Filtra contratos por FECHA_ALTA < fin_periodo para gastos
@@ -5939,3 +5941,50 @@ ROL CONTROL_GESTION:
 
 Responde la clasificación considerando permisos del rol.
 """
+
+# =================================================================
+# S43: Re-exports desde archivos modulares
+# Estos imports sobreescriben las definiciones originales del archivo.
+# Permite que los agentes sigan importando desde prompts.system_prompts
+# mientras el contenido real vive en archivos especializados.
+# =================================================================
+
+try:
+    from prompts.cdg_prompts import (
+        FINANCIAL_ANALYST_SYSTEM_PROMPT,
+        FINANCIAL_REPORT_SYSTEM_PROMPT,
+        COMPARATIVE_ANALYSIS_SYSTEM_PROMPT,
+        DEVIATION_ANALYSIS_SYSTEM_PROMPT,
+    )
+except ImportError:
+    try:
+        from cdg_prompts import (
+            FINANCIAL_ANALYST_SYSTEM_PROMPT,
+            FINANCIAL_REPORT_SYSTEM_PROMPT,
+            COMPARATIVE_ANALYSIS_SYSTEM_PROMPT,
+            DEVIATION_ANALYSIS_SYSTEM_PROMPT,
+        )
+    except ImportError:
+        pass  # fallback: usa las definiciones originales de arriba
+
+try:
+    from prompts.chat_prompts import (
+        BASIC_QUERIES_CATALOG_PROMPT,
+        COMPARATIVE_QUERIES_CATALOG_PROMPT,
+        DEVIATION_QUERIES_CATALOG_PROMPT,
+        GESTOR_QUERIES_CATALOG_PROMPT,
+        INCENTIVE_QUERIES_CATALOG_PROMPT,
+        PERIOD_QUERIES_CATALOG_PROMPT,
+    )
+except ImportError:
+    try:
+        from chat_prompts import (
+            BASIC_QUERIES_CATALOG_PROMPT,
+            COMPARATIVE_QUERIES_CATALOG_PROMPT,
+            DEVIATION_QUERIES_CATALOG_PROMPT,
+            GESTOR_QUERIES_CATALOG_PROMPT,
+            INCENTIVE_QUERIES_CATALOG_PROMPT,
+            PERIOD_QUERIES_CATALOG_PROMPT,
+        )
+    except ImportError:
+        pass  # fallback: usa las definiciones originales de arriba

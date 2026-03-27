@@ -170,21 +170,25 @@ try:
                 return type('BR', (), {'to_dict': lambda s: data})()
     
     # 🎯 PROMPTS INTEGRADOS CON CHAT_AGENT
-    from prompts.system_prompts import (
+    # S43: CDG-specific prompts from new modular file
+    from prompts.cdg_prompts import (
         FINANCIAL_ANALYST_SYSTEM_PROMPT,
         FINANCIAL_REPORT_SYSTEM_PROMPT,
         COMPARATIVE_ANALYSIS_SYSTEM_PROMPT,
         DEVIATION_ANALYSIS_SYSTEM_PROMPT,
+    )
+    # Shared prompts and shortened catalogs (system_prompts re-exports from chat_prompts)
+    from prompts.system_prompts import (
         CHAT_NATURAL_RESPONSE_SYSTEM_PROMPT,
         CHAT_FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
         CHAT_SQL_GENERATION_SYSTEM_PROMPT,
-        # 🎯 CATÁLOGOS INTEGRADOS
+        # 🎯 CATÁLOGOS (acortados en S43, mantenidos por compatibilidad)
         BASIC_QUERIES_CATALOG_PROMPT,
         COMPARATIVE_QUERIES_CATALOG_PROMPT,
         DEVIATION_QUERIES_CATALOG_PROMPT,
         GESTOR_QUERIES_CATALOG_PROMPT,
         INCENTIVE_QUERIES_CATALOG_PROMPT,
-        PERIOD_QUERIES_CATALOG_PROMPT
+        PERIOD_QUERIES_CATALOG_PROMPT,
     )
     
     from prompts.user_prompts import (
