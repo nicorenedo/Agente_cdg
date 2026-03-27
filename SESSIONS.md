@@ -79,6 +79,20 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S40 — completada (commit `1318755`):**
+- ROUTER ✅ `query_router.py`: nuevo `DeterministicQueryRouter` con 20 reglas keyword → (catalog, function, params). Reemplaza los 6 LLM calls secuenciales de `_find_predefined_query()` por matching determinista O(n). Unit tests: 7/7 OK.
+- WIRING ✅ `chat_agent.py`: `_find_predefined_query()` reescrita — delega al router, elimina `_search_exclusive_catalog()` (que hacía hasta 6 LLM calls). Instancia `self.router` en `IntelligentQueryClassifier.__init__()`.
+- FIX ✅ Key mismatch en `classify_and_route()`: `is_personal` leía `'is_personal'` pero el LLM devuelve `'is_personal_query'` → REGLA 1 nunca se disparaba. Corregido con fallback dual.
+- VERIFICADO: 4 tests habituales pasan con datos reales — gastos G1 (€3,078 directos / €14,795 redistribuidos), ROE G1 47.34%, gestores que retroceden (9 identificados), desviaciones críticas precio.
+- LATENCIA: `_find_predefined_query()` pasa de 0-6 LLM calls a 0 LLM calls (microsegundos). GestorAgent ~7.5s (LangGraph sin cambios), CDG queries ~25s (sin cambio — LLM calls restantes fuera de scope S40).
+- ARCHIVOS: solo `chat_agent.py` modificado + `query_router.py` creado. Ningún otro archivo tocado.
+
+**S38 — completada (commit `187d9ec`):**
+- REVERT ✅ `kpi_calculator.py` restaurado al estado pre-S37: campos `clasificacion` y `benchmark_vs_sector` de vuelta en todos los métodos
+- MOTIVO: `gestor_queries.py` accede a `.get('clasificacion')` en los resultados de `calculate_roe`/`calculate_margen_neto` — al eliminar el campo en S37, los tools del agente lanzaban `KeyError: 'clasificacion'`
+- VERIFICADO: `/kpis/gestor/1/roe?periodo=2025-10` devuelve `clasificacion_roe: 'SOBRESALIENTE'`, directos €3,078 / redistribuidos €14,795 ✅
+- Los commits de tono empático del agente (S37: `4194437`, `4685b41`) se mantienen intactos
+
 **S37 — completada (commits `8028fe9`, `4194437`, `4685b41`):**
 - BLOQUE 1 ✅ `kpi_calculator.py`: eliminadas todas las clasificaciones inventadas
   - `calculate_margen_neto`: eliminado campo `clasificacion` (EXCELENTE/BUENO/ACEPTABLE/BAJO/PERDIDAS)
