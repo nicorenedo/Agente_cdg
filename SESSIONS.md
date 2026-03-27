@@ -79,6 +79,20 @@
 - B3 ✅ GestoresTable.jsx: new component with 7 cols, expandable drill-down (productos/by-gestor), seg/centro filters, sort, variation sep→oct Tag; added as "Tabla Detallada" tab in DireccionView
 - B4 ✅ @ant-design/x@1.0.6 installed (antd 5.26.7 compatible); ChatInterface: Bubble.List (user #A100FF / assistant #F3E8FF+border) + Sender; markdown bold rendering; backend wiring unchanged
 
+**S43 — completada (commit `14eae5f`):**
+- NUEVOS ARCHIVOS ✅ `cdg_prompts.py`: 4 prompts del CDGAgent extraídos de system_prompts (FINANCIAL_ANALYST, FINANCIAL_REPORT, COMPARATIVE_ANALYSIS, DEVIATION_ANALYSIS).
+- NUEVOS ARCHIVOS ✅ `chat_prompts.py`: 6 CATALOG_PROMPTS acortados de ~1,220 líneas a ~50 (desde S40 el DeterministicQueryRouter reemplazó el uso LLM de estos catálogos; se mantienen por compatibilidad).
+- NUEVOS ARCHIVOS ✅ `gestor_prompts.py`: placeholder que documenta el schema SQL correcto para queries de gestor.
+- SQL SCHEMA FIX ✅ `CHAT_SQL_GENERATION_SYSTEM_PROMPT` (prompt activamente usado en flujo DYNAMIC_SQL):
+  - `PRECIO_POR_PRODUCTO_STD` como proxy de gastos → correcto: `SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL`
+  - Gastos centrales: añadir cuenta '66' + `CONTRATO_ID IS NULL`
+  - `ABS(SUM(IMPORTE))` documentado (importes negativos en BD)
+- SQL SCHEMA FIX ✅ 3 ocurrencias de `LINEA_CDR IN ('MARGEN_INTERES'...)` en prompts huérfanos → `CUENTA_ID LIKE '76%'`
+- SHIM ✅ `system_prompts.py`: añadidos re-exports al final del archivo — imports de cdg_prompts y chat_prompts sobreescriben las definiciones originales sin romper los imports existentes de los agentes.
+- IMPORTS ✅ `cdg_agent.py`: ahora importa los 4 prompts CDG desde `cdg_prompts.py` directamente.
+- VERIFICADO ✅ Los 3 agentes importan en PRODUCTION mode (real DB + Azure OpenAI conectado).
+- ARCHIVOS NO TOCADOS: `chat_agent.py` (sigue importando desde `system_prompts.py` que shimmea todo), `gestor_agent.py` (nunca importó de system_prompts).
+
 **S42 — completada (commit `c876d91`):**
 - DISPATCHER ✅ `_determine_analysis_type()` reescrito: 9 bloques ordenados de más a menos específico, sin overlaps. Antes: orden frágil con `elif` mezclados e `if` independientes.
 - BUG FIX ✅ Patterns regex usados como substrings: `'sep.*oct'` y `'septiembre.*octubre'` nunca matcheaban en el original (`in` es substring, no regex). Reemplazados por frases literales explícitas.
