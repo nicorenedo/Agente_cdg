@@ -95,7 +95,7 @@ CÓMO AYUDAS AL GESTOR:
 2. Le sitúas vs su centro: ¿está por encima o por debajo de la media? ¿en qué métricas destaca?
 3. Le preparas argumentos sólidos para el Business Review: qué ha funcionado bien, qué tiene justificación y qué requiere plan de acción.
 4. Detectas alertas tempranas: clientes con caída de margen, productos con coste elevado, desviaciones respecto al precio estándar.
-5. Comparas evolución mensual (sep vs oct) para mostrar tendencias.
+5. Comparas evolución mensual con el mes anterior para mostrar tendencias.
 
 CONFIDENCIALIDAD — REGLAS INAMOVIBLES:
 - Solo tienes acceso a los datos del gestor ID {gestor_id}.
@@ -111,7 +111,7 @@ RESTRICCIÓN CRÍTICA — BENCHMARKS:
 MODELO DE DATOS — IMPORTANTE:
 - Ingresos, gastos y ROE son del mes seleccionado ({periodo}). No son acumulados YTD.
 - La cartera de contratos es acumulada histórica (FECHA_ALTA <= fin del período).
-- En sep-2025 hay 216 contratos activos; en oct-2025 hay 220 (4 contratos nuevos, +1.8%).
+- Datos financieros desde sep-2025 hasta abr-2026. Contratos acumulados desde sep-2024.
 
 ROE — CÓMO USARLO:
 - El ROE del gestor es: beneficio_neto / ingresos_totales × 100 (no sobre patrimonio).
@@ -125,7 +125,7 @@ RESTRICCIÓN COMPARATIVAS:
 - Si no tienes el dato comparativo, di explícitamente: "No dispongo del dato comparativo para este período."
 
 REPORTE PERSONAL:
-- Cuando el gestor pida su reporte personal: usa SIEMPRE get_mi_reporte_personal y presenta los datos en formato estructurado con secciones: 1) KPIs del período, 2) Evolución MoM (sep→oct), 3) Top clientes, 4) Alertas y desviaciones, 5) Recomendaciones.
+- Cuando el gestor pida su reporte personal: usa SIEMPRE get_mi_reporte_personal y presenta los datos en formato estructurado con secciones: 1) KPIs del período, 2) Evolución MoM (mes actual vs anterior), 3) Top clientes, 4) Alertas y desviaciones, 5) Recomendaciones.
 
 DETECCIÓN DE TONO Y RESPUESTA EMPÁTICA:
 - Si el gestor usa palabras de frustración o urgencia ("no entiendo", "por qué", "explícamelo", "no tiene sentido", "demasiado alto", "injusto", "inaceptable", "ya"), PRIMERO valida su preocupación con una frase breve y empática antes de dar los datos.
@@ -257,21 +257,31 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
             return f"Error obteniendo desviaciones: {e}"
 
     @tool
-    def get_evolucion_sep_oct() -> str:
+    def get_mi_evolucion_mensual() -> str:
         """
-        Compara el rendimiento del gestor entre septiembre y octubre 2025.
-        Muestra variación en ingresos, gastos, margen y contratos.
+        Compara tu rendimiento del mes actual con el mes anterior.
+        Muestra variacion de ingresos, gastos, margen y contratos.
+        Usala para: 'como he evolucionado', 'mejore respecto al mes pasado',
+        'como fui el mes anterior', 'evolucion mensual'.
         """
         try:
-            result = gestor_queries.compare_gestor_septiembre_octubre(
-                gestor_id=str(gestor_id_int)
+            actual = periodo
+            y, m = int(actual[:4]), int(actual[5:7])
+            if m == 1:
+                anterior = f'{y-1}-12'
+            else:
+                anterior = f'{y}-{m-1:02d}'
+            result = gestor_queries.compare_gestor_periodos(
+                gestor_id=str(gestor_id_int),
+                periodo_actual=actual,
+                periodo_anterior=anterior
             )
             data = _extract(result)
             if data:
-                return f"Evolucion Sep-Oct del gestor {gestor_id_int}:\n{data}"
-            return "Sin datos de evolucion disponibles."
+                return f"Evolucion {anterior} vs {actual} del gestor {gestor_id_int}:\n{data}"
+            return "Sin datos de evolucion disponibles para estos periodos."
         except Exception as e:
-            logger.error(f"get_evolucion_sep_oct error: {e}")
+            logger.error(f"get_mi_evolucion_mensual error: {e}")
             return f"Error obteniendo evolucion: {e}"
 
     @tool
@@ -421,7 +431,7 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
         get_mis_kpis,
         get_mi_cartera,
         get_mis_desviaciones,
-        get_evolucion_sep_oct,
+        get_mi_evolucion_mensual,
         get_mis_clientes,
         get_mi_roe,
         get_mi_centro_benchmark,
@@ -535,7 +545,7 @@ class GestorAgent:
                     f"- Tus KPIs y métricas personales\n"
                     f"- Tu cartera de contratos y clientes\n"
                     f"- Tus desviaciones vs precio estándar\n"
-                    f"- Tu evolución Sep-Oct 2025"
+                    f"- Tu evolución mensual"
                 ),
                 "used_tools": [],
                 "execution_time": 0.0,
