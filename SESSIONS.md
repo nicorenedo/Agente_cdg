@@ -105,6 +105,31 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S54 — completada (solo tests, sin cambios de código):**
+
+Batería exhaustiva: 27 tests (15 retest S50 + 12 nuevos). Evalúa DATOS + ROUTING + CALIDAD.
+
+DATOS: 27/27 (100%) — todos los tests obtienen cifras reales de la BD. Cero invenciones.
+ROUTING: 27/27 (100%) — todos llegan al agente correcto con las tools adecuadas.
+CALIDAD: 18/27 (67%) — problema exclusivamente de verbosidad/formato LLM.
+
+Retest T1-T15: 15/15 DATOS ✅, 15/15 ROUTING ✅. T15 corregido (ReAct llama get_metricas_centro x5 = datos 5 centros completos, antes parcial).
+
+Tests nuevos N1-N12 — todos DATOS ✅ ROUTING ✅. Destacan:
+- N1 ✅ Bilbao sep→oct: 2 calls get_metricas_centro(5) con periodo distinto, variaciones % reales
+- N5 ✅ "por qué Madrid < Bilbao": explica gastos redistribuidos Madrid €86k (52.6%) vs Bilbao €36k (33.9%)
+- N7 ✅ "dónde enfocar esfuerzo": 5 centros consultados, recomienda Palma y Málaga con datos
+- N12 ✅ "los demás centros": 5 calls get_metricas_centro, todos los datos completos
+
+Problemas de calidad para S55 (solo system prompt):
+- Q1: respuestas 400-800 palabras para preguntas directas (T8/T9/T11/T12/N3/N10/N12)
+- Q2: exceso headers ### para preguntas simples
+- Q3: apertura empática inconsistente en GestorAgent (T3)
+- Q4: recomendaciones genéricas en N9 (falta llamar get_mis_productos_detalle)
+- Q5: CDG responde formal cuando la pregunta es coloquial (N10)
+
+---
+
 **S53 — completada (commits `dd4b255`, `3f36d2c`):**
 
 B1 ✅ Fix T14 — routing alertas al CDGAgent:
