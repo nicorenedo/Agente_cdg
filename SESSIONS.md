@@ -105,6 +105,31 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+---
+
+**S50 — completada (solo investigación + tests, sin commits de código):**
+
+BLOQUE 1 — Diagnóstico margen Depósito -254.64%:
+- Ingresos oct-2025: €26,518.72 (cuentas 760011+760012)
+- Gastos directos: €94,046.42 — dominado por cuenta 640001 "Intereses pagados - Depósitos Plazo Fijo" (€91,888) → línea CDR CR0003 "Gastos Financieros"
+- **Veredicto ✅ Dato correcto**: el Depósito es producto de captación (banco paga intereses al cliente). Coste de fondeo imputado directamente. El margen negativo es estructural por diseño del modelo contable — el beneficio real está en las hipotecas financiadas con ese dinero.
+- Explicación demo: "El depósito capta liquidez para financiar hipotecas con margen. Visto en solitario es negativo, pero aporta valor al mix de productos."
+- FIX INFRAESTRUCTURA: `pydantic-settings` no estaba instalado → Settings usaba clase dummy → GestorAgent no inicializaba → fallback en todos los tests Gestor. Instalado con `pip install pydantic-settings`.
+
+BLOQUE 2 — Batería 15 tests lenguaje informal — **Tasa fiabilidad: 10/15 (67%)**
+
+Tests ✅ (demo-ready): T1 (qué tal voy), T2 (por qué tantos gastos), T3 (no entiendo gastos), T4 (cómo estoy), T5 (qué cosas tengo), T7 (cuánto margen), T8 (cómo Bilbao), T9 (Madrid vs Bilbao), T10 (qué producto da más), T13 (resumen mes)
+
+Tests ⚠️: T6 (benchmark correcto pero LLM confunde contratos gestor=12 con total centro=220), T11 (datos ranking correctos pero flow=general_query en vez de comparative_performance), T15 (detecta pivot centro/INGRESOS pero datos parciales — suma top10 gestores no todos los centros)
+
+Tests ❌: T12 ("evolución respecto al mes pasado" no activa handler EVOLUCION_GESTORES), T14 ("algo que preocupar" cae en DYNAMIC_SQL con columna inexistente pr.CENTRO_CONTABLE)
+
+HALLAZGOS PARA S51:
+1. T12: Keywords "evolucionado respecto al mes pasado" no matchean el handler EVOLUCION_GESTORES → añadir keywords
+2. T14: No hay handler predefinido para alertas/desviaciones → DYNAMIC_SQL con schema incorrecto
+3. T6: LLM confunde contexto de benchmark (datos centro) con cartera propia del gestor
+4. T15: Pivot por centros usa datos del top-10 ranking en lugar de query específica de ingresos por centro
+
 ## Plan de refactorización S40-S44 — COMPLETADO
 - S40: Router determinista — 0 LLM calls en routing (antes hasta 6)
 - S41: Caché GestorAgent — invalida automáticamente con período y prompt
