@@ -1552,6 +1552,12 @@ class BankingResponseFormatter:
             - Números con formato bancario (€, %, separadores de miles)
             - SOLO números que estén en DATOS REALES
 
+            REGLAS DE LONGITUD Y TONO (S56 — obligatorias):
+            - Para preguntas directas: máximo 150 palabras. Sin headers ###. Sin emoji al inicio.
+            - Para análisis complejos: hasta 300 palabras. Headers solo si 3+ secciones.
+            - Máximo 3 recomendaciones. El dato más importante va en la primera frase.
+            - Si la pregunta es informal, responde directo sin encabezado ejecutivo.
+
             EJEMPLO DE RESPUESTA CUANDO HAY DATOS:
             "📊 **Su Posición en el Ranking - Octubre 2025**
 
@@ -2082,18 +2088,28 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
             )
             
             cdg_response = await self.cdg_agent.process_request(cdg_request)
-            
+
             if hasattr(cdg_response, 'content') and cdg_response.content:
-                formatted_response = await self.formatter.format_response(
-                    cdg_response.content,
-                    message.message,
-                    context={
-                        'user_role': PermissionManager.determine_user_role(message.user_id, message.context).value,
-                        'gestor_id': message.gestor_id,
-                        'is_personal': message.gestor_id is not None,
-                        'preferences': session.preferences,
-                    }
-                )
+                # S56: CDG ReAct agent (v7) already produces well-formatted responses.
+                # Use the agent's text directly if it contains concrete data,
+                # bypassing the BankingResponseFormatter to preserve brevity and tone.
+                _react_text = ''
+                if isinstance(cdg_response.content, dict):
+                    _react_text = cdg_response.content.get('results', {}).get('response_text', '')
+                if _react_text and BankingResponseFormatter._has_concrete_numbers(_react_text):
+                    formatted_response = _react_text
+                    logger.info("[S56] Using CDG ReAct response directly (bypass formatter)")
+                else:
+                    formatted_response = await self.formatter.format_response(
+                        cdg_response.content,
+                        message.message,
+                        context={
+                            'user_role': PermissionManager.determine_user_role(message.user_id, message.context).value,
+                            'gestor_id': message.gestor_id,
+                            'is_personal': message.gestor_id is not None,
+                            'preferences': session.preferences,
+                        }
+                    )
             else:
                 formatted_response = "El análisis avanzado ha sido procesado exitosamente por el sistema CDG."
             
