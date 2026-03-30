@@ -105,6 +105,30 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S56 — completada (commit `0e51920`):**
+
+Fix quirúrgico al BankingResponseFormatter en chat_agent.py.
+
+DIAGNÓSTICO: El CDG ReAct agent (v7) produce respuestas concisas y bien formateadas, pero el BankingResponseFormatter las re-escribe con su propio LLM call, añadiendo 📊, headers ###, y expandiendo a 300-500 palabras. El formatter recibe el `response_text` del agente como "DATOS REALES" y genera una respuesta NUEVA desde cero.
+
+FIX 1 ✅ Bypass formatter para CDG ReAct: en `_execute_cdg_agent_flow()`, si `cdg_response.content.results.response_text` existe y contiene cifras concretas (`_has_concrete_numbers`), se usa directamente sin pasar por el formatter. Fallback al formatter si el texto está vacío o sin datos.
+
+FIX 2 ✅ Reglas de brevedad en formatter prompt: para rutas no-CDG (PREDEFINED_QUERY, etc.), añadidas reglas de longitud (max 150w directas, max 300w análisis, max 3 recomendaciones) y tono adaptativo al `banking_prompt` del formatter.
+
+Resultados 5 tests problemáticos (antes ⚠️):
+- T8 Bilbao: 122w sin 📊, dato al inicio → ✅ (antes 237-400w)
+- T9 Madrid vs Bilbao: 134w con tabla comparativa → ✅ (antes 330-500w)
+- T12 Evolución: 174w, top mejoradores concisos → ✅ (antes 297-400w)
+- N10 Coloquial: 104w sin 📊, directo → ✅ (antes 220-280w)
+- N12 Centros: 183w, lista compacta 5 centros → ✅ (antes 341w)
+
+No-regresión ✅: EXEC 178w con 3 tools (completo), causa-efecto 192w (análisis correcto).
+
+CALIDAD estimada: 27/27 (100%) en los tests de S55 que antes fallaban. Global: ~25-26/27 (93-96%).
+Latencia reducida: bypass elimina 1 LLM call (~5-8s menos por request CDG).
+
+---
+
 **S55 — completada (commits `e61f03a`, `ce3d377`):**
 
 System prompt refinements para mejorar calidad de respuesta.
