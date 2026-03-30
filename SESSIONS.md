@@ -105,6 +105,28 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S52 — completada (commit `34c880e`):**
+
+CDGAgent v6 (keyword dispatcher) → v7 (ReAct agent con LangGraph `create_react_agent`).
+- REWRITE ✅ `cdg_agent.py`: 1,540 → ~400 líneas. 10 tools con `@tool`, system prompt con reglas de negocio, LLM decide qué tools llamar.
+- BACKUP ✅ `cdg_agent_v6_backup.py` preservado.
+- INTERFACES ✅ CDGRequest/CDGResponse/AnalysisType/create_cdg_agent/process_complex_analysis preservadas.
+- VALIDACIÓN POST-RESPUESTA ✅ `_has_concrete_data()` retry si respuesta sin cifras.
+- HISTORIAL ✅ 3 últimos turnos por session_id.
+
+Tools: get_resumen_entidad, get_metricas_periodo, get_metricas_centro, get_ranking_gestores_margen, get_ranking_gestores_ingresos, get_evolucion_sep_oct, get_kpis_productos, get_desviaciones_precio, get_comparativa_periodos, get_metricas_gestor_individual.
+
+Tests S52 (7 CDG tests):
+- T8 ✅ Bilbao → `get_metricas_centro(5)` → €105,364 / 57.18% margen
+- T9 ✅ Madrid vs Bilbao → `get_metricas_centro` × 2 → comparativa completa
+- T10 ✅ Productos → `get_kpis_productos` → FRV €302k / Hip €295k / Dep -254%
+- T11 ✅ Ranking → `get_ranking_gestores_margen` → Javier Fernández 76.91% #1 (mejora vs S50 ⚠️)
+- T12 ✅ Evolución → `get_evolucion_sep_oct` → 12 mejora, 8 estable, 10 retroceso (ANTES ❌ en S50)
+- T13 ✅ Resumen → `get_metricas_periodo` → €624k / 39.96% / 220 contratos
+- T14 ❌ Alertas → routing issue: chat_agent envía a DYNAMIC_SQL en vez de CDG_AGENT. El agente ReAct no recibe la pregunta. Pendiente para S53.
+
+HALLAZGO: T14 es un problema del clasificador en `chat_agent.py` (IntelligentQueryClassifier no reconoce "hay algo que me deba preocupar" como intent CDG). Fix requiere ajuste en chat_agent, no en cdg_agent.
+
 ---
 
 **S50 — completada (solo investigación + tests, sin commits de código):**
