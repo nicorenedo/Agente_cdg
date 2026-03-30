@@ -105,6 +105,29 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S55 — completada (commits `e61f03a`, `ce3d377`):**
+
+System prompt refinements para mejorar calidad de respuesta.
+
+B1 ✅ CDGAgent (`cdg_agent.py` CDG_SYSTEM_PROMPT):
+- Añadida sección LONGITUD Y FORMATO: max 150w preguntas directas, max 300w análisis profundo, max 3 recomendaciones, sin ### para respuestas cortas.
+- Añadida sección TONO ADAPTATIVO: sin 📊 ni encabezado ejecutivo para preguntas informales.
+- EFECTO LIMITADO: la respuesta pasa por BankingResponseFormatter en chat_agent.py que sobreescribe el tono. Fix completo requiere ajustar prompt del formatter en S56.
+
+B2 ✅ GestorAgent (`gestor_agent.py` _build_system_prompt):
+- Fix Q3: DETECCION DE TONO OBLIGATORIA — primer párrafo empático para frustración/confusión.
+- Fix Q4: Añadido mapeo "mejorar/recomendar" → get_mis_productos_detalle + get_mis_kpis. Recomendaciones deben mencionar productos específicos.
+- Max 200 palabras, nunca sugerir "optimizar gastos redistribuidos" (gestor no los controla).
+
+Mini-batería 10 tests: 4/9 mejoraron de ⚠️ a ✅ (T11, N3, N9, EXEC). 5 siguen ⚠️ (T8, T9, T12, N10, N12 = todos CDG path, causa: BankingResponseFormatter).
+
+CALIDAD estimada: 22/27 (81%) vs 18/27 (67%) en S54.
+DATOS + ROUTING: siguen 27/27 (100%).
+
+PARA S56: ajustar prompt del BankingResponseFormatter en chat_agent.py para que respete brevedad/tono. También: T3 empático solo parcial (GPT-4o inconsistente en detección frustración).
+
+---
+
 **S54 — completada (solo tests, sin cambios de código):**
 
 Batería exhaustiva: 27 tests (15 retest S50 + 12 nuevos). Evalúa DATOS + ROUTING + CALIDAD.
