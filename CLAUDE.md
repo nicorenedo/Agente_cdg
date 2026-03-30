@@ -53,17 +53,17 @@ frontend/src/
 
 ## 4. BASE DE DATOS — `BM_CONTABILIDAD_CDG.db`
 
-SQLite, 14 tablas, UTF-8. Períodos: **sep-2025** y **oct-2025**.
+SQLite, 14 tablas, UTF-8. Períodos financieros: **sep-2025 a abr-2026**. Contratos desde sep-2024.
 
 **Tablas maestras:**
 - `MAESTRO_CENTROS`: Finalistas (1-5): MADRID, PALMA, BARCELONA, MALAGA, BILBAO. Soporte (6-8).
 - `MAESTRO_GESTORES`: 30 gestores. C1 (1-8), C2 (9-16), C3 (17-21), C4 (22-26), C5 (27-30).
-- `MAESTRO_CONTRATOS`: **220 contratos** (216 sep + 4 nuevos oct-2025).
+- `MAESTRO_CONTRATOS`: **351 contratos** (acumulados sep-2024 a abr-2026).
 - `MAESTRO_PRODUCTOS`: `100100100100` Hip (100% banco) | `400200100100` Dep (100% banco) | `600100300300` Fondo (85% gestora/15% banco).
 - `MAESTRO_SEGMENTOS`: N10101=Minorista | N10102=Privada | N10103=Empresas | N10104=Personal | N20301=Fondos
 
 **Tablas transaccionales:**
-- `MOVIMIENTOS_CONTRATOS`: ~2,900+ registros. CONTRATO_ID NULL = gastos centrales. Ingresos: `76xxxx`. Gastos: `62/64/68/69xxxx`. Fábrica: `760024` banco / `760025` gestora.
+- `MOVIMIENTOS_CONTRATOS`: ~12,000 registros. CONTRATO_ID NULL = gastos centrales. Ingresos: `76xxxx`. Gastos: `62/64/68/69xxxx`. Fábrica: `760024` banco / `760025` gestora.
 - `GASTOS_CENTRO`: Sep €455k | Oct €222k. ⚠️ Gastos oct reales en MOVIMIENTOS (CONTRATO_ID IS NULL).
 - `PRECIO_POR_PRODUCTO_REAL`: Solo CDG. `PRECIO_POR_PRODUCTO_STD`: Todos.
 
@@ -75,14 +75,20 @@ SQLite, 14 tablas, UTF-8. Períodos: **sep-2025** y **oct-2025**.
 
 Ingresos/gastos/ROE = **mes seleccionado (MoM)**. Contratos = **acumulados históricos**.
 
-| Período | Filtro ingresos/gastos | Contratos |
+| Período | Ingresos | Contratos acumulados |
 |---|---|---|
-| sep-2025 | `strftime('%Y-%m', FECHA) = '2025-09'` | **216** |
-| oct-2025 | `strftime('%Y-%m', FECHA) = '2025-10'` | **220** |
+| sep-2025 | ~€621,729 | **216** |
+| oct-2025 | ~€660,185 | **230** |
+| nov-2025 | ~€615,039 | **247** |
+| dic-2025 | ~€576,024 | **258** |
+| ene-2026 | ~€593,914 | **279** |
+| feb-2026 | ~€628,648 | **303** |
+| mar-2026 | ~€646,443 | **329** |
+| abr-2026 | ~€633,458 | **351** (último período) |
+
+**Historia contratos:** sep-2024 a ago-2025 (sin datos financieros, solo FECHA_ALTA).
 
 **Fórmula contratos activos:** `COUNT(DISTINCT CASE WHEN co.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day') THEN co.CONTRATO_ID END)`
-
-**Ref (post-S24):** Sep €599,759 | ROE 35.94% | 216 contratos. Oct €624,000 | ROE 39.96% | 220 contratos (+4.04%). Fábrica oct: cedido €123,278 (84.01%).
 
 ---
 
@@ -161,4 +167,4 @@ cd frontend && npm start
 # frontend/.env: REACT_APP_API_BASE_URL=http://localhost:8000
 ```
 
-**Fase actual:** Fase 6 completada. S27 completada. Ver SESSIONS.md para próximos pasos y pendientes.
+**Fase actual:** S61 completada. Sistema con 8 meses de datos (sep-2025 a abr-2026). Ver SESSIONS.md.
