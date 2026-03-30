@@ -105,6 +105,32 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S59 — completada (solo análisis, sin cambios en BD ni código):**
+
+Plan revisado y definitivo de generación de datos históricos.
+
+AUDITORÍA COMPLETA:
+- FECHA_ALTA: 220 contratos concentrados en ene-may 2025 + sep 2025. Gap jun-ago. Necesita redistribuir a sep-2024→ago-2025.
+- INTEGRIDAD: 8 contratos sin movimientos (1067,1074,1075,2066,3069,3070,3071,3072) — necesitan fix.
+- COLUMNAS: 0 ALTER TABLE necesarios.
+- HARDCODEOS BACKEND: 10 ocurrencias en 7 archivos. 3 funciones a renombrar (get_evolucion_gestores_sep_oct, compare_gestor_septiembre_octubre, tool get_evolucion_sep_oct).
+- HARDCODEOS FRONTEND: ~50 defaults "2025-10" en analyticsService.js, api.js, DireccionView, GestorView, GestoresTable, FabricaModelSection.
+- PRECIO_STD: falta ANNO=2026 (15 INSERTs preparados).
+
+PLAN DEFINITIVO:
+- 7a: Redistribuir FECHA_ALTA de 187 contratos a sep-2024→ago-2025 (UPDATE)
+- 7b: Corregir oct-2025: +10 contratos + 5 clientes nuevos + movimientos para 8 huérfanos
+- 7c: 0 ALTER TABLE
+- 7d: Generar nov-2025 a abr-2026: ~68 contratos, ~22 clientes, ~6,430 movimientos
+- 7e: Fix 8 contratos huérfanos
+- 7f: Generalizar 3 funciones hardcodeadas a sep/oct
+- 7g: Fix ~50 defaults frontend
+- 7h: PRECIO_STD 2026 (15 INSERTs)
+
+EJECUCIÓN: S60 (BD), S61 (backend), S62 (frontend + tests)
+
+---
+
 **S58 — completada (solo análisis, sin cambios en BD ni código):**
 
 Análisis BD + plan de generación de datos históricos (nov-2025 a abr-2026).
