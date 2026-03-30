@@ -105,6 +105,29 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S53 — completada (commits `dd4b255`, `3f36d2c`):**
+
+B1 ✅ Fix T14 — routing alertas al CDGAgent:
+- REGLA 0 ✅ en `chat_agent.py` `classify_and_route()`: keyword override para CDG users con 'preocupar', 'alertas', 'riesgo', 'desviación', etc. → fuerza CDG_AGENT antes de RULE 1.
+- CAUSA RAÍZ: LLM clasificador devolvía `requires_sql=False` o `is_personal=True` para preguntas de alertas, impidiendo que RULE 2b las enviara al CDGAgent.
+- VERIFICADO ✅ T14 "hay algo que me deba preocupar" → CDG_AGENT, tools: `get_desviaciones_precio` + `get_ranking_gestores_margen`. Desviaciones reales (Hip 17%, FRV 16.4%, Dep 15.8%) + gestores en pérdidas.
+- VARIANTES ✅ "qué alertas hay", "hay desviaciones importantes" → CDG_AGENT correctamente.
+
+B2 ✅ Fix T6 — benchmark gestor vs centro:
+- TOOL REWRITE ✅ `get_mi_centro_benchmark` en `gestor_agent.py`: retorno reestructurado con etiquetas explícitas ("Contratos TOTALES del centro", "Media de contratos POR gestor", "TU CARTERA PERSONAL tiene X contratos").
+- PROMPT ✅ Añadida regla en RESTRICCIÓN COMPARATIVAS: "los datos de get_mi_centro_benchmark son del CENTRO COMPLETO, NO de tu cartera".
+- VERIFICADO ✅ T6: LLM distingue "Tienes 12 contratos" (gestor) vs "media 8.8 por gestor" (centro). Tools: `get_mi_centro_benchmark` + `get_mis_kpis`.
+
+B3 — tool_choice="any": NO implementado.
+- `bind_tools` soporta `tool_choice` pero es incompatible con `create_react_agent`: el loop ReAct necesita que el LLM pueda elegir "responder" (sin tool) tras obtener datos. Con `tool_choice="any"` el agente entra en loop infinito de tool calls.
+- El retry S46 sigue activo como safety net — funciona correctamente.
+
+REGRESIONES ✅: T12 (evolución), T8 (Bilbao) — sin regresiones.
+
+ARCHIVOS TOCADOS: `chat_agent.py` (REGLA 0 routing), `gestor_agent.py` (benchmark tool + prompt).
+
+---
+
 **S52 — completada (commit `34c880e`):**
 
 CDGAgent v6 (keyword dispatcher) → v7 (ReAct agent con LangGraph `create_react_agent`).
