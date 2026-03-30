@@ -508,7 +508,24 @@ class IntelligentQueryClassifier:
             confidence = initial_classification.get('confidence', 0.0)
             
             logger.info(f"🎯 Clasificación: intent={intent}, is_personal={is_personal}, confidence={confidence}")
-            
+
+            # 🎯 REGLA 0: S53 — CDG users con preguntas de alerta/preocupación → CDG_AGENT
+            # (el LLM a veces clasifica estas como general_inquiry o is_personal=True incorrectamente)
+            if user_role == UserRole.CONTROL_GESTION:
+                _msg_low = user_message.lower()
+                _cdg_force_keywords = [
+                    'preocupar', 'alertas', 'alerta', 'riesgo', 'anomal',
+                    'desviacion', 'desviación', 'problema', 'critico', 'crítico',
+                ]
+                if any(kw in _msg_low for kw in _cdg_force_keywords):
+                    logger.info(f"🎯 [S53] CDG user + alert keyword → CDG_AGENT (override)")
+                    return {
+                        'flow_type': 'CDG_AGENT',
+                        'classification': initial_classification,
+                        'confidence': 0.90,
+                        'reasoning': 'S53: CDG user alert/concern query forced to CDG_AGENT'
+                    }
+
             # 🎯 REGLA 1: Consultas sobre DATOS personales específicos → PREDEFINED_QUERY
             personal_data_intents = [
                 'performance_analysis',
