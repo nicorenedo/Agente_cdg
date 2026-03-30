@@ -1718,10 +1718,10 @@ class GestorQueries:
     # 7) BENCHMARKING, RANKINGS Y TEMPORAL (ORIGINAL + NUEVO)
     # =================================================================
 
-    def compare_gestor_septiembre_octubre(self, gestor_id: str) -> QueryResult:
+    def compare_gestor_periodos(self, gestor_id: str, periodo_actual: str, periodo_anterior: str) -> QueryResult:
         """
-        ✅ CORREGIDO: Usa PRECIO_STD + gastos operativos
-        Compara performance del gestor entre septiembre y octubre 2025
+        Comparativa de un gestor entre dos períodos cualesquiera.
+        Generalización de compare_gestor_septiembre_octubre().
         """
         query = """
             WITH seg AS (
@@ -1730,14 +1730,13 @@ class GestorQueries:
             datos_mensuales AS (
                 SELECT
                     strftime('%Y-%m', mov.FECHA) as periodo,
-                    -- ✅ INGRESOS CORREGIDOS: Solo cuentas 76XXXX
                     COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
                     COUNT(DISTINCT mc.CONTRATO_ID) as contratos_activos
                 FROM MAESTRO_GESTORES g
                 JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
                 LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 WHERE g.GESTOR_ID = ?
-                  AND strftime('%Y-%m', mov.FECHA) IN ('2025-09', '2025-10')
+                  AND strftime('%Y-%m', mov.FECHA) IN (?, ?)
                 GROUP BY strftime('%Y-%m', mov.FECHA)
             ),
             gastos_fijos AS (
@@ -1750,81 +1749,77 @@ class GestorQueries:
                     AND pp.SEGMENTO_ID = s.SEGMENTO_ID
                 WHERE mc.GESTOR_ID = ?
             )
-            SELECT 
-                dm.*,
-                gf.gastos
+            SELECT dm.*, gf.gastos
             FROM datos_mensuales dm
             CROSS JOIN gastos_fijos gf
             ORDER BY dm.periodo
         """
-        
+
         start = datetime.now()
-        raw = execute_query(query, (gestor_id, gestor_id, gestor_id))
-        
+        raw = execute_query(query, (gestor_id, gestor_id, periodo_anterior, periodo_actual, gestor_id))
+
         if len(raw) < 2:
             return QueryResult(
-                data=[{"error": "Datos insuficientes para comparación"}],
-                query_type="compare_gestor_sep_oct_error",
-                execution_time=0,
-                row_count=0,
-                query_sql=query
+                data=[{"error": f"Datos insuficientes para comparar {periodo_anterior} vs {periodo_actual}"}],
+                query_type="compare_gestor_periodos_error",
+                execution_time=0, row_count=0, query_sql=query
             )
-        
-        sept_data = next((r for r in raw if r['periodo'] == '2025-09'), None)
-        oct_data = next((r for r in raw if r['periodo'] == '2025-10'), None)
-        
-        if not sept_data or not oct_data:
+
+        ant_data = next((r for r in raw if r['periodo'] == periodo_anterior), None)
+        act_data = next((r for r in raw if r['periodo'] == periodo_actual), None)
+
+        if not ant_data or not act_data:
             return QueryResult(
-                data=[{"error": "Faltan datos de septiembre u octubre"}],
-                query_type="compare_gestor_sep_oct_incomplete",
-                execution_time=0,
-                row_count=0,
-                query_sql=query
+                data=[{"error": f"Faltan datos de {periodo_anterior} o {periodo_actual}"}],
+                query_type="compare_gestor_periodos_incomplete",
+                execution_time=0, row_count=0, query_sql=query
             )
-        
-        # Calcular KPIs para ambos meses
-        margen_sept = self.kpi_calc.calculate_margen_neto(sept_data['ingresos'], sept_data['gastos'])
-        margen_oct = self.kpi_calc.calculate_margen_neto(oct_data['ingresos'], oct_data['gastos'])
-        
-        variacion_ingresos = ((oct_data['ingresos'] - sept_data['ingresos']) / sept_data['ingresos'] * 100) if sept_data['ingresos'] > 0 else 0
-        variacion_contratos = oct_data['contratos_activos'] - sept_data['contratos_activos']
-        variacion_margen = margen_oct['margen_neto_pct'] - margen_sept['margen_neto_pct']
-        
+
+        margen_ant = self.kpi_calc.calculate_margen_neto(ant_data['ingresos'], ant_data['gastos'])
+        margen_act = self.kpi_calc.calculate_margen_neto(act_data['ingresos'], act_data['gastos'])
+
+        var_ingresos = ((act_data['ingresos'] - ant_data['ingresos']) / ant_data['ingresos'] * 100) if ant_data['ingresos'] > 0 else 0
+        var_contratos = act_data['contratos_activos'] - ant_data['contratos_activos']
+        var_margen = margen_act['margen_neto_pct'] - margen_ant['margen_neto_pct']
+
         comparison = {
-            'septiembre': {
-                'ingresos': sept_data['ingresos'],
-                'contratos_activos': sept_data['contratos_activos'],
-                'gastos': sept_data['gastos'],
-                'beneficio_neto': margen_sept['beneficio_neto'],
-                'margen_neto_pct': margen_sept['margen_neto_pct']
+            'periodo_anterior': {
+                'periodo': periodo_anterior,
+                'ingresos': ant_data['ingresos'],
+                'contratos_activos': ant_data['contratos_activos'],
+                'gastos': ant_data['gastos'],
+                'beneficio_neto': margen_ant['beneficio_neto'],
+                'margen_neto_pct': margen_ant['margen_neto_pct']
             },
-            'octubre': {
-                'ingresos': oct_data['ingresos'],
-                'contratos_activos': oct_data['contratos_activos'],
-                'gastos': oct_data['gastos'],
-                'beneficio_neto': margen_oct['beneficio_neto'],
-                'margen_neto_pct': margen_oct['margen_neto_pct']
+            'periodo_actual': {
+                'periodo': periodo_actual,
+                'ingresos': act_data['ingresos'],
+                'contratos_activos': act_data['contratos_activos'],
+                'gastos': act_data['gastos'],
+                'beneficio_neto': margen_act['beneficio_neto'],
+                'margen_neto_pct': margen_act['margen_neto_pct']
             },
             'variaciones': {
-                'ingresos_variacion_pct': round(variacion_ingresos, 2),
-                'contratos_variacion': variacion_contratos,
-                'margen_variacion_pp': round(variacion_margen, 2)
+                'ingresos_variacion_pct': round(var_ingresos, 2),
+                'contratos_variacion': var_contratos,
+                'margen_variacion_pp': round(var_margen, 2)
             },
             'tendencia': {
-                'ingresos': 'POSITIVA' if variacion_ingresos > 0 else 'NEGATIVA',
-                'actividad': 'CRECIENTE' if variacion_contratos > 0 else 'DECRECIENTE',
-                'rentabilidad': 'MEJORA' if variacion_margen > 0 else 'DETERIORO'
+                'ingresos': 'POSITIVA' if var_ingresos > 0 else 'NEGATIVA',
+                'actividad': 'CRECIENTE' if var_contratos > 0 else 'DECRECIENTE',
+                'rentabilidad': 'MEJORA' if var_margen > 0 else 'DETERIORO'
             }
         }
-        
+
         exec_time = (datetime.now() - start).total_seconds()
         return QueryResult(
-            data=[comparison],
-            query_type="compare_gestor_septiembre_octubre",
-            execution_time=exec_time,
-            row_count=1,
-            query_sql=query
+            data=[comparison], query_type="compare_gestor_periodos",
+            execution_time=exec_time, row_count=1, query_sql=query
         )
+
+    def compare_gestor_septiembre_octubre(self, gestor_id: str) -> QueryResult:
+        """Alias de compatibilidad."""
+        return self.compare_gestor_periodos(gestor_id, '2025-10', '2025-09')
 
     def get_ranking_gestores_margen(self, periodo: str = "2025-10", limite: int = 20) -> QueryResult:
         """
