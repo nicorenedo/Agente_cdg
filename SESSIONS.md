@@ -105,6 +105,32 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S58 — completada (solo análisis, sin cambios en BD ni código):**
+
+Análisis BD + plan de generación de datos históricos (nov-2025 a abr-2026).
+
+AUDITORÍA:
+- No hay scripts de generación en el repo — se crea desde cero
+- BD actual: 2 períodos (sep/oct-2025), 220 contratos, 2,172 movimientos, 85 clientes
+- CONTRATO_IDs: 1xxx=Hip, 2xxx=Dep, 3xxx=FRV. MAX=3073, MAX_MOV_ID=2800
+- No hay FECHA_BAJA en contratos (no se gestionan bajas)
+- Gastos centrales en MOVIMIENTOS (CONTRATO_ID NULL): fondeo 660001 ~€180k + provisión 690002 ~€45k
+- PRECIO_STD solo para ANNO=2025 — necesita 2026
+
+NARRATIVA 6 MESES APROBADA:
+- Nov-2025: €610k (-2.2%), 3 contratos nuevos. Estacionalidad noviembre.
+- Dic-2025: €580k (-4.9%), 1 contrato. Cierre de año, mínimo actividad.
+- Ene-2026: €595k (+2.6%), 5 contratos. Arranque año + campaña Q1.
+- Feb-2026: €630k (+5.9%), 4 contratos. Fondos Q1 rinden frutos.
+- Mar-2026: €648k (+2.9%), 3 contratos. Cierre Q1, mejor mes.
+- Abr-2026: €635k (-2.0%), 2 contratos. Corrección post-Q1 + Semana Santa.
+
+PLAN TÉCNICO: Script Python, ~6,500 movimientos nuevos, ~18 contratos, ~10 clientes, 90 PRECIO_REAL, 210 GASTOS_CENTRO. Backup pre-expansion obligatorio.
+
+IMPACTO CÓDIGO: tool get_evolucion_sep_oct necesita generalización para cualquier par de meses. PRECIO_STD necesita set ANNO=2026. Resto de queries/tools funciona sin cambios.
+
+---
+
 **S57 — completada (solo tests, sin cambios de código):**
 
 Batería final de confirmación: 27 tests con evaluación DATOS + ROUTING + CALIDAD.
