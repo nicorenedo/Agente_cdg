@@ -105,6 +105,36 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S61 — completada (commits `ced28b6`, `df9fee6`, `b0c2cfc`, `5c9384a`):**
+
+Generalización hardcodeos backend + conciencia temporal de agentes.
+
+B1 ✅ Queries generalizadas:
+- `get_evolucion_gestores(actual, anterior)` reemplaza `get_evolucion_gestores_sep_oct()` (alias mantenido)
+- `compare_gestor_periodos(gestor_id, actual, anterior)` reemplaza `compare_gestor_septiembre_octubre()` (alias mantenido)
+
+B2 ✅ CDGAgent actualizado:
+- Tool `get_evolucion_sep_oct` → `get_evolucion_mensual(actual, anterior)` con períodos dinámicos
+- System prompt: datos sep-2025 a abr-2026, lógica temporal MoM/YoY, default período dinámico vía get_latest_period()
+
+B3 ✅ GestorAgent actualizado:
+- Tool `get_evolucion_sep_oct` → `get_mi_evolucion_mensual()` calcula mes anterior automáticamente
+- System prompt: períodos dinámicos, sin referencia a "sep-2025/oct-2025"
+
+B4 ✅ CLAUDE.md actualizado con 8 períodos de referencia (sep-2025 a abr-2026, 351 contratos, 12k movimientos)
+
+Tests verificación (5/5 ✅):
+- get_latest_period() → '2026-04' ✅
+- get_evolucion_gestores('2025-11','2025-10') → 30 gestores con variación ✅
+- CDG MoM nov vs oct → get_evolucion_mensual llamada ✅
+- CDG resumen abr-2026 → €633k, 351 contratos ✅
+- CDG comparativa feb-2026 vs oct-2025 → get_comparativa_periodos + get_metricas_periodo ✅
+- GestorAgent evolución mensual nov-2025 → get_mi_evolucion_mensual ✅
+
+PENDIENTE S62: correcciones frontend defaults + batería tests completa.
+
+---
+
 **S60 — completada (commit `57502ad`):**
 
 Generación datos históricos sep-2024 a abr-2026. Script: `backend/scripts/generate_months.py`.
