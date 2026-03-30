@@ -131,15 +131,24 @@ PERFIL Y ACCESO:
 - Si una pregunta requiere datos, LLAMA A LAS HERRAMIENTAS antes de responder.
 
 DATOS DISPONIBLES:
-- 5 centros finalistas: Madrid (ID=1), Palma (ID=2), Barcelona (ID=3), Málaga (ID=4), Bilbao (ID=5)
-- 30 gestores distribuidos en 5 centros, 5 segmentos (Minorista, Privada, Empresas, Personal, Fondos)
-- 3 productos: Préstamo Hipotecario, Depósito a Plazo Fijo, Fondo Renta Variable
-- Períodos disponibles: sep-2025 (2025-09) y oct-2025 (2025-10)
+- 5 centros finalistas: Madrid (ID=1), Palma (ID=2), Barcelona (ID=3), Malaga (ID=4), Bilbao (ID=5)
+- 30 gestores, 5 segmentos, 3 productos
+- Periodos con datos financieros: sep-2025 a abr-2026 (8 meses)
+- Historia de contratos desde: sep-2024 (cartera acumulada)
 
 MODELO TEMPORAL (MoM — Month-over-Month):
 - Ingresos, gastos, ROE y margen son del MES SELECCIONADO, no acumulados YTD.
-- Los contratos son acumulados históricos (FECHA_ALTA <= fin del período).
-- Sep-2025: 216 contratos, ~600k ingresos. Oct-2025: 220 contratos, ~624k ingresos.
+- Los contratos son acumulados historicos (FECHA_ALTA <= fin del periodo).
+
+LOGICA TEMPORAL — CUANDO USAR CADA COMPARATIVA:
+- "vs mes pasado" / "MoM" / "respecto al mes anterior":
+  -> usa get_evolucion_mensual(periodo_actual, periodo_anterior)
+  -> calcula el periodo anterior restando 1 mes al actual
+- "vs el año pasado" / "YoY" / "interanual":
+  -> usa get_comparativa_periodos(periodo_actual, periodo_yoy)
+  -> calcula el YoY restando 1 año al actual (ej: 2025-11 vs 2024-11)
+  -> NOTA: solo hay datos financieros desde sep-2025; antes solo hay contratos
+- Sin especificacion temporal: usa get_metricas_periodo para el periodo actual
 
 REGLAS DE NEGOCIO:
 - Gastos redistribuidos = Gastos centrales x (contratos_gestor / total_contratos_finalistas)
@@ -156,14 +165,15 @@ DEBES llamar al menos una herramienta ANTES de redactar tu respuesta.
 - NUNCA respondas con cifras de memoria — los datos cambian cada mes.
 
 COMBINACIONES FRECUENTES:
-- "¿cómo estamos?" → get_metricas_periodo
-- "¿cómo va [centro]?" → get_metricas_centro con el centro_id correspondiente
-- "¿quiénes son los mejores?" → get_ranking_gestores_margen
-- "¿qué producto da más?" → get_kpis_productos
-- "evolución vs mes pasado" → get_evolucion_sep_oct O get_comparativa_periodos
-- "¿hay alertas?" → get_desviaciones_precio + get_ranking_gestores_margen
+- "como estamos" → get_metricas_periodo
+- "como va [centro]" → get_metricas_centro con el centro_id
+- "mejores gestores" → get_ranking_gestores_margen
+- "que producto da mas" → get_kpis_productos
+- "evolucion vs mes pasado" → get_evolucion_mensual(actual, anterior)
+- "hay alertas" → get_desviaciones_precio + get_ranking_gestores_margen
 - "resumen completo" → get_metricas_periodo + get_ranking_gestores_margen + get_kpis_productos
 - "comparar dos centros" → get_metricas_centro(id1) + get_metricas_centro(id2)
+- "vs el año pasado" → get_comparativa_periodos(actual, mismo_mes_año_anterior)
 
 FORMATO DE RESPUESTA:
 - Español bancario profesional, dirigido a Dirección.
@@ -260,10 +270,14 @@ def get_ranking_gestores_ingresos(periodo: str, limit: int = 15) -> str:
 
 
 @tool
-def get_evolucion_sep_oct() -> str:
-    """Evolución de todos los gestores comparando septiembre con octubre 2025: variación de ingresos, gastos, margen, contratos. Clasifica cada gestor como mejora/estable/retroceso. Úsala para '¿cómo hemos evolucionado?', 'comparativa mes pasado', 'quién mejoró', 'tendencia mensual', 'evolución respecto al mes anterior'."""
+def get_evolucion_mensual(periodo_actual: str, periodo_anterior: str) -> str:
+    """Evolución de todos los gestores entre dos períodos consecutivos.
+    Muestra quién mejoró y quién retrocedió con variaciones porcentuales.
+    Úsala para: 'como hemos evolucionado respecto al mes pasado', 'quién mejoró',
+    'tendencia mensual'. Para mes anterior, calcula: si actual es 2025-11, anterior es 2025-10.
+    Ejemplo: periodo_actual='2025-11', periodo_anterior='2025-10'."""
     try:
-        result = comparative_queries.get_evolucion_gestores_sep_oct()
+        result = comparative_queries.get_evolucion_gestores(periodo_actual, periodo_anterior)
         return _safe_json(result)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -316,7 +330,7 @@ CDG_TOOLS = [
     get_metricas_centro,
     get_ranking_gestores_margen,
     get_ranking_gestores_ingresos,
-    get_evolucion_sep_oct,
+    get_evolucion_mensual,
     get_kpis_productos,
     get_desviaciones_precio,
     get_comparativa_periodos,
@@ -372,7 +386,12 @@ class CDGAgentV6:
     async def process_request(self, request: CDGRequest) -> CDGResponse:
         """Main entry point — called by chat_agent._execute_cdg_agent_flow()"""
         start_time = datetime.now()
-        periodo = request.periodo or "2025-10"
+        try:
+            from queries.period_queries import period_queries as _pq
+            _default_periodo = _pq.get_latest_period() or "2026-04"
+        except Exception:
+            _default_periodo = "2026-04"
+        periodo = request.periodo or _default_periodo
 
         try:
             if not self._initialized:
