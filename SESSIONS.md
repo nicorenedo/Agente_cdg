@@ -105,6 +105,30 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S57 — completada (solo tests, sin cambios de código):**
+
+Batería final de confirmación: 27 tests con evaluación DATOS + ROUTING + CALIDAD.
+
+DATOS: 27/27 (100%) — todos los tests obtienen cifras reales. Cero invenciones.
+ROUTING: 27/27 (100%) — todos llegan al agente correcto con tools correctas.
+CALIDAD: 25/27 (93%) — 2 ⚠️ por limitaciones de GPT-4o (empatía inconsistente T3, verbosidad leve N9).
+
+Comparativa evolutiva:
+- S50: DATOS 67%, ROUTING 73%, 15 tests
+- S54: DATOS 100%, ROUTING 100%, CALIDAD 67%, 27 tests
+- S57: DATOS 100%, ROUTING 100%, CALIDAD 93%, 27 tests
+
+Highlights de calidad post-S56:
+- T8 Bilbao: 125w sin 📊 (antes 400w con 📊)
+- T9 Madrid vs Bilbao: 141w tabla directa (antes 500w+)
+- T15 ingresos oficinas: 90w lista de 5 centros (antes datos parciales)
+- N7 dónde enfocar: 149w, recomienda Málaga con datos de 5 centros
+- N4 por qué margen 40%: 187w, combina 2 tools (periodo+productos), causa basada en datos
+
+VEREDICTO: Sistema listo para vídeo de demo. Tests recomendados para demo: T1, T2, T5, T6, T7, T8, T9, T13, T14, T15, N1, N5, N7.
+
+---
+
 **S56 — completada (commit `0e51920`):**
 
 Fix quirúrgico al BankingResponseFormatter en chat_agent.py.
