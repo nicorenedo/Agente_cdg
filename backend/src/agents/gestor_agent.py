@@ -120,6 +120,7 @@ ROE — CÓMO USARLO:
 
 RESTRICCIÓN COMPARATIVAS:
 - Para comparar con el centro, usa ÚNICAMENTE get_mi_centro_benchmark — NO requiere parámetros, el centro se resuelve automáticamente. NUNCA pidas el centro_id al usuario.
+- Cuando uses get_mi_centro_benchmark, los datos que devuelve son del CENTRO COMPLETO (todos los gestores sumados), NO de tu cartera personal. Los contratos del centro son la suma de todos los gestores. Tu cartera personal está en get_mis_kpis o get_mis_productos_detalle.
 - No uses datos globales ni datos de grupo (todos los gestores). Solo los tuyos y los de tu centro (anonimizados).
 - Si no tienes el dato comparativo, di explícitamente: "No dispongo del dato comparativo para este período."
 
@@ -298,6 +299,7 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
         Devuelve las métricas financieras agregadas del centro al que pertenece este gestor.
         Útil para comparar la performance propia con la media del centro (sin revelar datos individuales).
         No requiere parámetros adicionales — el centro se obtiene automáticamente del perfil del gestor.
+        IMPORTANTE: los datos son del CENTRO COMPLETO (todos los gestores), no del gestor individual.
         """
         try:
             metricas = basic_queries.get_gestor_metricas_completas(
@@ -305,6 +307,7 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
             )
             datos = _extract(metricas)
             centro_id = datos.get('CENTRO') if datos else None
+            mis_contratos = datos.get('total_contratos', 'N/A') if datos else 'N/A'
             if not centro_id:
                 return "No se pudo obtener el centro del gestor."
             result = basic_queries.get_centro_metricas_financieras(
@@ -312,7 +315,24 @@ def _make_tools(gestor_id: str, periodo: str = "2025-10"):
             )
             data = _extract(result)
             if data:
-                return f"Métricas del centro {centro_id} ({periodo_consulta}):\n{data}"
+                t_gestores = data.get('total_gestores', '?')
+                t_contratos = data.get('total_contratos', '?')
+                t_clientes = data.get('total_clientes', '?')
+                ingresos = data.get('ingresos_total', 0)
+                margen = data.get('margen_neto_pct', 0)
+                c_por_g = data.get('contratos_por_gestor', '?')
+                centro_desc = data.get('DESC_CENTRO', f'Centro {centro_id}')
+                return (
+                    f"BENCHMARK DEL CENTRO {centro_desc} — datos agregados del centro completo (NO son tus datos personales):\n"
+                    f"- Contratos TOTALES del centro (todos los gestores): {t_contratos}\n"
+                    f"- Gestores en el centro: {t_gestores}\n"
+                    f"- Media de contratos POR gestor en el centro: {c_por_g}\n"
+                    f"- Clientes totales del centro: {t_clientes}\n"
+                    f"- Ingresos totales del centro: {ingresos}\n"
+                    f"- Margen neto medio del centro: {margen}%\n"
+                    f"\n"
+                    f"TU CARTERA PERSONAL tiene {mis_contratos} contratos — consulta get_mis_kpis para el detalle de tu rendimiento individual."
+                )
             return f"Sin datos del centro para el período {periodo_consulta}."
         except Exception as e:
             logger.error(f"get_mi_centro_benchmark error: {e}")
