@@ -105,6 +105,35 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S60 — completada (commit `57502ad`):**
+
+Generación datos históricos sep-2024 a abr-2026. Script: `backend/scripts/generate_months.py`.
+
+BLOQUE 1 — Correcciones:
+- B1.1 ✅ 8 contratos huérfanos corregidos (51 movimientos insertados)
+- B1.2 ✅ 185 contratos redistribuidos a sep-2024→ago-2025 (64 Hip, 61 Dep, 60 FRV)
+- B1.3 ✅ Oct-2025: +10 contratos (3 Hip, 3 Dep, 4 FRV) + 5 clientes nuevos
+- CHECKPOINT: sep-2025=216 contratos ✅, oct-2025=230 contratos ✅
+
+BLOQUE 2 — Nuevos meses (todos targets ±1%):
+- nov-2025: €615k (+0.8% vs €610k target), 247 contratos, 17 nuevos
+- dic-2025: €576k (-0.7% vs €580k), 258 contratos, 11 nuevos
+- ene-2026: €594k (-0.2% vs €595k), 279 contratos, 21 nuevos
+- feb-2026: €629k (-0.2% vs €630k), 303 contratos, 24 nuevos
+- mar-2026: €646k (-0.2% vs €648k), 329 contratos, 26 nuevos
+- abr-2026: €633k (-0.2% vs €635k), 351 contratos, 22 nuevos
+
+TOTALES FINALES: 351 contratos, 142 clientes, 12,057 movimientos (antes: 220/85/2,172).
+Crecimiento interanual contratos: +10-20% (nov-nov, dic-dic, ene-ene, feb-feb, mar-mar).
+PRECIO_STD actualizado a 2026 (+2.5%). PRECIO_REAL: 120 rows (15/mes × 8 meses).
+Backup pre-expansion: BM_CONTABILIDAD_CDG_pre_expansion.db.
+
+NOTA: sep-2025 ingresos cambió de €599,759 a €621,729 (8 contratos huérfanos ahora tienen movimientos). Oct-2025 ingresos cambió de €624k a €660k (10 contratos nuevos). CLAUDE.md necesita actualización de valores referencia.
+
+PENDIENTE S61: generalizar hardcodeos backend (funciones sep/oct, defaults "2025-10").
+
+---
+
 **S59 — completada (solo análisis, sin cambios en BD ni código):**
 
 Plan revisado y definitivo de generación de datos históricos.
