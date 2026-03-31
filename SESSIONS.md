@@ -105,6 +105,30 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S74 — completada (solo tests, sin cambios de codigo):**
+
+Bateria ForecastAgent: 27 tests en 4 grupos (Direccion basico, What-if, Gestor prescriptivo, Edge cases).
+
+RESULTADOS: 22/27 (81%) — A: 6/6 ✅, B: 6/6 ✅, C: 5/8 (2⚠️ 1❌), D: 5/7 (2⚠️).
+
+Highlights:
+- A1-A6 (Direccion basico): PERFECTO. 3 escenarios, macro BCE/INE, tablas comparativas.
+- B1-B6 (What-if): PERFECTO. Shocks cuantificados: +75pb=-7.1%, -20%capt=-18%, combinados.
+- C1/C4 (Gestor forecast): €47k/mes base, 3 escenarios personales.
+- C5 (Plan accion): acciones concretas FRV/Q3/centros.
+- D7 (No-regresion): "resumen del mes" → CDG_AGENT correctamente.
+
+Problemas (para S75 si se corrigen):
+- C2 ⚠️: LLM calcula sin tools (deberia llamar get_forecast_base)
+- C6 ⚠️: apply_whatif no recibe dimension=gestor
+- C8 ❌: no infiere doble llamada (gestor + centro)
+- D1 ⚠️: confunde user_role (responde como gestor a control_gestion)
+- D2 ⚠️: estacionalidad sin consultar Prophet
+
+DEMO READY: 12/12 tests Direccion perfecto. 5/8 Gestor funciona. 10 tests recomendados para guion de demo.
+
+---
+
 **S73 — completada (commit `19a2d2b`):**
 
 GestorProjectionsPage — modulo de Proyecciones para el gestor individual.
