@@ -105,6 +105,31 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S70 — completada (commit `46b5356`):**
+
+Frontend: Página de Proyecciones completa.
+
+COMPONENTES CREADOS (6):
+- `pages/ProjectionsPage.jsx` — página principal 3 columnas, fondo oscuro (#0D0D1A→#111827)
+- `components/Forecast/ForecastChart.jsx` — Recharts ComposedChart: actual (púrpura) + 3 escenarios (rojo/blanco/verde)
+- `components/Forecast/ScenarioKPICards.jsx` — 3 cards resumen (pes/base/opt) con probabilidad y narrativa
+- `components/Forecast/ScenarioConfigurator.jsx` — horizonte (3/6/12m) + dimensión + sliders what-if
+- `components/Forecast/MacroContextPanel.jsx` — BCE MIR + INE IPC en tiempo real
+- `components/Forecast/ForecastChat.jsx` — chat con ForecastAgent, sugerencias iniciales
+
+INTEGRACIÓN:
+- Ruta: `/proyecciones/direccion` y `/proyecciones/gestor/:gestorId` en App.jsx
+- Botón "Proyecciones" (gradiente púrpura→azul) en DireccionView navbar
+- API: `api.forecast.*` con 8 métodos (historicos, base, whatif, macro, chat, recs, dimensiones, shocks)
+- Endpoint nuevo: `GET /forecast/historicos` para serie temporal de actuals
+
+VERIFICACIÓN BACKEND:
+- /forecast/historicos: 20 puntos (sep-2024 a abr-2026) ✅
+- /forecast/base: 6 meses, base €809k-€815k ✅
+- /forecast/macro-context: BCE 3.47%, INE 1.2% ✅
+
+---
+
 **S69 — completada (commits `3b50673`, `bf0359f`):**
 
 ForecastAgent ReAct + FastAPI endpoints + routing desde chat principal.
