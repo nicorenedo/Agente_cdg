@@ -105,6 +105,31 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S69 — completada (commits `3b50673`, `bf0359f`):**
+
+ForecastAgent ReAct + FastAPI endpoints + routing desde chat principal.
+
+B1+B2 ✅ ForecastAgent (`agents/forecast_agent.py`) + Router (`routers/forecast_router.py`):
+- 5 tools: get_forecast_base, get_macro_context, apply_whatif, get_recommendations, compare_scenarios.
+- 7 endpoints: /forecast/base, /whatif, /macro-context, /recommendations, /chat, /dimensiones, /shocks-disponibles.
+- Mismo patrón ReAct que CDGAgent v7 (LangGraph create_react_agent).
+- Integrado en main.py via `app.include_router(forecast_router)`.
+
+B3 ✅ Routing desde chat_agent.py:
+- REGLA -1: keywords forecast ("proyeccion", "what-if", "proximos meses", etc.) → FORECAST_AGENT.
+- `_execute_forecast_agent_flow()` delega al ForecastAgent y devuelve ChatResponse.
+- No-regresión: "resumen del mes" sigue en CDG_AGENT ✅.
+
+Tests calidad (6/6 ✅):
+- TF1 proyección → get_forecast_base, 3 escenarios con datos reales.
+- TF2 what-if +75pb/-15%capt → apply_whatif + compare_scenarios, impacto -18.3%.
+- TF3 recomendaciones → get_recommendations, acciones concretas (FRV, campañas).
+- TF4 macro → get_macro_context, 3.5% tipos, impacto por producto.
+- TF5 coloquial → get_forecast_base 12m, €789k/mes.
+- TF6 gestor → get_forecast_base gestor 1, €49k/mes trimestral.
+
+---
+
 **S68 — completada (commits `56ccef5`, `0279dfe`, `befc0d4`):**
 
 MacroContextService + ScenarioBuilder + WhatIfSimulator.
