@@ -327,6 +327,14 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+# ── Forecast Router ──────────────────────────────────────────────────
+try:
+    from routers.forecast_router import router as forecast_router
+    app.include_router(forecast_router)
+    logger.info("Forecast router included at /forecast/*") if 'logger' in dir() else None
+except Exception as _fr_err:
+    print(f"⚠️ Forecast router not available: {_fr_err}")
+
 # ============================================================================
 # 🚀 INICIALIZACIÓN DE AGENTES v10.0 y v6.0 CON LOGS VISUALES
 # ============================================================================
