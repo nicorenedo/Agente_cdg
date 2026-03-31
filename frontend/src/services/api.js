@@ -882,6 +882,18 @@ const api = {
   chat,                   // ✅ Chat Agent v11.0
   agent,                  // ✅ CDG Agent v6.0
   user,
+
+  // S70: Forecast module
+  forecast: {
+    historicos: (params, cfg) => unwrap(http.get("/forecast/historicos", { params, ...cfg })),
+    base:       (payload, cfg) => unwrap(http.post("/forecast/base", payload, cfg)),
+    whatif:     (payload, cfg) => unwrap(http.post("/forecast/whatif", payload, cfg)),
+    macro:      (cfg) => unwrap(http.get("/forecast/macro-context", cfg)),
+    recs:       (payload, cfg) => unwrap(http.post("/forecast/recommendations", payload, cfg)),
+    chat:       (payload, cfg) => http.post("/forecast/chat", payload, cfg).then(r => r.data),
+    dimensiones:(cfg) => unwrap(http.get("/forecast/dimensiones", cfg)),
+    shocks:     (cfg) => unwrap(http.get("/forecast/shocks-disponibles", cfg)),
+  },
 };
 
 export default api;

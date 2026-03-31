@@ -15,6 +15,7 @@ import theme from './styles/theme';
 import LandingPage from './pages/LandingPage';
 import GestorView from './pages/GestorView';
 import DireccionView from './pages/DireccionView';
+import ProjectionsPage from './pages/ProjectionsPage';
 
 // ============================================================================
 // CONFIGURACIÓN TEMA ACCENTURE — CDG Intelligence
@@ -265,6 +266,10 @@ const AppRoutes = () => (
       
       {/* Dashboard Control de Gestión */}
       <Route path="/direccion-dashboard" element={<DireccionView />} />
+
+      {/* Proyecciones */}
+      <Route path="/proyecciones/direccion" element={<ProjectionsPage mode="direccion" />} />
+      <Route path="/proyecciones/gestor/:gestorId" element={<ProjectionsPage mode="gestor" />} />
       
       {/* Rutas alternativas más amigables */}
       <Route path="/gestor" element={<Navigate to="/gestor-dashboard" replace />} />

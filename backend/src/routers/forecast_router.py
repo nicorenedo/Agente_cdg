@@ -98,6 +98,15 @@ async def forecast_whatif(req: WhatIfRequest):
     )
 
 
+@router.get("/historicos")
+async def historicos(dimension: str = 'entidad', filtro_id: str = None):
+    """Serie temporal histórica de ingresos mensuales."""
+    _init()
+    df = _fq.get_serie_ingresos(dimension=dimension, filtro_id=filtro_id)
+    return [{'periodo': row['ds'].strftime('%Y-%m'), 'valor': round(float(row['y']))}
+            for _, row in df.iterrows()]
+
+
 @router.get("/macro-context")
 async def macro_context():
     """Contexto macroeconómico actual."""
