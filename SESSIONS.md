@@ -105,6 +105,25 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S62 — completada (solo análisis, sin cambios en BD ni código):**
+
+Plan generación datos financieros sep-2024 a ago-2025.
+
+AUDITORÍA: cartera activa va de 14 (sep-2024) a 187 (ago-2025) contratos. Ingresos estimados: €40k (sep-24) a €454k (ago-25) usando promedios oct-2025 × 0.93 × estacionalidad.
+
+PROBLEMA YoY: la distribución FECHA_ALTA simula un banco que arranca en sep-2024. Las comparativas interanuales serían +63% a +1459% en vez del +15-20% deseado. Causa: 14 contratos en sep-24 vs 216 en sep-25.
+
+OPCIONES:
+- A) Generar y aceptar hiper-crecimiento (1er año del banco). Rápido, narrativa "fase expansión".
+- B) Redistribuir FECHA_ALTA a 2022-2023 para que sep-2024 tenga ~180 contratos. YoY realista pero requiere rehacer S60.
+- C) Generar datos 2024 pero no usar YoY en demo. Solo MoM (ya funciona bien).
+
+RECOMENDACIÓN: Opción A — generar + nota en prompt explicando el hiper-crecimiento como "primer año de operaciones".
+
+PLAN TÉCNICO: Script S60 reutilizable. ~6,255 movimientos nuevos, ~420 GASTOS_CENTRO, 180 PRECIO_REAL. <30s ejecución. Backup obligatorio.
+
+---
+
 **S61 — completada (commits `ced28b6`, `df9fee6`, `b0c2cfc`, `5c9384a`):**
 
 Generalización hardcodeos backend + conciencia temporal de agentes.
