@@ -178,7 +178,7 @@ const getMetricIcon = (metric) => {
 
 const InteractiveCharts = ({
   mode = 'direccion',
-  periodo = '2025-10',
+  periodo = '2026-04',
   gestorId = null,
   filters = {},
   height = 400,

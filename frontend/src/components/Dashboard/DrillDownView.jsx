@@ -56,10 +56,10 @@ const DrillDownView = ({
 }) => {
   // Normalizar período
   const normalizedPeriodo = useMemo(() => {
-    if (!periodo) return "2025-10";
+    if (!periodo) return "2026-04";
     if (typeof periodo === 'string') return periodo;
     if (typeof periodo === 'object') {
-      return periodo.latest || periodo.periodo || periodo.value || "2025-10";
+      return periodo.latest || periodo.periodo || periodo.value || "2026-04";
     }
     return String(periodo);
   }, [periodo]);

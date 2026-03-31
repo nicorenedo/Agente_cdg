@@ -104,10 +104,10 @@ const GestorView = () => {
 
   // ✅ Normalizar período de forma estable
   const normalizedPeriodo = useMemo(() => {
-    if (!periodo) return "2025-10";
+    if (!periodo) return "2026-04";
     if (typeof periodo === 'string') return periodo;
     if (typeof periodo === 'object') {
-      return periodo.periodo || periodo.value || periodo.latest || "2025-10";
+      return periodo.periodo || periodo.value || periodo.latest || "2026-04";
     }
     return String(periodo);
   }, [periodo]);
@@ -490,7 +490,7 @@ const GestorView = () => {
         // Inicialización paralela
         const [initResult, latestPeriod, gestorData] = await Promise.all([
           AdminService.init().catch(err => ({ ok: false, errors: [err.message] })),
-          api.catalogs.latestPeriod().catch(() => "2025-10"),
+          api.catalogs.latestPeriod().catch(() => "2026-04"),
           loadGestorInfo(gestorFromUrl)
         ]);
 
@@ -510,9 +510,9 @@ const GestorView = () => {
         
         // Normalizar período
         if (latestPeriod && typeof latestPeriod === 'object') {
-          setPeriodo(latestPeriod.periodo || latestPeriod.value || latestPeriod.latest || "2025-10");
+          setPeriodo(latestPeriod.periodo || latestPeriod.value || latestPeriod.latest || "2026-04");
         } else {
-          setPeriodo(latestPeriod || "2025-10");
+          setPeriodo(latestPeriod || "2026-04");
         }
         
         setGestorId(gestorFromUrl);

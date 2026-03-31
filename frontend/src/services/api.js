@@ -472,25 +472,25 @@ const analytics = {
     ),
   
   // ✅ NUEVOS: Métricas por Centro
-  centroMetricas: (centroId, periodo = "2025-10", cfg) =>
+  centroMetricas: (centroId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/analytics/centro/${centroId}/metricas`, { params: { periodo }, ...cfg })),
-  centroGestoresMetricas: (centroId, periodo = "2025-10", cfg) =>
+  centroGestoresMetricas: (centroId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/analytics/centro/${centroId}/gestores-con-metricas`, { params: { periodo }, ...cfg })),
   
   // ✅ NUEVOS: Métricas por Segmento
-  segmentoMetricas: (segmentoId, periodo = "2025-10", cfg) =>
+  segmentoMetricas: (segmentoId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/analytics/segmento/${encodeURIComponent(segmentoId)}/metricas`, { params: { periodo }, ...cfg })),
   
   // ✅ NUEVOS: Métricas por Gestor
-  gestorMetricasCompletas: (gestorId, periodo = "2025-10", cfg) =>
+  gestorMetricasCompletas: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/analytics/gestor/${gestorId}/metricas-completas`, { params: { periodo }, ...cfg })),
-  gestorClientesMetricas: (gestorId, periodo = "2025-10", cfg) =>
+  gestorClientesMetricas: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/analytics/gestor/${gestorId}/clientes-con-metricas`, { params: { periodo }, ...cfg })),
   
   // ✅ NUEVOS: Métricas por Cliente
-  clienteMetricas: (clienteId, periodo = "2025-10", cfg) =>
+  clienteMetricas: (clienteId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/analytics/cliente/${clienteId}/metricas`, { params: { periodo }, ...cfg })),
-  clienteContratosMetricas: (clienteId, periodo = "2025-10", cfg) =>
+  clienteContratosMetricas: (clienteId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/analytics/cliente/${clienteId}/contratos-con-metricas`, { params: { periodo }, ...cfg })),
   
   // ✅ NUEVOS: Métricas por Contrato
@@ -498,7 +498,7 @@ const analytics = {
     unwrap(http.get(`/analytics/contrato/${contratoId}/detalle-completo`, cfg)),
 
   // ✅ Modelo Fábrica (CDG/Dirección only)
-  fabrica: (periodo = "2025-10", cfg) =>
+  fabrica: (periodo = "2026-04", cfg) =>
     unwrap(http.get("/analytics/fabrica", { params: { periodo }, ...cfg })),
 };
 
@@ -534,7 +534,7 @@ const comparatives = {
     unwrap(http.get("/comparatives/segmentos/margen", { params: { periodo }, ...cfg })),
   custom: (payload, cfg) => unwrap(http.post("/comparatives/custom", toQueryBody(payload), cfg)),
   // ✅ NUEVO: Ranking extendido
-  gestoresRanking: (periodo = "2025-10", cfg) =>
+  gestoresRanking: (periodo = "2026-04", cfg) =>
     unwrap(http.get("/comparatives/gestores-ranking", { params: { periodo }, ...cfg })),
 };
 
@@ -568,16 +568,16 @@ const incentives = {
   simulate: (payload, cfg) =>
     unwrap(http.post("/incentives/simulate", toQueryBody(payload), cfg)),
   // ✅ NUEVO: Calculate
-  calculate: (gestorId, periodo = "2025-10", cfg) =>
+  calculate: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get("/incentives/calculate", { 
       params: { gestor_id: gestorId || undefined, periodo }, 
       ...cfg 
     })),
   
   // ✅ NUEVOS: Incentivos detallados por entidad
-  centroTotal: (centroId, periodo = "2025-10", cfg) =>
+  centroTotal: (centroId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/incentives/centro/${centroId}/total`, { params: { periodo }, ...cfg })),
-  gestorDetalle: (gestorId, periodo = "2025-10", cfg) =>
+  gestorDetalle: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/incentives/gestor/${encodeURIComponent(gestorId)}/detalle`, { params: { periodo }, ...cfg })),
 };
 
@@ -600,17 +600,17 @@ const kpis = {
     ),
   
   // ✅ NUEVOS: KPIs financieros específicos por entidad
-  centroFinancieros: (centroId, periodo = "2025-10", cfg) =>
+  centroFinancieros: (centroId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/kpis/centro/${centroId}/financieros`, { params: { periodo }, ...cfg })),
-  gestorFinancieros: (gestorId, periodo = "2025-10", cfg) =>
+  gestorFinancieros: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/kpis/gestor/${gestorId}/financieros`, { params: { periodo }, ...cfg })),
-  gestorROE: (gestorId, periodo = "2025-10", cfg) =>
+  gestorROE: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/kpis/gestor/${gestorId}/roe`, { params: { periodo }, ...cfg })),
-  gestorEficiencia: (gestorId, periodo = "2025-10", cfg) =>
+  gestorEficiencia: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/kpis/gestor/${gestorId}/eficiencia`, { params: { periodo }, ...cfg })),
-  centroMargen: (centroId, periodo = "2025-10", cfg) =>
+  centroMargen: (centroId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/kpis/centro/${centroId}/margen`, { params: { periodo }, ...cfg })),
-  centroBonusTotal: (centroId, periodo = "2025-10", cfg) =>
+  centroBonusTotal: (centroId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/kpis/centro/${centroId}/bonus-total`, { params: { periodo }, ...cfg })),
 };
 
@@ -652,11 +652,11 @@ const charts = {
   availableQueries: (cfg) => unwrap(http.get("/charts/available-queries", cfg)),
   availableTypes: (cfg) => unwrap(http.get("/charts/available-types", cfg)),
   summaryDashboard: (cfg) => unwrap(http.get("/charts/summary-dashboard", cfg)),
-  gestoresRanking: ({ metric = "CONTRATOS", chartType = "horizontal_bar", periodo = "2025-10" } = {}, cfg) =>
+  gestoresRanking: ({ metric = "CONTRATOS", chartType = "horizontal_bar", periodo = "2026-04" } = {}, cfg) =>
     unwrap(http.get("/charts/gestores-ranking", { params: { metric, chart_type: chartType, periodo }, ...cfg })),
-  centrosDistribution: ({ chartType = "donut", periodo = "2025-10" } = {}, cfg) =>
+  centrosDistribution: ({ chartType = "donut", periodo = "2026-04" } = {}, cfg) =>
     unwrap(http.get("/charts/centros-distribution", { params: { chart_type: chartType, periodo }, ...cfg })),
-  productosPopularity: ({ chartType = "horizontal_bar", periodo = "2025-10" } = {}, cfg) =>
+  productosPopularity: ({ chartType = "horizontal_bar", periodo = "2026-04" } = {}, cfg) =>
     unwrap(http.get("/charts/productos-popularity", { params: { chart_type: chartType, periodo }, ...cfg })),
   preciosComparison: ({ fechaCalculo = null, chartType = "bar" } = {}, cfg) =>
     unwrap(
@@ -683,27 +683,27 @@ const dashboards = {
   generate: (payload, cfg) => unwrap(http.post("/dashboards/generate", toQueryBody(payload), cfg)),
   
   // ✅ NUEVOS: Dashboards específicos para componentes frontend
-  gestorSummary: (gestorId, periodo = "2025-10", cfg) =>
+  gestorSummary: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/summary`, { params: { periodo }, ...cfg })),
   gestorEvolution: (gestorId, cfg) =>
     unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/evolution`, cfg)),
-  gestorProductos: (gestorId, periodo = "2025-10", cfg) =>
+  gestorProductos: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/productos`, { params: { periodo }, ...cfg })),
-  gestorAlertas: (gestorId, periodo = "2025-10", cfg) =>
+  gestorAlertas: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/alertas`, { params: { periodo }, ...cfg })),
-  gestorComparative: (gestorId, periodo = "2025-10", cfg) =>
+  gestorComparative: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/dashboards/gestor/${encodeURIComponent(gestorId)}/comparative`, { params: { periodo }, ...cfg })),
   
   // ✅ NUEVOS: Dashboards de incentivos
-  incentivosSummary: (periodo = "2025-10", cfg) =>
+  incentivosSummary: (periodo = "2026-04", cfg) =>
     unwrap(http.get("/dashboards/incentivos/summary", { params: { periodo }, ...cfg })),
   incentivosTendencia: (cfg) =>
     unwrap(http.get("/dashboards/incentivos/tendencia", cfg)),
   
   // ✅ NUEVOS: Dashboards comparativos
-  comparativeSummary: (periodo = "2025-10", cfg) =>
+  comparativeSummary: (periodo = "2026-04", cfg) =>
     unwrap(http.get("/dashboards/comparative/summary", { params: { periodo }, ...cfg })),
-  matrizSegmentos: (periodo = "2025-10", cfg) =>
+  matrizSegmentos: (periodo = "2026-04", cfg) =>
     unwrap(http.get("/dashboards/matriz-segmentos", { params: { periodo }, ...cfg })),
 };
 
@@ -760,7 +760,7 @@ const sql = {
 
 // ✅ Gestor Analysis - NUEVO MÓDULO  
 const gestorAnalysis = {
-  performance: (gestorId, periodo = "2025-10", cfg) =>
+  performance: (gestorId, periodo = "2026-04", cfg) =>
     unwrap(http.get(`/gestor/${encodeURIComponent(gestorId)}/performance`, { 
       params: { periodo }, 
       ...cfg 

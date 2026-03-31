@@ -19,7 +19,7 @@ const cardStyle = {
   borderTop: '2px solid #A100FF',
 };
 
-const FabricaModelSection = ({ periodo = '2025-10' }) => {
+const FabricaModelSection = ({ periodo = '2026-04' }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -51,9 +51,10 @@ const FabricaModelSection = ({ periodo = '2025-10' }) => {
   );
   if (!data) return null;
 
-  const isSep = periodo === '2025-09';
-  const current = isSep ? (data.sep_2025 || {}) : (data.oct_2025 || {});
-  const periodoLabel = isSep ? 'sep' : 'oct';
+  // Dynamic: use data for the selected period (the API returns period-keyed data)
+  const periodoKey = periodo ? periodo.replace('-', '_') : '';
+  const current = data[periodoKey] || data.oct_2025 || data || {};
+  const periodoLabel = periodo ? periodo.substring(0, 7) : 'periodo';
   const desvRatio = data.desviacion_ratio_vs_target ?? null;
   const varCedido = data.variacion_cedido_pct ?? null;
 

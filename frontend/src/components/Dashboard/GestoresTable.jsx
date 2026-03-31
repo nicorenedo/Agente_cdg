@@ -17,7 +17,14 @@ const SEGMENTO_COLORS = {
 };
 
 const normPeriodo = (p) =>
-  typeof p === 'object' ? p?.latest || p?.periodo || '2025-10' : p || '2025-10';
+  typeof p === 'object' ? p?.latest || p?.periodo || '2026-04' : p || '2026-04';
+
+const getPeriodoAnterior = (periodo) => {
+  if (!periodo) return null;
+  const [year, month] = periodo.split('-').map(Number);
+  if (month === 1) return `${year - 1}-12`;
+  return `${year}-${String(month - 1).padStart(2, '0')}`;
+};
 
 const GestoresTable = ({ periodo }) => {
   const [loading, setLoading] = useState(true);
@@ -33,7 +40,7 @@ const GestoresTable = ({ periodo }) => {
     setLoading(true);
 
     const curr = normPeriodo(periodo);
-    const prev = curr === '2025-10' ? '2025-09' : null;
+    const prev = getPeriodoAnterior(curr);
 
     const calls = [
       api.charts.gestoresRanking({ metric: 'INGRESOS', periodo: curr }),

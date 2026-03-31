@@ -91,18 +91,20 @@ const KPICards = ({
 
   // Normalizar período
   const normalizedPeriodo = useMemo(() => {
-    if (!periodo) return "2025-10";
+    if (!periodo) return "2026-04";
     if (typeof periodo === 'string') return periodo;
     if (typeof periodo === 'object') {
-      return periodo.latest || periodo.periodo || periodo.value || "2025-10";
+      return periodo.latest || periodo.periodo || periodo.value || "2026-04";
     }
     return String(periodo);
   }, [periodo]);
 
-  // Período anterior para calcular variaciones (solo tenemos sep y oct)
+  // Período anterior para calcular variaciones (dinámico)
   const prevPeriodo = useMemo(() => {
-    if (normalizedPeriodo === '2025-10') return '2025-09';
-    return null;
+    if (!normalizedPeriodo) return null;
+    const [y, m] = normalizedPeriodo.split('-').map(Number);
+    if (m === 1) return `${y - 1}-12`;
+    return `${y}-${String(m - 1).padStart(2, '0')}`;
   }, [normalizedPeriodo]);
 
   // Helper: calcula variación % entre valor actual y anterior (null si no hay datos)

@@ -115,8 +115,8 @@ const DireccionView = () => {
 
         // ✅ NORMALIZACIÓN DE PERÍODO
         const periodoStr = typeof latestPeriod === 'object' 
-          ? latestPeriod.latest || latestPeriod.period || '2025-10'
-          : latestPeriod || '2025-10';
+          ? latestPeriod.latest || latestPeriod.period || '2026-04'
+          : latestPeriod || '2026-04';
         
         console.log('[DireccionView] ✅ Período establecido:', periodoStr);
         setPeriodo(periodoStr);
@@ -125,7 +125,7 @@ const DireccionView = () => {
         console.error('[DireccionView] ❌ Initialization error:', err);
         setError(err?.message || 'Error al inicializar el dashboard');
         // Fallback en caso de error
-        setPeriodo('2025-10');
+        setPeriodo('2026-04');
       } finally {
         setLoading(false);
       }

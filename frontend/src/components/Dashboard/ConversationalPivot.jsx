@@ -230,7 +230,7 @@ const formatDimensionLabel = (dimension) => {
 
 const ConversationalPivot = ({
   mode = 'direccion',
-  periodo = '2025-10',
+  periodo = '2026-04',
   gestorId = null,
   currentChartConfig = null,
   onChartUpdate = () => {},

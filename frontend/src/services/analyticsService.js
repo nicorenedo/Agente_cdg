@@ -544,7 +544,7 @@ function filterDataBySegment(data, targetSegmentId) {
 /**
  * ✅ NUEVO: Métricas financieras por centro
  */
-async function getCentroMetricas(centroId, periodo = "2025-10", options = {}) {
+async function getCentroMetricas(centroId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🏢 Fetching metrics for centro ${centroId}, period ${periodo}`);
   
   const cacheKey = { centroId, periodo, type: 'centro_metricas' };
@@ -576,7 +576,7 @@ async function getCentroMetricas(centroId, periodo = "2025-10", options = {}) {
 /**
  * ✅ NUEVO: Gestores con métricas por centro
  */
-async function getCentroGestoresMetricas(centroId, periodo = "2025-10", options = {}) {
+async function getCentroGestoresMetricas(centroId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 👥 Fetching gestores metrics for centro ${centroId}`);
   
   const cacheKey = { centroId, periodo, type: 'centro_gestores_metricas' };
@@ -603,7 +603,7 @@ async function getCentroGestoresMetricas(centroId, periodo = "2025-10", options 
 /**
  * ✅ NUEVO: Métricas financieras por segmento
  */
-async function getSegmentoMetricas(segmentoId, periodo = "2025-10", options = {}) {
+async function getSegmentoMetricas(segmentoId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🎯 Fetching metrics for segmento ${segmentoId}, period ${periodo}`);
   
   const cacheKey = { segmentoId, periodo, type: 'segmento_metricas' };
@@ -635,7 +635,7 @@ async function getSegmentoMetricas(segmentoId, periodo = "2025-10", options = {}
 /**
  * ✅ NUEVO: Métricas completas por gestor
  */
-async function getGestorMetricasCompletas(gestorId, periodo = "2025-10", options = {}) {
+async function getGestorMetricasCompletas(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 👤 Fetching complete metrics for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'gestor_metricas_completas' };
@@ -667,7 +667,7 @@ async function getGestorMetricasCompletas(gestorId, periodo = "2025-10", options
 /**
  * ✅ NUEVO: Clientes con métricas por gestor
  */
-async function getGestorClientesMetricas(gestorId, periodo = "2025-10", options = {}) {
+async function getGestorClientesMetricas(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🤝 Fetching client metrics for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'gestor_clientes_metricas' };
@@ -694,7 +694,7 @@ async function getGestorClientesMetricas(gestorId, periodo = "2025-10", options 
 /**
  * ✅ NUEVO: Métricas por cliente
  */
-async function getClienteMetricas(clienteId, periodo = "2025-10", options = {}) {
+async function getClienteMetricas(clienteId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🤝 Fetching metrics for cliente ${clienteId}`);
   
   const cacheKey = { clienteId, periodo, type: 'cliente_metricas' };
@@ -726,7 +726,7 @@ async function getClienteMetricas(clienteId, periodo = "2025-10", options = {}) 
 /**
  * ✅ NUEVO: Contratos con métricas por cliente
  */
-async function getClienteContratosMetricas(clienteId, periodo = "2025-10", options = {}) {
+async function getClienteContratosMetricas(clienteId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 📋 Fetching contract metrics for cliente ${clienteId}`);
   
   const cacheKey = { clienteId, periodo, type: 'cliente_contratos_metricas' };
@@ -788,7 +788,7 @@ async function getContratoDetalleCompleto(contratoId, options = {}) {
 /**
  * ✅ NUEVO: KPIs financieros por centro
  */
-async function getCentroKPIsFinancieros(centroId, periodo = "2025-10", options = {}) {
+async function getCentroKPIsFinancieros(centroId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 📊 Fetching financial KPIs for centro ${centroId}`);
   
   const cacheKey = { centroId, periodo, type: 'centro_kpis_financieros' };
@@ -820,7 +820,7 @@ async function getCentroKPIsFinancieros(centroId, periodo = "2025-10", options =
 /**
  * ✅ NUEVO: KPIs financieros por gestor
  */
-async function getGestorKPIsFinancieros(gestorId, periodo = "2025-10", options = {}) {
+async function getGestorKPIsFinancieros(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 📊 Fetching financial KPIs for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'gestor_kpis_financieros' };
@@ -852,7 +852,7 @@ async function getGestorKPIsFinancieros(gestorId, periodo = "2025-10", options =
 /**
  * ✅ NUEVO: ROE específico por gestor
  */
-async function getGestorROE(gestorId, periodo = "2025-10", options = {}) {
+async function getGestorROE(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 📈 Fetching ROE for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'gestor_roe' };
@@ -885,7 +885,7 @@ async function getGestorROE(gestorId, periodo = "2025-10", options = {}) {
 /**
  * ✅ NUEVO: Eficiencia específica por gestor
  */
-async function getGestorEficiencia(gestorId, periodo = "2025-10", options = {}) {
+async function getGestorEficiencia(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] ⚡ Fetching efficiency for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'gestor_eficiencia' };
@@ -918,7 +918,7 @@ async function getGestorEficiencia(gestorId, periodo = "2025-10", options = {}) 
 /**
  * ✅ NUEVO: Margen específico por centro
  */
-async function getCentroMargen(centroId, periodo = "2025-10", options = {}) {
+async function getCentroMargen(centroId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 💰 Fetching margin for centro ${centroId}`);
   
   const cacheKey = { centroId, periodo, type: 'centro_margen' };
@@ -951,7 +951,7 @@ async function getCentroMargen(centroId, periodo = "2025-10", options = {}) {
 /**
  * ✅ NUEVO: Total bonus por centro
  */
-async function getCentroBonusTotal(centroId, periodo = "2025-10", options = {}) {
+async function getCentroBonusTotal(centroId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🎁 Fetching total bonus for centro ${centroId}`);
   
   const cacheKey = { centroId, periodo, type: 'centro_bonus_total' };
@@ -988,7 +988,7 @@ async function getCentroBonusTotal(centroId, periodo = "2025-10", options = {}) 
 /**
  * ✅ NUEVO: Total incentivos por centro
  */
-async function getIncentivesCentroTotal(centroId, periodo = "2025-10", options = {}) {
+async function getIncentivesCentroTotal(centroId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🏆 Fetching total incentives for centro ${centroId}`);
   
   const cacheKey = { centroId, periodo, type: 'incentives_centro_total' };
@@ -1021,7 +1021,7 @@ async function getIncentivesCentroTotal(centroId, periodo = "2025-10", options =
 /**
  * ✅ NUEVO: Detalle completo incentivos por gestor
  */
-async function getIncentivesGestorDetalle(gestorId, periodo = "2025-10", options = {}) {
+async function getIncentivesGestorDetalle(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🎯 Fetching detailed incentives for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'incentives_gestor_detalle' };
@@ -1058,7 +1058,7 @@ async function getIncentivesGestorDetalle(gestorId, periodo = "2025-10", options
 /**
  * ✅ NUEVO: Dashboard resumen por gestor
  */
-async function getDashboardGestorSummary(gestorId, periodo = "2025-10", options = {}) {
+async function getDashboardGestorSummary(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 📊 Fetching dashboard summary for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_summary' };
@@ -1121,7 +1121,7 @@ async function getDashboardGestorEvolution(gestorId, options = {}) {
 /**
  * ✅ NUEVO: Dashboard productos por gestor
  */
-async function getDashboardGestorProductos(gestorId, periodo = "2025-10", options = {}) {
+async function getDashboardGestorProductos(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🛍️ Fetching products dashboard for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_productos' };
@@ -1153,7 +1153,7 @@ async function getDashboardGestorProductos(gestorId, periodo = "2025-10", option
 /**
  * ✅ NUEVO: Dashboard alertas por gestor
  */
-async function getDashboardGestorAlertas(gestorId, periodo = "2025-10", options = {}) {
+async function getDashboardGestorAlertas(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🚨 Fetching alerts dashboard for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_alertas' };
@@ -1185,7 +1185,7 @@ async function getDashboardGestorAlertas(gestorId, periodo = "2025-10", options 
 /**
  * ✅ NUEVO: Dashboard comparativo por gestor
  */
-async function getDashboardGestorComparative(gestorId, periodo = "2025-10", options = {}) {
+async function getDashboardGestorComparative(gestorId, periodo = "2026-04", options = {}) {
   console.log(`[Analytics] ⚖️ Fetching comparative dashboard for gestor ${gestorId}`);
   
   const cacheKey = { gestorId, periodo, type: 'dashboard_gestor_comparative' };
@@ -1217,7 +1217,7 @@ async function getDashboardGestorComparative(gestorId, periodo = "2025-10", opti
 /**
  * ✅ NUEVO: Dashboard resumen incentivos
  */
-async function getDashboardIncentivosSummary(periodo = "2025-10", options = {}) {
+async function getDashboardIncentivosSummary(periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🏆 Fetching incentives summary dashboard`);
   
   const cacheKey = { periodo, type: 'dashboard_incentivos_summary' };
@@ -1278,7 +1278,7 @@ async function getDashboardIncentivosTendencia(options = {}) {
 /**
  * ✅ NUEVO: Dashboard comparativo summary
  */
-async function getDashboardComparativeSummary(periodo = "2025-10", options = {}) {
+async function getDashboardComparativeSummary(periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 📊 Fetching comparative summary dashboard`);
   
   const cacheKey = { periodo, type: 'dashboard_comparative_summary' };
@@ -1309,7 +1309,7 @@ async function getDashboardComparativeSummary(periodo = "2025-10", options = {})
 /**
  * ✅ NUEVO: Matriz comparativa segmentos
  */
-async function getDashboardMatrizSegmentos(periodo = "2025-10", options = {}) {
+async function getDashboardMatrizSegmentos(periodo = "2026-04", options = {}) {
   console.log(`[Analytics] 🎯 Fetching segments matrix dashboard`);
   
   const cacheKey = { periodo, type: 'dashboard_matriz_segmentos' };
@@ -1859,7 +1859,7 @@ async function getChartMeta() {
  * ✅ FUNCIÓN PRINCIPAL: Obtiene datos para cualquier combinación métrica/dimensión/tipo
  */
 async function getPivotableChartData(metric, dimension, chartType = 'bar', options = {}) {
-  const { periodo = '2025-10', gestorId, centroId, limit = 10 } = options;
+  const { periodo = '2026-04', gestorId, centroId, limit = 10 } = options;
   
   console.log(`[Analytics] 🎯 getPivotableChartData: ${metric} by ${dimension} as ${chartType}`);
   
@@ -2666,7 +2666,7 @@ function generateMockPriceComparison(gestorId = null, segmentoInfo = null) {
       mockData: true,
       segmentoId: segmentoInfo?.segmentoId,
       segmentoNombre: segmentoInfo?.segmentoNombre,
-      periodo: '2025-10',
+      periodo: '2026-04',
       semaforos: { Verde: 2, Amarillo: 1, Rojo: 0 },
       note: `Datos de demostración para ${segmentoInfo?.segmentoNombre || 'Segmento Desconocido'}`
     }
@@ -2763,7 +2763,7 @@ function transformProductMix(productsData = [], options = {}) {
  * ✅ FUNCIÓN COMPLETAMENTE REESCRITA: transformPriceComparison (mantenida)
  */
 function transformPriceComparison(data = {}, options = {}) {
-  const { gestorId, segmentoInfo, periodo = '2025-10' } = options;
+  const { gestorId, segmentoInfo, periodo = '2026-04' } = options;
   
   console.log(`[Analytics] transformPriceComparison called for gestor ${gestorId}`);
   console.log(`[Analytics] Segment info:`, segmentoInfo);
@@ -3104,7 +3104,7 @@ async function getTopClientsChartData(gestorId, options = {}) {
     }
 
     // ✅ FIX: usar clientes-con-metricas para tener beneficio_neto real
-    const periodo = options.periodo || '2025-10';
+    const periodo = options.periodo || '2026-04';
     const clientsData = await analyticsAPI.gestorClientesMetricas(numericGestorId, periodo);
     console.log(`[Analytics] Retrieved ${clientsData?.length || 0} clients with metrics from API`);
 
