@@ -66,15 +66,18 @@ const ProjectionsPage = ({ mode = 'direccion' }) => {
   const configRef = useRef(config);
   configRef.current = config;
 
-  const calcular = useCallback(async (overrideConfig) => {
-    const c = overrideConfig || configRef.current;
+  const calcular = useCallback(async (explicitConfig) => {
+    // Always use the explicitly passed config if available,
+    // falling back to the ref (which tracks latest state)
+    const c = explicitConfig || configRef.current;
+    console.log('[Forecast] calcular:', c.dimension, c.filtroId, c.horizonte);
     setIsLoading(true);
     try {
       const hasShocks = Object.values(c.shocks).some(v => v !== 0);
       const payload = {
         horizonte_meses: c.horizonte,
         dimension: c.dimension,
-        filtro_id: c.filtroId,
+        ...(c.filtroId ? { filtro_id: String(c.filtroId) } : {}),
       };
       const result = hasShocks
         ? await api.forecast.whatif({ ...payload, shocks: c.shocks })
@@ -99,7 +102,7 @@ const ProjectionsPage = ({ mode = 'direccion' }) => {
   /* ── Auto-recalculate when horizonte changes ────────────────── */
   useEffect(() => {
     if (initialised.current && escenarios) {
-      calcular();
+      calcular(config);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.horizonte]);
@@ -171,7 +174,7 @@ const ProjectionsPage = ({ mode = 'direccion' }) => {
         <Col xs={24} lg={6} style={{ display:'flex',flexDirection:'column',gap:12,
           overflowY:'auto',maxHeight:'calc(100vh - 76px)' }}>
           <ScenarioConfigurator config={config} onChange={setConfig}
-            onCalcular={() => calcular()} isLoading={isLoading} dimensiones={dimensiones} />
+            onCalcular={() => calcular(configRef.current)} isLoading={isLoading} dimensiones={dimensiones} />
           <MacroContextPanel />
         </Col>
 
