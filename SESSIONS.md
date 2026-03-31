@@ -105,6 +105,14 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S72b — completada (commit `e317d2d`):**
+
+Fix: selector de dimension no cambiaba visualmente.
+CAUSA: Case D — dos `update()` separados en la misma linea (`update('dimension', v); update('filtroId', null)`) causaban que la segunda llamada sobreescribiera la primera (ambas leian el config original del render).
+FIX: un solo `onChange({ ...config, dimension: v, filtroId: null })` atomico.
+
+---
+
 **S72 — completada (commit `49e30c8`):**
 
 Fix: cambio de dimension no actualizaba el grafico en ProjectionsPage.
