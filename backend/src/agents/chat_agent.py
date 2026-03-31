@@ -509,6 +509,25 @@ class IntelligentQueryClassifier:
             
             logger.info(f"🎯 Clasificación: intent={intent}, is_personal={is_personal}, confidence={confidence}")
 
+            # 🎯 REGLA -1: S69 — Forecast/proyección intent → FORECAST_AGENT
+            _forecast_kw = [
+                'proyeccion', 'proyección', 'forecast', 'predic', 'proyect',
+                'proximos meses', 'próximos meses', 'proximo trimestre', 'próximo trimestre',
+                'como cerraremos', 'cómo cerraremos', 'que esperamos', 'qué esperamos',
+                'que pasaria', 'qué pasaría', 'que pasa si', 'qué pasa si',
+                'escenario si', 'simula', 'what-if', 'whatif',
+                'si los tipos', 'si perdemos', 'si captamos',
+                'ano que viene', 'año que viene', 'tendencia futura', 'perspectivas',
+            ]
+            if any(kw in user_message.lower() for kw in _forecast_kw):
+                logger.info(f"🔮 [S69] Forecast keyword detected → FORECAST_AGENT")
+                return {
+                    'flow_type': 'FORECAST_AGENT',
+                    'classification': initial_classification,
+                    'confidence': 0.90,
+                    'reasoning': 'S69: Forecast/projection query routed to ForecastAgent'
+                }
+
             # 🎯 REGLA 0: S53 — CDG users con preguntas de alerta/preocupación → CDG_AGENT
             # (el LLM a veces clasifica estas como general_inquiry o is_personal=True incorrectamente)
             if user_role == UserRole.CONTROL_GESTION:
@@ -1818,7 +1837,10 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
                 
             elif flow_type == 'CDG_AGENT':
                 return await self._execute_cdg_agent_flow(message, session, routing_result, start_time)
-                
+
+            elif flow_type == 'FORECAST_AGENT':
+                return await self._execute_forecast_agent_flow(message, session, routing_result, start_time)
+
             elif flow_type == 'CONTEXTUAL_RESPONSE':
                 return await self._execute_contextual_flow(message, session, routing_result, start_time)
                 
@@ -2146,6 +2168,45 @@ Lo siento, como gestor no puedo proporcionarle datos personales de otros colegas
             return await self._execute_dynamic_sql_flow(message, session, routing_result, start_time)
 
     
+    async def _execute_forecast_agent_flow(self, message: ChatMessage, session: ChatSession,
+                                          routing_result: Dict, start_time: datetime) -> ChatResponse:
+        """🔮 S69: Flujo ForecastAgent — proyecciones y what-if"""
+        try:
+            from agents.forecast_agent import get_forecast_agent
+            fa = get_forecast_agent()
+            result = await fa.process_message(
+                message=message.message,
+                user_role=message.context.get('user_role', 'control_gestion') if message.context else 'control_gestion',
+                gestor_id=message.gestor_id,
+                periodo_base=message.periodo or '2026-04',
+                session_id=message.user_id or 'default',
+            )
+            execution_time = (datetime.now() - start_time).total_seconds()
+            session.conversation_history.append({
+                'user_message': message.message,
+                'response': result.get('response', ''),
+                'flow_type': 'FORECAST_AGENT',
+                'timestamp': datetime.now().isoformat()
+            })
+            return ChatResponse(
+                response=result.get('response', ''),
+                response_type="forecast_analysis",
+                data={'tools_used': result.get('tools_used', [])},
+                charts=[],
+                recommendations=[],
+                metadata={
+                    "flow_type": "FORECAST_AGENT",
+                    "tools_used": result.get('tools_used', []),
+                    "routing_confidence": routing_result.get('confidence', 0.9),
+                },
+                execution_time=execution_time,
+                confidence_score=0.90,
+                session_id=message.user_id,
+            )
+        except Exception as e:
+            logger.error(f"ForecastAgent flow error: {e}")
+            return await self._execute_cdg_agent_flow(message, session, routing_result, start_time)
+
     async def _execute_contextual_flow(self, message: ChatMessage, session: ChatSession,
                                      routing_result: Dict, start_time: datetime) -> ChatResponse:
         """🎯 FLUJO: Respuesta contextual sin SQL (preguntas generales/conceptuales)"""
