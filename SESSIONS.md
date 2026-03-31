@@ -105,6 +105,26 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S64 — completada (commits `8b4a3e4`, `8e6fba6`):**
+
+Revisión y corrección backend + frontend tras expansión de datos.
+
+B1 ✅ Backend fix:
+- `compare_periodos_metricas` en `period_queries.py` usaba key `gastos_productos` inexistente → fix con `.get()` safe access.
+- Tests: CDG con periodo 2024-11 ✅, YoY nov-25 vs nov-24 ✅, MoM mar-26 vs feb-26 ✅, Gestor jun-2025 ✅.
+
+B2 ✅ Frontend: 74 hardcodeos eliminados en 11 archivos:
+- `analyticsService.js` (30 ocurrencias), `api.js` (29), `DireccionView.jsx` (3), `GestorView.jsx` (5)
+- `KPICards.jsx`: cálculo dinámico de período anterior (reemplaza `=== '2025-10' ? '2025-09'`)
+- `GestoresTable.jsx`: función `getPeriodoAnterior()` dinámica (reemplaza hardcode sep/oct)
+- `FabricaModelSection.jsx`: período dinámico (reemplaza `isSep === '2025-09'`)
+- Defaults cambiados de `'2025-10'` a `'2026-04'` en todos los archivos.
+- 0 ocurrencias de `'2025-10'` o `'2025-09'` restantes en frontend/src/.
+
+B4 ✅ Regresión: T8 Bilbao, T13 resumen, T1 gestor, YoY, MoM — todos con datos reales de abr-2026.
+
+---
+
 **S63 — completada (commit `8d18ac1`):**
 
 Generación datos financieros sep-2024 a ago-2025. Script: `backend/scripts/generate_2024_months.py`.
