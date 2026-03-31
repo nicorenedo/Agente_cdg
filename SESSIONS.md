@@ -105,6 +105,30 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S63 — completada (commit `8d18ac1`):**
+
+Generación datos financieros sep-2024 a ago-2025. Script: `backend/scripts/generate_2024_months.py`.
+
+12 meses generados (todos targets ±2%):
+- sep-2024: €40k (14 contratos) → ago-2025: €456k (187 contratos)
+- Total: ~7,200 movimientos nuevos, ~420 GASTOS_CENTRO, 180 PRECIO_REAL
+
+BD final: 20 períodos con datos financieros (sep-2024 a abr-2026), 19,266 movimientos, 351 contratos, 142 clientes.
+
+YoY contratos NUEVOS (la métrica de captación):
+- nov-24→nov-25: 15→17 (+13%), dic-24→dic-25: 10→11 (+10%)
+- ene-25→ene-26: 18→21 (+17%), feb-25→feb-26: 20→24 (+20%), mar-25→mar-26: 22→26 (+18%)
+
+YoY ingresos totales (refleja crecimiento de cartera acumulada):
+- sep-24→sep-25: €40k→€622k (+1446%) — banco en mes 1 vs mes 13 (esperado)
+- abr-25→abr-26: €395k→€633k (+61%) — se normaliza a medida que la base crece
+
+CDG system prompt actualizado con contexto YoY: "banco inició en sep-2024, primeros meses con base baja".
+
+Tests: get_latest_period()→'2026-04' ✅, YoY nov-2025 datos reales ✅, CDG explica crecimiento alto ✅.
+
+---
+
 **S62 — completada (solo análisis, sin cambios en BD ni código):**
 
 Plan generación datos financieros sep-2024 a ago-2025.
