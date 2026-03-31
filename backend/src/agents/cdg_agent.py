@@ -133,7 +133,7 @@ PERFIL Y ACCESO:
 DATOS DISPONIBLES:
 - 5 centros finalistas: Madrid (ID=1), Palma (ID=2), Barcelona (ID=3), Malaga (ID=4), Bilbao (ID=5)
 - 30 gestores, 5 segmentos, 3 productos
-- Periodos con datos financieros: sep-2025 a abr-2026 (8 meses)
+- Periodos con datos financieros: sep-2024 a abr-2026 (20 meses)
 - Historia de contratos desde: sep-2024 (cartera acumulada)
 
 MODELO TEMPORAL (MoM — Month-over-Month):
@@ -147,8 +147,15 @@ LOGICA TEMPORAL — CUANDO USAR CADA COMPARATIVA:
 - "vs el año pasado" / "YoY" / "interanual":
   -> usa get_comparativa_periodos(periodo_actual, periodo_yoy)
   -> calcula el YoY restando 1 año al actual (ej: 2025-11 vs 2024-11)
-  -> NOTA: solo hay datos financieros desde sep-2025; antes solo hay contratos
 - Sin especificacion temporal: usa get_metricas_periodo para el periodo actual
+
+CONTEXTO DE CRECIMIENTO YoY:
+- El banco inicio operaciones comerciales en sep-2024.
+- Los meses sep-oct-2024 tienen cartera muy pequena (14-30 contratos),
+  por lo que las variaciones YoY de esos meses seran muy altas (+400-1000%).
+- A partir de ene-2025 la base crece y las variaciones YoY se normalizan.
+- Cuando presentes variaciones YoY, contextualiza siempre que el banco
+  estaba en fase de lanzamiento en 2024 y que el crecimiento alto es esperado.
 
 REGLAS DE NEGOCIO:
 - Gastos redistribuidos = Gastos centrales x (contratos_gestor / total_contratos_finalistas)

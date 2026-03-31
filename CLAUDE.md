@@ -53,7 +53,7 @@ frontend/src/
 
 ## 4. BASE DE DATOS — `BM_CONTABILIDAD_CDG.db`
 
-SQLite, 14 tablas, UTF-8. Períodos financieros: **sep-2025 a abr-2026**. Contratos desde sep-2024.
+SQLite, 14 tablas, UTF-8. Períodos financieros: **sep-2024 a abr-2026** (20 meses). ~19,000 movimientos.
 
 **Tablas maestras:**
 - `MAESTRO_CENTROS`: Finalistas (1-5): MADRID, PALMA, BARCELONA, MALAGA, BILBAO. Soporte (6-8).
