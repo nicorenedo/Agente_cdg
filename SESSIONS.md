@@ -105,6 +105,31 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S67 — completada (commits `9dabe65`, `6cf1e2e`):**
+
+ProphetEngine + ForecastQueries — motor de predicción con Meta Prophet.
+
+B1 ✅ ForecastQueries (`queries/forecast_queries.py`):
+- 4 series: ingresos, contratos_nuevos, margen por cualquier dimensión (entidad/centro/gestor/producto)
+- get_metadata_serie: cap_recomendado, tendencia, rango. 20 puntos todos ✅.
+- get_dimensiones_disponibles: 5 centros, 30 gestores, 3 productos.
+
+B2 ✅ ProphetEngine (`forecast/prophet_engine.py`):
+- growth='logistic' con cap = max(y) × 1.25. Evita sobreestimación del ramp-up 2024.
+- changepoint_prior_scale=0.05, seasonality_prior_scale=0.1 (conservador).
+- Post-process clip: all predictions clamped to [0, cap].
+- Caché: hash de datos, no re-entrena si no cambian.
+- get_scenarios: 3 escenarios (base/optimista/pesimista) al 80% confianza.
+
+Resultados forecast (entidad, abr-2026 base):
+- 6 meses: base €815k | pes €753k | opt €825k (cap)
+- 12 meses: base €802k | pes €742k | opt €825k (se estabiliza por logística)
+- Madrid 6m: €232k. Contratos: ~20/mes.
+- Estacionalidad: fuertes (May, Jun, Oct), flojos (Ene, Feb, Dic, Ago).
+- Fit time: 0.7s con 20 puntos.
+
+---
+
 **S66 — completada (solo diseño, sin cambios en código ni BD):**
 
 Diseño completo del módulo de Proyecciones + ForecastAgent.
