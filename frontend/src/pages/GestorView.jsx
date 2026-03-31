@@ -623,6 +623,21 @@ const GestorView = () => {
         showHelp={true}
       />
 
+      {/* S73: Botón Proyecciones */}
+      {gestorId && (
+        <div style={{ position: 'fixed', top: 14, right: 120, zIndex: 1001 }}>
+          <Button
+            onClick={() => navigate(`/proyecciones/gestor/${gestorId}`)}
+            style={{
+              background: 'linear-gradient(135deg, #A100FF 0%, #00C2FF 100%)',
+              border: 'none', color: 'white', fontWeight: 600, borderRadius: 6
+            }}
+          >
+            Proyecciones
+          </Button>
+        </div>
+      )}
+
       {/* Contenido principal */}
       <Content style={{
         marginTop: 64,

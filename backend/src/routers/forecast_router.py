@@ -148,6 +148,28 @@ async def forecast_chat(req: ForecastChatRequest):
     )
 
 
+@router.get("/gestor/{gestor_id}/contexto")
+async def gestor_forecast_contexto(gestor_id: str):
+    """Contexto de forecast personalizado para un gestor."""
+    _init()
+    df = _fq.get_serie_ingresos(dimension='gestor', filtro_id=gestor_id)
+    meta = _fq.get_metadata_serie(df) if len(df) > 0 else {}
+    if len(df) >= 3:
+        _pe.fit(df)
+        forecast_3m = _pe.get_scenarios(horizonte_meses=3)
+    else:
+        forecast_3m = {'base': [], 'optimista': [], 'pesimista': []}
+    return {
+        'gestor_id': gestor_id,
+        'n_periodos': len(df),
+        'ingreso_ultimo_mes': float(df['y'].iloc[-1]) if len(df) > 0 else 0,
+        'ingreso_medio_6m': float(df['y'].tail(6).mean()) if len(df) >= 6 else 0,
+        'tendencia': meta.get('tendencia', 'estable'),
+        'forecast_3m': forecast_3m,
+        'cap_estimado': meta.get('cap_recomendado', 0),
+    }
+
+
 @router.get("/dimensiones")
 async def dimensiones():
     """Dimensiones disponibles para forecast."""

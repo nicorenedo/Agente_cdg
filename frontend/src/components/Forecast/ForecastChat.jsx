@@ -3,11 +3,18 @@ import { Input, Button, Spin } from 'antd';
 import { SendOutlined } from '@ant-design/icons';
 import api from '../../services/api';
 
-const SUGGESTIONS = [
+const DIR_SUGGESTIONS = [
   '¿Como cerraremos el ejercicio?',
   '¿Que ocurre si captamos 20% mas?',
   '¿Que deberiamos priorizar?',
   'Explica el escenario pesimista',
+];
+
+const GESTOR_SUGGESTIONS = [
+  '¿Voy a llegar a mis objetivos este trimestre?',
+  '¿Que producto deberia priorizar?',
+  '¿Cuantos contratos nuevos necesito?',
+  '¿Como esta mi evolucion vs el mes pasado?',
 ];
 
 const ForecastChat = ({ mode = 'direccion', gestorId, perioBase = '2026-04' }) => {
@@ -72,7 +79,7 @@ const ForecastChat = ({ mode = 'direccion', gestorId, perioBase = '2026-04' }) =
         {messages.length === 0 && (
           <div style={{ display:'flex',flexDirection:'column',gap:6,marginTop:12 }}>
             <span style={{ color:'#64748B',fontSize:11,marginBottom:4 }}>Pregunta sobre proyecciones:</span>
-            {SUGGESTIONS.map((s, i) => (
+            {(mode === 'gestor' ? GESTOR_SUGGESTIONS : DIR_SUGGESTIONS).map((s, i) => (
               <div key={i} onClick={() => send(s)} style={{
                 background:'rgba(161,0,255,.06)',border:'1px solid rgba(161,0,255,.15)',
                 borderRadius:10,padding:'8px 12px',cursor:'pointer',

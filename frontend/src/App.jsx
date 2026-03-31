@@ -16,6 +16,7 @@ import LandingPage from './pages/LandingPage';
 import GestorView from './pages/GestorView';
 import DireccionView from './pages/DireccionView';
 import ProjectionsPage from './pages/ProjectionsPage';
+import GestorProjectionsPage from './pages/GestorProjectionsPage';
 
 // ============================================================================
 // CONFIGURACIÓN TEMA ACCENTURE — CDG Intelligence
@@ -269,7 +270,7 @@ const AppRoutes = () => (
 
       {/* Proyecciones */}
       <Route path="/proyecciones/direccion" element={<ProjectionsPage mode="direccion" />} />
-      <Route path="/proyecciones/gestor/:gestorId" element={<ProjectionsPage mode="gestor" />} />
+      <Route path="/proyecciones/gestor/:gestorId" element={<GestorProjectionsPage />} />
       
       {/* Rutas alternativas más amigables */}
       <Route path="/gestor" element={<Navigate to="/gestor-dashboard" replace />} />
