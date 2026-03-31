@@ -105,6 +105,22 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S72 — completada (commit `49e30c8`):**
+
+Fix: cambio de dimension no actualizaba el grafico en ProjectionsPage.
+
+DIAGNOSTICO: caso B — `onCalcular={() => calcular()}` sin argumento leia configRef.current que podia estar stale si React no habia re-renderizado tras setConfig. Fix: pasar `configRef.current` explicitamente al calcular desde el boton click.
+
+CAMBIOS:
+- `calcular(explicitConfig)` acepta config explicito como primer argumento
+- `onCalcular={() => calcular(configRef.current)}` lee ref al momento del click (siempre actual)
+- `filtro_id` condicionalmente incluido en payload solo si tiene valor
+- console.log de debug para verificar dimension/filtroId en cada calculo
+
+VERIFICACION BACKEND: Entidad=€633k, Madrid=€182k, Bilbao=€91k — datos claramente distintos por dimension.
+
+---
+
 **S71 — completada (commit `d729307`):**
 
 Pulido visual + fixes funcionales de ProjectionsPage.
