@@ -105,6 +105,27 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S76 — completada (commit `56f7a65`):**
+
+Auditoria calidad de dato + correccion nombres clientes para demo.
+
+52 clientes genericos ("Cliente 91"..."Cliente 142") renombrados con nombres regionales:
+- Madrid (16): Carlos Fernandez Lopez, Ana Garcia Martinez...
+- Palma (13): Joan Mayol Pons, Maria Barcelo Riera...
+- Barcelona (8): Jordi Puig Martinez, Montserrat Vila Soler...
+- Malaga (7): Antonio Ruiz Jimenez, Carmen Moreno Diaz...
+- Bilbao (8): Aitor Etxebarria Aguirre, Amaia Goikoetxea Urrutia...
+
+5 clientes S60 (IDs 86-90) corregidos para coincidir con la region de su centro:
+- 87: "David Munoz Blanco" → "Miquel Servera Bonet" (Palma)
+- 88: "Sergio Diaz Fernandez" → "Arnau Costa Planas" (Barcelona)
+- 89: "Laura Romero Sanz" → "Leire Mendizabal Arteaga" (Bilbao)
+- 90: "Adrian Molina Torres" → "Carla Domenech Rovira" (Barcelona)
+
+AUDITORIA: 0 clientes genericos restantes. 0 anomalias metricas. Gestores coherentes con centros. Backup: BM_CONTABILIDAD_CDG_pre_s76.db.
+
+---
+
 **S75 — completada (commit `0525e3a`):**
 
 Fix system prompt ForecastAgent: 3 problemas de S74 corregidos via prompt.
