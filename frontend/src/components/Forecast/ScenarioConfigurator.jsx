@@ -35,7 +35,7 @@ const ScenarioConfigurator = ({ config, onChange, onCalcular, isLoading, dimensi
       {/* Dimensión */}
       <div style={cardStyle}>
         <span style={labelStyle}>Dimensión</span>
-        <Select value={dimension} onChange={v => { update('dimension', v); update('filtroId', null); }}
+        <Select value={dimension} onChange={v => onChange({ ...config, dimension: v, filtroId: null })}
           style={{ width: '100%', marginBottom: 8 }} size="small"
           options={[
             { value: 'entidad', label: 'Entidad completa' },
