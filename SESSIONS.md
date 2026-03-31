@@ -105,6 +105,31 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S71 — completada (commit `d729307`):**
+
+Pulido visual + fixes funcionales de ProjectionsPage.
+
+FIXES FUNCIONALES:
+- Horizonte reactivo: cambiar 3m/6m/12m recalcula automaticamente (useEffect en config.horizonte)
+- Dimension con sub-selector: "Centro" muestra select de 5 centros, "Gestor" muestra search de 30 gestores
+- Historicos se recargan al cambiar dimension/filtro
+- calcular() usa configRef para tener siempre la config mas reciente
+- Solo ultimos 8 meses historicos visibles en grafico (legibilidad)
+- Sugerencias chat corregidas (sin "el ano")
+
+MEJORAS VISUALES PREMIUM:
+- Fondo: grid sutil 40px (#A100FF 2.5% opacity) + ambient glows en esquinas (purpura + azul)
+- Header: gradiente con linea de acento superior (purpura→azul), badge "Prophet ML · GPT-4o · BCE · INE" con indicador verde pulsante
+- ForecastChart: gradientes SVG para areas opt/pes, dot destacado en ultimo punto historico, tooltip rich con "Dato real" vs "Proyeccion", linea base punteada
+- MacroContextPanel: macro indicadores con numero grande + barra progreso + glow, impacto por producto con tarjetas coloreadas
+- ForecastChat: header con shimmer animado + indicador verde pulsante + badge tech, burbujas glassmorphism con shadows, input con borde purpura
+- Tabla: CSS oscuro custom (.dark-forecast-table) con hover purpura
+- Animacion entrada fadeInUp + pulse + shimmer via style injection
+
+ENDPOINTS VERIFICADOS: historicos(20pts) ✅, base(6m) ✅, centro Madrid(6m) ✅, whatif(3m,-3.5%) ✅
+
+---
+
 **S70 — completada (commit `46b5356`):**
 
 Frontend: Página de Proyecciones completa.
