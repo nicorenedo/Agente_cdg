@@ -105,6 +105,14 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S65 — completada (commit `3480aba`):**
+
+Hotfix: FabricaModelSection.jsx daba ReferenceError: isSep is not defined.
+- S64 eliminó la definición de `isSep` pero quedó la referencia en línea 64 (`!isSep && varCedido`).
+- Fix: reemplazado `isSep` → eliminado (varDisplay siempre disponible). Renombrado `varSepOct` → `varDisplay`. Label "Variación oct vs sep" → "Variación MoM".
+
+---
+
 **S64 — completada (commits `8b4a3e4`, `8e6fba6`):**
 
 Revisión y corrección backend + frontend tras expansión de datos.
