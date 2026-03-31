@@ -105,6 +105,26 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S75 — completada (commit `0525e3a`):**
+
+Fix system prompt ForecastAgent: 3 problemas de S74 corregidos via prompt.
+
+FIX 1 ✅ C2 (preguntas cuantitativas): "cuantos contratos para >40k" → ahora llama get_forecast_base, responde "ya superas €40k en base (€48k/mes)". Antes calculaba mentalmente sin tools.
+
+FIX 2 ✅ D2 (estacionalidad): "en que meses mas actividad" → ahora llama get_forecast_base 12m, identifica May/Oct como fuertes desde datos del modelo. Antes respondía con conocimiento general.
+
+FIX 3 ✅ D1 (contexto de rol): "como ves el año que viene" con user_role=control_gestion → ahora habla en plural como analista ("Se espera €789k/mes"). Antes confundía con gestor.
+
+BONUS ✅ C8: doble dimensión ahora funciona (2x get_forecast_base: gestor + centro Madrid). Fix indirecto del contexto de rol.
+
+PENDIENTE (requiere código Python): C6 — apply_whatif no pasa dimension=gestor al simulador.
+
+NO-REGRESION: A1 ✅, C4 ✅, B3 ✅ (con session limpia; session history contamina entre tests pero no en producción).
+
+SCORE ESTIMADO: 25/27 (93%) vs 22/27 (81%) en S74. Solo C6 (⚠️ código) queda.
+
+---
+
 **S74 — completada (solo tests, sin cambios de codigo):**
 
 Bateria ForecastAgent: 27 tests en 4 grupos (Direccion basico, What-if, Gestor prescriptivo, Edge cases).
