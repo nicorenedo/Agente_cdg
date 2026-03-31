@@ -197,30 +197,37 @@ class PeriodQueries:
         actual = metricas_actual.data[0]
         anterior = metricas_anterior.data[0]
         
-        # Calcular variaciones
+        # Calcular variaciones (use .get() for safety)
+        ing_act = actual.get('ingresos_periodo', 0) or 0
+        ing_ant = anterior.get('ingresos_periodo', 0) or 0
+        gastos_act = actual.get('gastos_totales', actual.get('gastos_directos', 0)) or 0
+        gastos_ant = anterior.get('gastos_totales', anterior.get('gastos_directos', 0)) or 0
+        ben_act = actual.get('beneficio_neto', 0) or 0
+        ben_ant = anterior.get('beneficio_neto', 0) or 0
+
         comparacion = {
             'periodo_actual': periodo_actual,
             'periodo_anterior': periodo_anterior,
-            'ingresos_actual': actual['ingresos_periodo'],
-            'ingresos_anterior': anterior['ingresos_periodo'],
-            'ingresos_variacion_abs': actual['ingresos_periodo'] - anterior['ingresos_periodo'],
-            'ingresos_variacion_pct': round(((actual['ingresos_periodo'] - anterior['ingresos_periodo']) / max(anterior['ingresos_periodo'], 1) * 100), 2),
-            'gastos_productos_actual': actual['gastos_productos'],
-            'gastos_productos_anterior': anterior['gastos_productos'],
-            'gastos_productos_variacion_abs': actual['gastos_productos'] - anterior['gastos_productos'],
-            'gastos_productos_variacion_pct': round(((actual['gastos_productos'] - anterior['gastos_productos']) / max(anterior['gastos_productos'], 1) * 100), 2),
-            'beneficio_actual': actual['beneficio_neto'],
-            'beneficio_anterior': anterior['beneficio_neto'],
-            'beneficio_variacion_abs': actual['beneficio_neto'] - anterior['beneficio_neto'],
-            'beneficio_variacion_pct': round(((actual['beneficio_neto'] - anterior['beneficio_neto']) / max(abs(anterior['beneficio_neto']), 1) * 100), 2),
-            'contratos_actual': actual['total_contratos_activos'],
-            'contratos_anterior': anterior['total_contratos_activos'],
-            'contratos_variacion': actual['total_contratos_activos'] - anterior['total_contratos_activos'],
-            'gestores_actual': actual['total_gestores_activos'],
-            'gestores_anterior': anterior['total_gestores_activos'],
-            'margen_neto_actual': actual['margen_neto_pct'],
-            'margen_neto_anterior': anterior['margen_neto_pct'],
-            'margen_neto_variacion_pp': round(actual['margen_neto_pct'] - anterior['margen_neto_pct'], 2)
+            'ingresos_actual': ing_act,
+            'ingresos_anterior': ing_ant,
+            'ingresos_variacion_abs': round(ing_act - ing_ant, 2),
+            'ingresos_variacion_pct': round((ing_act - ing_ant) / max(abs(ing_ant), 1) * 100, 2),
+            'gastos_actual': gastos_act,
+            'gastos_anterior': gastos_ant,
+            'gastos_variacion_abs': round(gastos_act - gastos_ant, 2),
+            'gastos_variacion_pct': round((gastos_act - gastos_ant) / max(abs(gastos_ant), 1) * 100, 2),
+            'beneficio_actual': ben_act,
+            'beneficio_anterior': ben_ant,
+            'beneficio_variacion_abs': round(ben_act - ben_ant, 2),
+            'beneficio_variacion_pct': round((ben_act - ben_ant) / max(abs(ben_ant), 1) * 100, 2),
+            'contratos_actual': actual.get('total_contratos_activos', 0),
+            'contratos_anterior': anterior.get('total_contratos_activos', 0),
+            'contratos_variacion': (actual.get('total_contratos_activos', 0) or 0) - (anterior.get('total_contratos_activos', 0) or 0),
+            'gestores_actual': actual.get('total_gestores_activos', 0),
+            'gestores_anterior': anterior.get('total_gestores_activos', 0),
+            'margen_neto_actual': actual.get('margen_neto_pct', 0),
+            'margen_neto_anterior': anterior.get('margen_neto_pct', 0),
+            'margen_neto_variacion_pp': round((actual.get('margen_neto_pct', 0) or 0) - (anterior.get('margen_neto_pct', 0) or 0), 2)
         }
         
         execution_time = (datetime.now() - start_time).total_seconds()
