@@ -105,6 +105,26 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S73 — completada (commit `19a2d2b`):**
+
+GestorProjectionsPage — modulo de Proyecciones para el gestor individual.
+
+BACKEND:
+- Nuevo endpoint GET /forecast/gestor/{id}/contexto: KPIs personales, media 6m, tendencia, forecast 3m.
+- Verificado G1: ultimo_mes=€36,847, media_6m=€36,011, tendencia=creciente.
+- Forecast G1 6m: base €50k, pes €47k, opt €51k (actual €37k).
+
+FRONTEND:
+- `pages/GestorProjectionsPage.jsx`: layout 2 columnas (30% KPIs/config + 70% chart/chat).
+  - Panel izquierdo: KPIs personales, horizonte 3/6/12m, 3 mini-cards escenarios, palancas recomendadas.
+  - Panel derecho: ForecastChart (reutilizado) + tabla mes a mes + ForecastChat prescriptivo.
+- ForecastChat actualizado con sugerencias especificas para gestor vs direccion.
+- Boton "Proyecciones" en GestorView navbar (gradiente purpura-azul).
+- Ruta: /proyecciones/gestor/:gestorId → GestorProjectionsPage.
+- App.jsx actualizado con import y ruta.
+
+---
+
 **S72b — completada (commit `e317d2d`):**
 
 Fix: selector de dimension no cambiaba visualmente.
