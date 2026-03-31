@@ -61,7 +61,7 @@ const FabricaModelSection = ({ periodo = '2026-04' }) => {
   const ratioStatus = desvRatio == null ? null : Math.abs(desvRatio) < 1 ? 'success' : Math.abs(desvRatio) < 3 ? 'warning' : 'error';
   const ratioTagColor = ratioStatus === 'success' ? 'green' : ratioStatus === 'warning' ? 'orange' : 'red';
 
-  const varSepOct = (!isSep && varCedido != null)
+  const varDisplay = (varCedido != null)
     ? `${varCedido >= 0 ? '+' : ''}${varCedido}%`
     : null;
 
@@ -118,14 +118,14 @@ const FabricaModelSection = ({ periodo = '2026-04' }) => {
           />
         </Col>
         <Col xs={24} sm={5} style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>Variación oct vs sep</div>
-          {varSepOct != null ? (
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>Variación MoM</div>
+          {varDisplay != null ? (
             <span style={{
               fontSize: 15,
               fontWeight: 700,
               color: varCedido >= 0 ? '#52c41a' : '#ff4d4f'
             }}>
-              {varCedido >= 0 ? '▲' : '▼'} {varSepOct}
+              {varCedido >= 0 ? '▲' : '▼'} {varDisplay}
             </span>
           ) : (
             <span style={{ fontSize: 15, color: '#ccc' }}>—</span>
