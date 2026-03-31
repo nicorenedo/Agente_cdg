@@ -105,6 +105,31 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S68 — completada (commits `56ccef5`, `0279dfe`, `befc0d4`):**
+
+MacroContextService + ScenarioBuilder + WhatIfSimulator.
+
+B1 ✅ MacroContextService (`forecast/macro_context.py`):
+- BCE MIR: tipos hipotecarios 3.47% (real, no fallback). INE IPC: 1.2% (real).
+- Caché 24h. Narrativa automática en español bancario.
+- Impacto calculado: Hip=MODERADO_POSITIVO, Dep=NEUTRAL, FRV=POSITIVO.
+
+B2 ✅ ScenarioBuilder (`forecast/scenario_builder.py`):
+- 3 escenarios (pes/base/opt) con ajuste macro + shocks opcionales.
+- Narrativa por escenario, drivers de riesgo, acciones optimistas.
+- Nota metodológica reconoce histórico corto y fase de lanzamiento.
+- Escenario base 6m: €809k-€817k/mes (acum €4.76M).
+
+B3 ✅ WhatIfSimulator (`forecast/whatif_simulator.py`):
+- 4 shocks: tipos_interes (pb), captacion_clientes (%), reduccion_gastos (%), mix_productos (pp).
+- Análisis de impacto: shock +50pb tipos → -4.7% base. Combinado +50pb/-10%capt → -12.2%.
+- Recomendaciones automáticas basadas en shocks aplicados.
+- Nota contexto banco: "principal lever es captación, no macro".
+
+Integración completa ✅: ForecastQueries → Prophet → Macro → Scenarios → WhatIf pipeline funciona.
+
+---
+
 **S67 — completada (commits `9dabe65`, `6cf1e2e`):**
 
 ProphetEngine + ForecastQueries — motor de predicción con Meta Prophet.
