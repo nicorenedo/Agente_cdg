@@ -105,6 +105,29 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S66 — completada (solo diseño, sin cambios en código ni BD):**
+
+Diseño completo del módulo de Proyecciones + ForecastAgent.
+
+VIABILIDAD TÉCNICA:
+- Prophet ✅ instala y funciona en Python 3.14. Fit+predict en 8s con 20 puntos.
+- ⚠️ Prophet sobreestima sin cap (€1.3M vs €633k real). Fix: growth='logistic' con cap dinámico.
+- BCE MIR ✅ tipos hipotecarios eurozona (3.41-3.50%). BCE Euribor 12m ❌ endpoint roto.
+- INE IPC ✅ inflación España.
+- 20 puntos históricos suficientes para yearly_seasonality.
+
+ARQUITECTURA:
+- backend/src/forecast/: prophet_engine.py, macro_context.py, scenario_builder.py, whatif_simulator.py
+- agents/forecast_agent.py: ReAct con 5 tools (forecast_base, macro_context, whatif, recommendations, compare)
+- queries/forecast_queries.py: series temporales para Prophet (ingresos, contratos, margen)
+- 5 endpoints FastAPI: /forecast/base, /whatif, /macro-context, /recommendations, /chat
+
+FRONTEND: ProjectionsPage con 6 componentes (ScenarioConfigurator, ForecastChart, KPICards, MacroPanel, ForecastChat).
+
+PLAN: S67 (ProphetEngine) → S68 (Macro+Scenarios) → S69 (ForecastAgent+API) → S70 (Routing) → S71 (Frontend) → S72 (Tests).
+
+---
+
 **S65 — completada (commit `3480aba`):**
 
 Hotfix: FabricaModelSection.jsx daba ReferenceError: isSep is not defined.
