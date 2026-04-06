@@ -105,6 +105,14 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S79 — completada (commit `75e81b8`):**
+
+Generado ARCHITECTURE.md — documentación completa de arquitectura del sistema (649 líneas).
+
+Contenido: 12 secciones — Visión general, estructura repositorio, capas, 4 agentes IA con todas sus tools, 5 flujos end-to-end, BD (14 tablas, volumen, cobertura 20 meses), módulo proyecciones (Prophet params, APIs macro, shocks), 4 dashboards con rutas, 35+ endpoints API categorizados, tecnologías/versiones, métricas de calidad 48/48, 8 decisiones de diseño justificadas.
+
+---
+
 **S78a — completada (commits `ca93ab0`, `d9f18fc`):**
 
 Fix A10 + C11 (los 2 tests ⚠️ de S77).
