@@ -105,6 +105,26 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S78a — completada (commits `ca93ab0`, `d9f18fc`):**
+
+Fix A10 + C11 (los 2 tests ⚠️ de S77).
+
+F1 ✅ A10 (CDG pregunta por gestor por nombre):
+- CAUSA: LLM clasifica como general_inquiry → REGLA 4 → CONTEXTUAL_RESPONSE.
+- FIX 1: CONTROL_GESTION bypasa enhanced_confidentiality_check (línea 465).
+- FIX 2: REGLA 3c — CDG + general_inquiry → CDG_AGENT (override REGLA 4).
+- RESULTADO: flow=CDG_AGENT, Antonio Rodríguez €36,847 en respuesta.
+
+F2 ✅ C11 (YoY crecimiento):
+- CAUSA: ForecastAgent usaba get_forecast_base para responder YoY con proyecciones.
+- FIX: Prompt FORECAST_SYSTEM_PROMPT: "cuanto hemos crecido" → get_comparativa_periodos
+  + contexto "banco inició sep-2024, YoY refleja lanzamiento, usar MoM como metrica principal".
+- RESULTADO: Respuesta contextualiza el banco joven correctamente.
+
+Score post-S78a: 48/48 (100%).
+
+---
+
 **S77 — completada (solo tests, sin cambios de codigo):**
 
 Bateria end-to-end: 60 tests en 5 grupos. Score: 46/48 (95.8%).
