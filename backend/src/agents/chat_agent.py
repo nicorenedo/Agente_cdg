@@ -463,8 +463,12 @@ class IntelligentQueryClassifier:
             user_role = PermissionManager.determine_user_role(context.get('user_id', ''), context) if context else UserRole.GESTOR
             
             # 🔐 NUEVO: Análisis avanzado de confidencialidad
-            confidentiality_result = await PermissionManager.enhanced_confidentiality_check(user_message, context or {})
-            
+            # S78a: CONTROL_GESTION always gets full access — skip check
+            if user_role == UserRole.CONTROL_GESTION:
+                confidentiality_result = {'access_granted': True, 'confidence': 1.0}
+            else:
+                confidentiality_result = await PermissionManager.enhanced_confidentiality_check(user_message, context or {})
+
             if not confidentiality_result['access_granted']:
                 return {
                     'flow_type': 'ACCESS_DENIED',
@@ -577,6 +581,17 @@ class IntelligentQueryClassifier:
                         'reasoning': f"No hay query predefinida para {intent}, construir SQL dinámico"
                     }
             
+            # 🎯 REGLA 1b: S78a — CDG users asking about specific gestores by name → CDG_AGENT
+            # For control_gestion, is_personal should never block CDG routing
+            if user_role == UserRole.CONTROL_GESTION and is_personal and initial_classification.get('requires_sql', False):
+                logger.info(f"🎯 [S78a] CDG user + personal query (name/id) → CDG_AGENT (full access)")
+                return {
+                    'flow_type': 'CDG_AGENT',
+                    'classification': initial_classification,
+                    'confidence': 0.90,
+                    'reasoning': 'S78a: CDG role has full access to any gestor data'
+                }
+
             # 🎯 REGLA 2: Análisis complejo NO personal → CDG_AGENT (antes que SQL)
             cdg_intents = [
                 'business_review',
@@ -628,6 +643,16 @@ class IntelligentQueryClassifier:
                         'classification': initial_classification,
                         'confidence': initial_classification['confidence']
                     }
+
+            # 🎯 REGLA 3c: S78a — CDG users with general_inquiry but involves SQL data → CDG_AGENT
+            if user_role == UserRole.CONTROL_GESTION and intent == 'general_inquiry':
+                logger.info(f"🎯 [S78a] CDG user + general_inquiry → CDG_AGENT (override contextual)")
+                return {
+                    'flow_type': 'CDG_AGENT',
+                    'classification': initial_classification,
+                    'confidence': 0.85,
+                    'reasoning': 'S78a: CDG role general inquiry routed to CDG Agent'
+                }
 
             # 🎯 REGLA 4: Consultas generales conceptuales → CONTEXTUAL_RESPONSE
             if intent == 'general_inquiry' or not initial_classification.get('requires_sql', True):
