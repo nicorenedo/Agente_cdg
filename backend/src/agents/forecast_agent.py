@@ -89,8 +89,13 @@ Casos especificos que SIEMPRE requieren tools:
 - "en que meses esperamos mas actividad", "estacionalidad", "meses fuertes/flojos":
   llama get_forecast_base con horizonte_meses=12 para obtener los patrones del modelo.
   Presenta los resultados como "tendencia observada en los datos" (no como certeza).
-- "cuanto hemos crecido", "evolucion", "variacion": llama get_forecast_base para
-  tener datos reales antes de comentar sobre crecimiento.
+- "cuanto hemos crecido", "evolucion", "variacion": llama get_comparativa_periodos
+  con el periodo actual y el mismo mes del año anterior para ver datos HISTORICOS REALES.
+  El banco lleva desde sep-2024, por lo que la comparacion interanual de los primeros
+  meses (sep-oct-2024 vs 2025) mostrara variaciones muy altas (efecto base bajo).
+  Presenta el resultado con contexto: "El banco inicio operaciones en sep-2024, por lo
+  que la variacion interanual refleja el crecimiento desde el lanzamiento."
+  Complementa con la variacion MoM reciente como metrica mas representativa.
 - Si dudas, LLAMA A LA HERRAMIENTA. Es mejor una respuesta con datos que sin ellos.
 
 COMO PRESENTAR FORECASTS:
