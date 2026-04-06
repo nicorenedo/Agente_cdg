@@ -105,6 +105,25 @@ ROOT CAUSE FIX ⚠️: El backend llevaba corriendo con código anterior a S42 (
 
 ARCHIVOS TOCADOS: `basic_queries.py` (2 métodos nuevos), `cdg_agent.py` (enum + BLOQUE 0b + dispatch + handler + B1 keywords + setdefault).
 
+**S77 — completada (solo tests, sin cambios de codigo):**
+
+Bateria end-to-end: 60 tests en 5 grupos. Score: 46/48 (95.8%).
+(Los tests E4/C12/A15 son de no-regresion, se contabilizan separado).
+
+GRUPO A CDGAgent Direccion: 14/15 ✅ (A10 ⚠️ — CDG consulta gestor por nombre → CONTEXTUAL_RESPONSE por bloqueo confidencialidad innecesario)
+GRUPO B GestorAgent: 8/8 ✅ (B3 muestra "Gloria Ruiz Hernandez", B7 muestra "Gorka Etxebarria Aguirre" — nombres reales de S76)
+GRUPO C ForecastAgent Direccion: 11/12 ✅ (C11 ⚠️ — YoY usa forecast en lugar de datos historicos reales)
+GRUPO D ForecastAgent Gestor: 8/8 ✅ (D2 confirma fix S75: "ya superas 40k en todos los escenarios")
+GRUPO E Calidad dato: 5/5 ✅ (0 clientes genericos en respuestas ni en BD)
+
+PENDIENTES (<S78):
+- A10: PermissionManager bloquea consulta de gestor individual por nombre cuando user=control_gestion.
+- C11: ForecastAgent usa get_forecast_base para YoY en lugar de get_comparativa_periodos con datos reales.
+
+VEREDICTO: Sistema listo para demo. 95.8% fiabilidad.
+
+---
+
 **S76 — completada (commit `56f7a65`):**
 
 Auditoria calidad de dato + correccion nombres clientes para demo.
