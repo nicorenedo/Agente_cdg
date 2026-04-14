@@ -539,6 +539,11 @@ class IntelligentQueryClassifier:
                 _cdg_force_keywords = [
                     'preocupar', 'alertas', 'alerta', 'riesgo', 'anomal',
                     'desviacion', 'desviación', 'problema', 'critico', 'crítico',
+                    # S89-F2: strategic questions must also go to CDG_AGENT
+                    'priorizar', 'prioridad', 'accion comercial', 'acción comercial',
+                    'oportunidad', 'oportunidades', 'donde mejorar', 'dónde mejorar',
+                    'que hacer', 'qué hacer', 'que deberia', 'qué debería',
+                    'mejorar margen', 'mejorar resultado', 'estrategia',
                 ]
                 if any(kw in _msg_low for kw in _cdg_force_keywords):
                     logger.info(f"🎯 [S53] CDG user + alert keyword → CDG_AGENT (override)")
