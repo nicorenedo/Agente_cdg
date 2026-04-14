@@ -1010,3 +1010,136 @@ cd frontend && npm start
 **⚠️ Nota backend:** WatchFiles no detectó los cambios en `src/` durante la sesión. Los tests en caliente fallaron mostrando `analysis_type: business_intelligence` (código anterior en memoria). **Requiere reinicio manual del backend** para que B1 entre en efecto.
 
 **Próxima sesión:** S49 — "Handlers Faltantes" (período ad-hoc, producto global CDG, gestor individual como CDG). Considerar si DYNAMIC_SQL puede habilitarse como fallback seguro post-S43.
+
+---
+
+## ✅ Completado (sesiones S50-S80) — Resumen compacto
+
+**S50 — Diagnóstico + batería 15 tests (solo lectura):** Depósito margen -254% confirmado
+como estructural (coste fondeo > comisiones). Batería lenguaje informal: 10/15 (67%).
+Hallazgos: T12 evolución no matchea keywords, T14 alertas cae en DYNAMIC_SQL, T6 benchmark
+confunde gestor/centro. Fix: `pydantic-settings` instalado.
+
+**S51 — GestorAgent benchmark tool + routing fix:** REGLA 0 en `chat_agent.py` para preguntas
+de benchmark → gestor_agent directo (sin LLM classifier). `get_mi_centro_benchmark` tool añadida
+a GestorAgent (contratos/ingresos/margen del centro completo + ranking posición). Tool
+`_choice="any"` descartado (loop infinito en ReAct). 12/15 tests.
+
+**S52 — CDGAgent v6→v7 ReAct rewrite:** `cdg_agent.py` 1,540→~400 líneas. 10 tools con
+`@tool`, LLM decide qué llamar. Validación post-respuesta `_has_concrete_data()`.
+Historial 3 turnos por session_id. 7 CDG tests OK excepto T14 (routing issue en chat_agent).
+
+**S53 — Routing & benchmark fixes:** Alert queries redirigidas a CDGAgent (no DYNAMIC_SQL).
+Benchmark tool clarifica datos centro vs gestor.
+
+**S54 — Batería exhaustiva 27 tests:** 100% precisión datos, 100% routing, 67% calidad
+formato. Sistema listo para refinamiento.
+
+**S55 — System prompt refinement:** CDGAgent con reglas de brevedad y tono adaptativo.
+GestorAgent con detección de empatía y recomendaciones accionables.
+
+**S56 — Response formatter bypass:** CDG users reciben respuestas ReAct directas, sin pasar
+por BankingResponseFormatter que interfería con el formato.
+
+**S57-S59 — Planificación expansión de datos:** S57 validación final. S58 análisis BD y
+planificación histórica. S59 plan definitivo de expansión aprobado.
+
+**S60 — Expansión histórica mayor:** BD escalada de 2 meses (sep-oct 2025) a 8 meses
+(sep-2025 a abr-2026). ~7,200 nuevos movimientos. Script `generate_months.py`.
+
+**S61 — Backend generalización temporal (4 partes):** Eliminadas referencias hardcoded
+sep/oct en todo el backend. CDGAgent y GestorAgent tools dinámicos por período. CLAUDE.md
+actualizado con valores de referencia 8 meses.
+
+**S62 — Planificación YoY:** Análisis distribución datos históricos. Patrón hiper-crecimiento
+1446% sep-24→sep-25 (banco nuevo). Narrativa "fase expansión" aceptada.
+
+**S63 — Generación datos 2024:** Script `generate_2024_months.py` genera 12 meses
+(sep-2024 a ago-2025). ~7,200 movimientos, ~420 GASTOS_CENTRO, 180 PRECIO_REAL.
+BD final: 20 períodos, 19,266 movimientos, 351 contratos.
+
+**S64 — Limpieza hardcoding períodos:** Backend fix KeyError `compare_periodos_metricas`.
+74 referencias hardcoded eliminadas en 11 archivos frontend. Defaults actualizados a 2026-04.
+
+**S65 — Hotfix FabricaModelSection:** Variable `isSep` indefinida eliminada. Labels
+estandarizados a "Variación MoM".
+
+**S66-S69 — Módulo Proyecciones backend:** ProphetEngine (logístico, cap×1.25,
+changepoint=0.05), MacroContextService (BCE MIR 3.47%, INE IPC 1.2%),
+ScenarioBuilder (3 escenarios), WhatIfSimulator (4 shocks), ForecastAgent ReAct
+(5 tools, 7 endpoints). Tests 6/6.
+
+**S70-S73 — Módulo Proyecciones frontend:** ProjectionsPage (tema oscuro, grid,
+glows, animaciones), GestorProjectionsPage (prescriptivo personal), 6 componentes
+Forecast. Fix dimensión selector (onChange atómico). Botones Proyecciones en
+DireccionView y GestorView.
+
+**S74-S75 — Tests ForecastAgent + fixes prompt:** Batería 27 tests (22/27 → 25/27).
+Fixes: preguntas cuantitativas con tools, estacionalidad consulta Prophet,
+contexto de rol (control_gestion vs gestor).
+
+**S76 — Calidad de dato:** 57 clientes renombrados con nombres regionales reales
+(Bilbao vasco, Palma balear, Barcelona catalán, etc.). 0 genéricos restantes.
+
+**S77-S78a — Batería end-to-end + fixes:** 48/48 (100%). Fix A10: PermissionManager
+permite CDG consultar gestores por nombre. Fix C11: YoY con contexto banco joven.
+
+**S79 — ARCHITECTURE.md:** Documentación completa del repositorio (649 líneas, 12 secciones).
+Agentes, flujos, schema BD, Prophet, endpoints, decisiones de diseño.
+
+---
+
+## ✅ S80 — Diagnóstico completo de calidad de datos (2026-04-14)
+
+**Objetivo:** Auditoría SOLO LECTURA de toda la BD para identificar causas raíz de datos
+incoherentes detectados en el frontend (María González margen -74.5%, semáforo "Óptimo"
+para ROE negativos).
+
+### Hallazgos principales
+
+**1. Depósito estructuralmente ruinoso (CAUSA RAÍZ):**
+- Margen producto: **-302.9%** (113 contratos, ing €35k, gas €141k)
+- Calibración en `generate_months.py`: gastos base -2,123€/contrato vs ingresos ~311€/contrato
+- Ratio 4:1 gastos/ingresos. Los 15 peores contratos son TODOS Depósitos (ratio 4.5-5.3x)
+- Conocido desde S50 como "estructural", pero la magnitud es excesiva para demo
+
+**2. Distribución desigual de productos:**
+- G25 María González: 6 Dep + 3 Hip + **0 FRV** = 67% Depósitos → margen directo 4.2%
+- G29 Mikel Aguirre (Bilbao): 1 Dep + 3 Hip + 7 FRV = 9% Depósitos → margen directo 90.5%
+- Correlación perfecta FRV% ↔ margen. Dispersión: 86pp (4.2%-90.5%)
+- 2 gestores sin FRV (G24, G25). Bilbao concentra 71% FRV → márgenes >84%
+
+**3. Bug semáforo (DrillDownView.jsx:247,330):**
+```
+Math.abs(margen_pct) >= 15 ? 'success' : ...
+```
+`Math.abs(-74.5) = 74.5 >= 15` → "Óptimo". Debería ser `margen_pct >= 15`.
+
+**4. `_get_total_contratos_finalistas()` no filtra por período:**
+- Retorna 351 siempre. Para sep-2025 (216 contratos), redistribución infra-asignada un 38%.
+- En abr-2026 (351): correcto. Bug solo afecta períodos anteriores.
+
+**5. María González (G25) — desglose completo abr-2026:**
+- Ingresos directos: €8,770 (3 Hip + 6 Dep)
+- Gastos directos: -€8,400 (640001 intereses pagados = -€7,513)
+- Margen directo: 4.2%
+- Redistribuidos: -€6,902 (gc -€269k × 9/351)
+- **Margen final: -74.5%** ← correcto dada la data, pero data irreal
+
+**6. Margen entidad abr-2026:** 28.8% (ing €633k, gas €451k). Sería ~45-50% con
+Depósito recalibrado.
+
+**7. Evolución temporal:** 0 gestores negativos desde oct-2025 (excepto sep-2025: 2).
+Períodos 2024 tenían 2-5 gestores negativos por carteras pequeñas.
+
+### Plan de corrección propuesto (NO ejecutado)
+
+| Opción | Qué | Impacto |
+|---|---|---|
+| **A** | Recalibrar 640001 de -2,123 a ~-400 en scripts, regenerar Dep | Alto: margen entidad 29%→50%, María 4%→55% |
+| **B** | Rebalancear mix: asignar FRV a G24/G25 | Medio: reduce dispersión, no arregla -302% |
+| **C** | Fix semáforo + `_get_total_contratos_finalistas(periodo)` | Bajo: cosmético + precisión redistribución |
+
+**Recomendación: C → A (en ese orden).** C primero (rápido, 2 archivos). Luego A (regenerar datos).
+
+ARCHIVOS NO TOCADOS (sesión de solo lectura). Ningún commit de código.
