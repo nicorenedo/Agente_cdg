@@ -1248,3 +1248,52 @@ productos/gestores. Para bajar a ~37%: necesario añadir ~€67k/mes en gastos.
 Dejar margen entidad ~47% y documentar como "P&L antes de cost allocation completa".
 
 ARCHIVOS NO TOCADOS (sesión de solo lectura).
+
+---
+
+## ✅ S83 — Corrección Opción A+C post-diagnóstico S82 (2026-04-14)
+
+**Objetivo:** Fix C (rebalancear G25) + Fix A (fondeo 660001 solo a Hipotecas).
+Backup: `BM_CONTABILIDAD_CDG_pre_s83.db`.
+
+**Fix C — G25 María González: 3 Dep→FRV** (commit `7f3abb5`):
+- Contratos 2112, 2102, 2101 convertidos de Depósito a FRV.
+- MAESTRO_CONTRATOS.PRODUCTO_ID actualizado + movimientos reemplazados.
+- G25 antes: 6 Dep + 3 Hip + 0 FRV → margen neto -0.6%
+- G25 después: 3 Dep + 3 Hip + 3 FRV → margen neto **46.2%**
+
+**Fix A — Fondeo 660001 imputado solo a Hipotecas** (commit `11a0d28`):
+- Nueva lógica: `redist = fondeo × n_hip/total_hip + otros × n_ctos/total_fin`
+- `basic_queries.py`: 4 helpers nuevos (`_get_gastos_fondeo_periodo`,
+  `_get_gastos_otros_centrales_periodo`, `_get_total_hipotecas_finalistas`,
+  `_calcular_redistribucion`). 8 funciones actualizadas con `n_hipotecas` en SQL.
+- `gestor_queries.py`: mismos helpers + 3 funciones actualizadas.
+- `comparative_queries.py`: mismos helpers + 4 bloques actualizados.
+- `incentive_queries.py`: pendiente (secundario, no afecta KPIs principales).
+
+### Resultados finales post-S83
+
+| Métrica | S80 (antes) | S81 (post-dep) | S83 (final) | Objetivo |
+|---------|-------------|----------------|-------------|----------|
+| Margen entidad | 28.8% | 47.6% | **48.2%** | 40-50% ✅ |
+| Media gestores | — | 44.3% | **46.2%** | ~40-50% ✅ |
+| Min gestor | -74.5% (G25) | -0.6% (G25) | **16.9%** (G24) | >10% ✅ |
+| Max gestor | 90.5% (G29) | 62.2% (G29) | **66.7%** (G29) | <65% ⚠️ |
+| Dispersión | 86pp | 62.8pp | **49.8pp** | ≤45pp ⚠️ |
+| En rango 20-55% | 8/30 | 23/30 | **23/30** | >25 ⚠️ |
+| Bajo 10% | — | 2 | **0** | 0 ✅ |
+| Negativos | 1 | 1 | **0** | 0 ✅ |
+
+**Distribución nueva:** P10=35.1% | P50=46.1% | P90=61.1% | Stdev=11.5%
+
+**Redistribución por contrato (abr-2026):**
+- Hipoteca: €1,742/cto (fondeo €1,482 + otros €260)
+- FRV/Depósito: €260/cto (solo otros centrales, sin fondeo)
+
+**Residuales menores (no bloquean demo):**
+- G24 José Ramírez: 16.9% (último sin FRV, 3 Hip + 3 Dep)
+- G29 Mikel Aguirre: 66.7% (7 FRV + 3 Hip + 1 Dep)
+- Dispersión 49.8pp (objetivo 45pp — diferencia marginal)
+
+ARCHIVOS TOCADOS: `basic_queries.py`, `gestor_queries.py`, `comparative_queries.py`,
+`BM_CONTABILIDAD_CDG.db`.
