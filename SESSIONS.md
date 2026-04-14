@@ -1143,3 +1143,57 @@ Períodos 2024 tenían 2-5 gestores negativos por carteras pequeñas.
 **Recomendación: C → A (en ese orden).** C primero (rápido, 2 archivos). Luego A (regenerar datos).
 
 ARCHIVOS NO TOCADOS (sesión de solo lectura). Ningún commit de código.
+
+---
+
+## ✅ S81 — Corrección de calidad de datos (2026-04-14)
+
+**Objetivo:** Corregir los 3 problemas principales detectados en S80.
+Backup: `BM_CONTABILIDAD_CDG_pre_s81.db`.
+
+**B1 — Fix semáforo DrillDownView.jsx** (commit `15a8e7f`):
+- `Math.abs(margen_pct)` eliminado en 4 ocurrencias (líneas 247, 327, 330, 602, 776).
+- Umbrales ajustados: success ≥20%, warning 10-20%, error <0% o beneficio<0.
+- `avgMargen` ahora usa valores reales (no absolutos).
+
+**B2 — Redistribución period-aware** (commit `3846a78`):
+- `_get_total_contratos_finalistas(periodo)` filtra por `FECHA_ALTA <= último día del periodo`.
+- `basic_queries.py`: 8 callers actualizados. `gestor_queries.py`: 3 callers.
+- `comparative_queries.py`: nuevo `_total_finalistas_periodo()` helper, 4 inline queries eliminadas.
+- Valores: sep-2024=14, sep-2025=216, oct-2025=230, abr-2026=351 (antes siempre 351).
+
+**B3 — Recalibrar coste fondeo Depósito** (commit `6ae5dc8`):
+- 1068 movimientos de cuenta 640001 escalados × factor 0.1378 (reducción 86%).
+- Margen Depósito: **-302.9% → 35.9%** (objetivo 35%).
+- Hipotecario y FRV sin cambios (89.0% y 97.5%).
+
+### Resultados post-corrección
+
+| Bloque | Fix | Resultado | Estado |
+|--------|-----|-----------|--------|
+| B1 | Semáforo sin Math.abs | Márgenes negativos ahora muestran "Crítico" | ✅ |
+| B2 | Redistribución period-aware | sep-2024=14, sep-2025=216, abr-2026=351 | ✅ |
+| B3 | Coste fondeo Depósito | Margen Dep: 35.9% (era -302.9%) | ✅ |
+| B4 | Verificación criterios | 23/30 en rango, 1 gestor <0% (María G25) | ⚠️ |
+
+**Distribución márgenes netos (con redistribución, abr-2026):**
+- Margen entidad: **47.6%** (objetivo 40-45%)
+- Media gestores: **44.3%** | P10: 32.6% | P50: 45.7% | P90: 59.1%
+- Min: **-0.6%** (G25 María) | Max: **62.2%** (G29 Mikel Aguirre)
+- Dispersión: **62.8pp** (objetivo ≤45pp, NO cumplido)
+- En rango 20-55%: **23/30** gestores
+- Bajo 10%: **2** (G25 María -0.6%, G8 Pablo 14.2%)
+
+**Gestores sin FRV (problema residual):**
+- G24 José Ramírez (Málaga): 3 Hip + 3 Dep + 0 FRV → margen neto 32.6%
+- G25 María González (Málaga): 3 Hip + 6 Dep + 0 FRV → margen neto **-0.6%**
+- Causa: ingresos por Depósito (€311/cto) vs FRV (€2,553/cto) → redistribución (€767/cto)
+  consume todo el margen de carteras pesadas en Depósitos sin FRV para compensar.
+
+**Propuesta para S82:**
+1. Reasignar 2-3 Depósitos de G25 como FRV → margen estimado ~25-30%
+2. Reasignar 1 Depósito de G24 como FRV → margen estimado ~40%
+3. Considerar si G8 Pablo Moreno (0 Hip, 6 Dep, 3 FRV, margen 14.2%) necesita rebalanceo
+
+ARCHIVOS TOCADOS: `DrillDownView.jsx`, `basic_queries.py`, `gestor_queries.py`,
+`comparative_queries.py`, `BM_CONTABILIDAD_CDG.db`.

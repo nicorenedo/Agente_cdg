@@ -94,8 +94,8 @@ Ingresos/gastos/ROE = **mes seleccionado (MoM)**. Contratos = **acumulados hist�
 
 ## 6. REGLAS DE NEGOCIO
 
-**Redistribución gastos centrales:** `Gasto_i = Gasto_Central × (Contratos_i / 220)`
-**Semáforo:** 🟢 <5% | 🟡 5-15% | 🔴 >15%
+**Redistribución gastos centrales:** `Gasto_i = Gasto_Central × (Contratos_i / Total_Finalistas_Periodo)` — denominador dinámico por período (S81-B2).
+**Semáforo:** 🟢 ≥20% margen | 🟡 10-20% | 🔴 <0% o beneficio<0 (S81-B1).
 **Modelo Fábrica:** Gestora 85% (`760025`) / Banco 15% (`760024`).
 
 **Filtros de gastos:**
@@ -137,7 +137,7 @@ GET  /basic/productos/by-gestor/{id}       GET  /analytics/fabrica
 
 - **Ingresos:** `SUM(IMPORTE) WHERE CUENTA_ID LIKE '76%'`
 - **Gastos directos:** `ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL`
-- **Gastos redistribuidos:** `gastos_centrales × (n_contratos_gestor / 220)`
+- **Gastos redistribuidos:** `gastos_centrales × (n_contratos_gestor / total_finalistas_periodo)`
 - **Gastos centrales:** `ABS(SUM(IMPORTE)) WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')`
 
 ---
@@ -167,4 +167,4 @@ cd frontend && npm start
 # frontend/.env: REACT_APP_API_BASE_URL=http://localhost:8000
 ```
 
-**Fase actual:** S61 completada. Sistema con 8 meses de datos (sep-2025 a abr-2026). Ver SESSIONS.md.
+**Fase actual:** S81 completada. Depósito recalibrado (margen 35%), semáforo y redistribución corregidos. Margen entidad 47.6%. Ver SESSIONS.md.
