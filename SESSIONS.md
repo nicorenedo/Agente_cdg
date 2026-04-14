@@ -1197,3 +1197,54 @@ Backup: `BM_CONTABILIDAD_CDG_pre_s81.db`.
 
 ARCHIVOS TOCADOS: `DrillDownView.jsx`, `basic_queries.py`, `gestor_queries.py`,
 `comparative_queries.py`, `BM_CONTABILIDAD_CDG.db`.
+
+---
+
+## ✅ S82 — Diagnóstico de lógica económica por producto (2026-04-14)
+
+**Objetivo:** Auditar si los márgenes por producto son económicamente coherentes
+con la banca española. Sesión SOLO LECTURA.
+
+### Hallazgos por producto
+
+**Hipoteca (margen directo 89.0%, benchmark 25-35%):**
+- Intereses 760001 = €1,481/cto/mes → tipo implícito 11.85% (s/€150k), muy alto
+- Comisiones 760002-4 = €995/cto/mes (en realidad serían puntuales, no mensuales)
+- El margen alto es correcto SI 660001 (fondeo) se considera parte del coste Hip
+- Con 100% fondeo imputado a Hip: margen = **29.1%** (benchmark perfecto)
+- Sin fondeo imputado: 89% = "P&L antes de cost allocation" (válido en CDG)
+
+**Depósito (margen directo 35.9%, benchmark -10% a +5%):**
+- Post-S81: margen alto pero Depósito es solo 6% del ingreso total
+- Impacto en entidad: marginal (~2pp si se corrigiera a ~0%)
+- Para la demo: aceptable como "producto de margen estrecho"
+
+**FRV (margen directo 97.5%, benchmark 65-85%):**
+- Fábrica gestora (760025) = 68% del ingreso. Split 85/15 correcto
+- AUM implícito = €3M/cto a 1% comisión (irreal para retail)
+- Gastos directos casi nulos (solo 620001 al 30% de contratos)
+- 97.5% es excesivo — debería ser ~75-80% con gastos de custodio/marketing
+
+**Cuenta 660001 (fondeo):**
+- 100% gasto central (CONTRATO_ID IS NULL), ~€178k/mes
+- 66.1% del total de gastos centrales (€269k)
+- Escala linealmente con cartera: €11k (sep-2024) → €178k (abr-2026)
+- En banca real se imputa a Hipoteca; aquí se redistribuye igualitariamente
+
+### Conclusión sobre margen entidad (47.6%)
+
+Redistribuir 660001 a Hip NO cambia el margen entidad — solo reasigna costes entre
+productos/gestores. Para bajar a ~37%: necesario añadir ~€67k/mes en gastos.
+
+### Plan propuesto (3 opciones)
+
+| Opción | Qué | Margen entidad | Esfuerzo | Riesgo |
+|---|---|---|---|---|
+| **C (mínima)** | Rebalancear mix G25 + documentar | 47.6% (sin cambio) | Bajo | Bajo |
+| **A (cosmético)** | Imputar 660001 a Hip en redistribución | 47.6% (sin cambio) | Medio | Medio |
+| **B (estructural)** | Gastos FRV + fondeo Hip + Dep | ~35-40% | Alto | Alto |
+
+**Recomendación:** C inmediata (G25) + A si cliente pregunta por márgenes de producto.
+Dejar margen entidad ~47% y documentar como "P&L antes de cost allocation completa".
+
+ARCHIVOS NO TOCADOS (sesión de solo lectura).
