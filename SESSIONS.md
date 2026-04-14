@@ -1345,3 +1345,52 @@ ARCHIVOS TOCADOS: `basic_queries.py`, `gestor_queries.py`, `comparative_queries.
 
 ARCHIVOS TOCADOS: `BM_CONTABILIDAD_CDG.db`, `incentive_queries.py`,
 `cdg_agent.py`, `cdg_prompts.py`, `gestor_prompts.py`, `system_prompts.py`.
+
+---
+
+## ✅ S85 — Diagnóstico módulo Proyecciones (2026-04-14)
+
+**Objetivo:** Diagnosticar por qué Prophet genera +26% en mayo (indefendible).
+Sesión SOLO LECTURA.
+
+### Causa raíz: cap demasiado alto + yearly_seasonality espuria
+
+- `cap = max(y) × 1.25 = €825k` → 28% por encima del último valor (€644k)
+- Prophet con `growth=logistic` sube hacia ese techo agresivamente
+- `yearly_seasonality=True` con 20 meses genera oscilaciones artificiales
+- `changepoint_prior_scale` (0.001 a 0.05): **sin efecto** — el cap domina
+
+### Configuración óptima identificada
+
+`yearly_seasonality=False` + `cap_factor=1.10` + `changepoint_prior_scale=0.005`:
+- may: €700k (+8.6%) vs actual €811k (+25.9%)
+- 6m estable: +0.3-0.8% MoM post-mayo
+- Total 6m: +11.5% (defensible como maduración de cartera)
+
+### 13 configuraciones probadas
+
+| Config | Salto may | 6m total |
+|---|---|---|
+| ACTUAL (cp=0.05, cap=1.25, yearly=T) | **+25.9%** | +26.5% |
+| cap=1.05 | +11.5% | +11.4% (con oscilaciones) |
+| **no_yearly + cap=1.10 + cp=0.005** | **+8.6%** | **+11.5%** (estable) |
+
+### WhatIfSimulator: 4 shocks OK
+
+- `tipos_interes`: efecto dual correcto (ingresos +, captación -)
+- `captacion_clientes`: gradual (25%→100% en 4 meses) OK
+- `reduccion_gastos`: no afecta ingresos (correcto)
+- `mix_productos`: impacto muy bajo (0.008 factor — debería ser ~0.05)
+
+### ForecastAgent: 5 tools OK, LLM elige correctamente
+
+- El problema es 100% de la calibración Prophet, no del agente ni de las tools
+- Tests: get_forecast_base ✅, apply_whatif ✅, compare_scenarios ✅
+
+### Plan S86 (no ejecutar)
+
+1. **prophet_engine.py**: `cap_factor=1.10`, `yearly_seasonality=False`, `cp=0.005`
+2. **scenario_builder.py**: actualizar narrativas con valores nuevos
+3. **whatif_simulator.py**: `mix_productos` factor 0.008→0.05
+
+ARCHIVOS NO TOCADOS (sesión de solo lectura).
