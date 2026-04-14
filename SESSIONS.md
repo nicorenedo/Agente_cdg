@@ -1479,3 +1479,45 @@ el mismo estado `escenarios`. Arquitectura es correcta (single source of truth).
 - ForecastAgent chat what-if ✅
 
 ARCHIVOS TOCADOS: `prophet_engine.py` (1 línea).
+
+---
+
+## ✅ S88 — Batería de preguntas cualitativas (2026-04-15)
+
+**Objetivo:** Evaluar calidad de respuestas con modelo `gpt-5.4` (Azure OpenAI, 21 tests).
+Sesión SOLO LECTURA.
+
+### Puntuación media
+
+| Agente | Score | Estado |
+|--------|-------|--------|
+| CDGAgent | **4.2/5** | ✅ |
+| GestorAgent | **4.3/5** | ✅ |
+| ForecastAgent | **4.7/5** | ✅ Excelente |
+| **SISTEMA** | **4.4/5** | ✅ Demo-ready |
+
+### Fortalezas
+
+- **Precisión datos**: los tres agentes citan cifras exactas (€36.847, 48.6%, 351 ctos)
+- **Routing correcto**: A8 → gestor por nombre, C2 → apply_whatif, C5 → compare_scenarios
+- **ForecastAgent**: excelente what-if (BCE -25pb → +2.4%, captación +15% → +28% acumulado)
+- **Tono empático**: B6 (gestor preocupado) respondido con empatía + datos concretos
+
+### Problemas detectados
+
+1. **A6 CDGAgent** — Pregunta "¿qué acción comercial priorizarías?" genera respuesta vacía
+   ("no puedo realizar diagnóstico preciso"). El agente no llama ninguna herramienta.
+2. **B3 GestorAgent** — Margen neto 103.45% (imposible). Bug en query MoM comparativa —
+   probable división errónea (beneficio/gastos en lugar de beneficio/ingresos).
+3. **C4 ForecastAgent** — "Perder 10% ingresos FRV" mapeado a captación general en lugar
+   de shock específico por producto.
+
+### Fixes propuestos S89
+
+| Fix | Agente | Descripción |
+|-----|--------|-------------|
+| S89-F1 | CDGAgent | Case "acción comercial" → ejecutar ranking margen + kpis productos antes de responder |
+| S89-F2 | GestorAgent | Investigar y corregir bug margen 103% en comparativa MoM |
+| S89-F3 | ForecastAgent | Mejorar prompt para mapear "perder X% ingresos" a shock correcto |
+
+ARCHIVOS NO TOCADOS (sesión de evaluación).
