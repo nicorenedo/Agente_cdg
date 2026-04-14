@@ -1394,3 +1394,47 @@ Sesión SOLO LECTURA.
 3. **whatif_simulator.py**: `mix_productos` factor 0.008→0.05
 
 ARCHIVOS NO TOCADOS (sesión de solo lectura).
+
+---
+
+## ✅ S86 — Recalibración motor de proyecciones (2026-04-15)
+
+**Objetivo:** Aplicar los 3 cambios en Prophet identificados en S85.
+
+**F1 — ProphetEngine recalibrado** (commit `643b5df`):
+- `cap_factor`: 1.25 → **1.10** (cap €825k → €726k)
+- `yearly_seasonality`: True → **False** (20 meses insuficientes)
+- `changepoint_prior_scale`: 0.05 → **0.005** (conservador)
+- Resultado: may €811k (+26%) → **€700k (+8.6%)**, MoM estable +0.3-0.8%
+
+**F2 — mix_productos factor**: **No cambiado.** Análisis confirmó que factor 0.008
+es correcto — diferencia Hip vs FRV es solo €77/cto/mes, impacto inherentemente
+pequeño. El factor genera €516/mes por +10pp vs €924 teórico (misma orden magnitud).
+
+**F3 — Narrativas actualizadas** (commit `9758a42`):
+- `scenario_builder.py`: "margen 98%" → "97%" en acciones optimista.
+- `whatif_simulator.py`: "margen 98%" → "97%" en recomendaciones.
+- `forecast_agent.py`: sin referencias obsoletas — sin cambio.
+
+### Proyecciones post-S86
+
+| Mes | Pesimista | Base | Optimista | MoM Base |
+|---|---|---|---|---|
+| may-2026 | €632,832 | **€700,070** | €733,465 | +8.6% |
+| jun-2026 | €640,997 | €705,953 | €733,465 | +0.8% |
+| jul-2026 | €644,671 | €710,410 | €733,465 | +0.6% |
+| ago-2026 | €647,070 | €714,006 | €733,465 | +0.5% |
+| sep-2026 | €653,919 | €716,793 | €733,465 | +0.4% |
+| oct-2026 | €650,886 | €718,889 | €733,465 | +0.3% |
+
+### Tests ForecastAgent: 5/5 OK
+
+- Proyección base ✅ (€711k media, no €795k)
+- What-if tipos +50pb ✅
+- What-if captación +20% ✅
+- Comparar escenarios ✅
+- Recomendaciones ✅
+
+**Veredicto:** Proyecciones defendibles en demo.
+
+ARCHIVOS TOCADOS: `prophet_engine.py`, `scenario_builder.py`, `whatif_simulator.py`.
