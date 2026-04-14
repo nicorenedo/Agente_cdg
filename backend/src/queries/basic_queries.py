@@ -597,16 +597,32 @@ class BasicQueries:
             result = self.query_executor.execute_query(query, fetch_type="one")
         return float(result["total"]) if result else 0.0
 
-    def _get_total_contratos_finalistas(self) -> int:
-        """Total de contratos en centros finalistas (1-5). Denominador de redistribucion."""
-        query = """
-        SELECT COUNT(mc.CONTRATO_ID) AS total
-        FROM MAESTRO_CONTRATOS mc
-        JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
-        JOIN MAESTRO_CENTROS  c ON g.CENTRO     = c.CENTRO_ID
-        WHERE c.IND_CENTRO_FINALISTA = 1
-        """
-        result = self.query_executor.execute_query(query, fetch_type="one")
+    def _get_total_contratos_finalistas(self, periodo: str = None) -> int:
+        """Total de contratos activos en centros finalistas (1-5). Denominador de redistribucion.
+        Si periodo='2026-04', cuenta contratos con FECHA_ALTA <= ultimo dia del periodo."""
+        if periodo:
+            import calendar
+            year, month = int(periodo[:4]), int(periodo[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_limite = f"{periodo}-{last_day:02d}"
+            query = """
+            SELECT COUNT(mc.CONTRATO_ID) AS total
+            FROM MAESTRO_CONTRATOS mc
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            JOIN MAESTRO_CENTROS  c ON g.CENTRO     = c.CENTRO_ID
+            WHERE c.IND_CENTRO_FINALISTA = 1
+              AND mc.FECHA_ALTA <= ?
+            """
+            result = self.query_executor.execute_query(query, (fecha_limite,), fetch_type="one")
+        else:
+            query = """
+            SELECT COUNT(mc.CONTRATO_ID) AS total
+            FROM MAESTRO_CONTRATOS mc
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            JOIN MAESTRO_CENTROS  c ON g.CENTRO     = c.CENTRO_ID
+            WHERE c.IND_CENTRO_FINALISTA = 1
+            """
+            result = self.query_executor.execute_query(query, fetch_type="one")
         return int(result["total"]) if result and result["total"] else 1
 
     # =====================================
@@ -652,7 +668,7 @@ class BasicQueries:
             return {}
 
         gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
         n_contratos      = result["total_contratos"]
         redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
@@ -700,7 +716,7 @@ class BasicQueries:
             return []
 
         gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
 
         for row in rows:
             redistribuidos = round(gastos_centrales * row["num_contratos"] / total_finalistas, 2)
@@ -749,7 +765,7 @@ class BasicQueries:
 
         if result and result.get("num_contratos"):
             gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-            total_finalistas = self._get_total_contratos_finalistas()
+            total_finalistas = self._get_total_contratos_finalistas(periodo)
             n_contratos      = result["num_contratos"]
             redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
             ingresos         = result["ingresos_total"]
@@ -807,7 +823,7 @@ class BasicQueries:
             return []
 
         gastos_centrales  = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas  = self._get_total_contratos_finalistas()
+        total_finalistas  = self._get_total_contratos_finalistas(periodo)
         redistribuido_uno = round(gastos_centrales / total_finalistas, 2)
 
         for row in rows:
@@ -860,7 +876,7 @@ class BasicQueries:
             return {}
 
         gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
         redistribuidos   = round(gastos_centrales / total_finalistas, 2)
         ingresos         = result["ingresos_total"]
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
@@ -914,7 +930,7 @@ class BasicQueries:
             return {}
 
         gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
         n_contratos      = result["total_contratos"]
         redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
@@ -959,7 +975,7 @@ class BasicQueries:
             return []
 
         gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
 
         for row in rows:
             redistribuidos = round(gastos_centrales * row["num_contratos"] / total_finalistas, 2)
@@ -1009,7 +1025,7 @@ class BasicQueries:
             return {}
 
         gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
         n_contratos      = result["total_contratos"]
         redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)

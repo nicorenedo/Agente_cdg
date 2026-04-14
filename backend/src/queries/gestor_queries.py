@@ -87,15 +87,30 @@ class GestorQueries:
             )
         return float(r["t"]) if r else 0.0
 
-    def _get_total_contratos_finalistas(self) -> int:
-        """Denominador para redistribucion: total contratos en centros finalistas (1-5)."""
-        r = execute_query(
-            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
-            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
-            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
-            " WHERE c.IND_CENTRO_FINALISTA=1",
-            fetch_type="one"
-        )
+    def _get_total_contratos_finalistas(self, periodo: str = None) -> int:
+        """Denominador para redistribucion: total contratos activos en centros finalistas (1-5).
+        Si periodo='2026-04', cuenta contratos con FECHA_ALTA <= ultimo dia del periodo."""
+        if periodo:
+            import calendar
+            year, month = int(periodo[:4]), int(periodo[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_limite = f"{periodo}-{last_day:02d}"
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1 AND mc.FECHA_ALTA <= ?",
+                (fecha_limite,),
+                fetch_type="one"
+            )
+        else:
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1",
+                fetch_type="one"
+            )
         return int(r["t"]) if r and r["t"] else 1
 
     def get_gestor_performance_enhanced(self, gestor_id: str, periodo: str = None) -> QueryResult:
@@ -130,7 +145,7 @@ class GestorQueries:
 
         start_time = datetime.now()
         gastos_centrales  = self._get_gastos_centrales(periodo)
-        total_finalistas  = self._get_total_contratos_finalistas()
+        total_finalistas  = self._get_total_contratos_finalistas(periodo)
         raw = execute_query(query, (gestor_id,))
 
         if not raw:
@@ -537,7 +552,7 @@ class GestorQueries:
 
         start = datetime.now()
         gastos_centrales = self._get_gastos_centrales(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
         raw = execute_query(query, (periodo, gestor_id))
         r = raw[0] if raw else {'ingresos': 0, 'gastos_directos': 0, 'n_contratos': 0}
 
@@ -655,7 +670,7 @@ class GestorQueries:
 
         start = datetime.now()
         gastos_centrales = self._get_gastos_centrales(periodo)
-        total_finalistas = self._get_total_contratos_finalistas()
+        total_finalistas = self._get_total_contratos_finalistas(periodo)
         raw = execute_query(query, (periodo, gestor_id))
         r = raw[0] if raw else {'ingresos': 0, 'gastos_directos': 0, 'patrimonio_total': 0, 'n_contratos': 0}
 
