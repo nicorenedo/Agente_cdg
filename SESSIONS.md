@@ -1521,3 +1521,48 @@ Sesión SOLO LECTURA.
 | S89-F3 | ForecastAgent | Mejorar prompt para mapear "perder X% ingresos" a shock correcto |
 
 ARCHIVOS NO TOCADOS (sesión de evaluación).
+
+---
+
+## ✅ S89 — Tres fixes post-evaluación S88 (2026-04-15)
+
+**Objetivo:** Corregir los 3 problemas detectados en S88.
+
+**F1 — GestorAgent margen 103% corregido** (commit `635ae37`):
+- Causa: `compare_gestor_periodos()` usaba `PRECIO_MANTENIMIENTO` de `PRECIO_POR_PRODUCTO_STD`
+  como proxy de gastos (valor negativo ≈ -1,271€). `calculate_margen_neto(39626, -1271)`
+  producía beneficio=ingresos-(-1271)=40897 → margen=103.21% (imposible).
+- Fix: reemplazada la query para usar gastos directos reales de MOVIMIENTOS_CONTRATOS
+  (cuentas 62/64/68/69) + `abs(gastos)` en la llamada a `calculate_margen_neto`.
+- Resultado: margen MoM = 92.7%→91.8% (correcto), sin valores >100%.
+
+**F2 — CDGAgent preguntas estratégicas con datos** (commit `6d4ea67`):
+- Causa: keywords de "priorizar", "acción comercial", "qué hacer" no estaban en la lista
+  de forzado a CDG_AGENT en `chat_agent.py`. La pregunta caía en CONTEXTUAL_RESPONSE.
+- Fix: añadidos 8 keywords estratégicos a `_cdg_force_keywords`. En `cdg_agent.py`,
+  ampliadas las COMBINACIONES FRECUENTES y la REGLA ABSOLUTA para incluir explícitamente
+  preguntas de recomendación/estrategia.
+- Resultado: A6 ahora devuelve cifras reales (97.54%, 88.95%) + recomendación concreta.
+
+**F3 — ForecastAgent mapeo de shocks por producto** (commit `045522d`):
+- Causa: "perder 10% ingresos por FRV" se mapeaba solo a `captacion_clientes=-10`
+  sin explicación del mapeo.
+- Fix: añadida sección MAPEO DE SHOCKS al prompt del ForecastAgent con guía explícita:
+  FRV → `captacion=-X + mix=-(X/2)`; crisis general → `captacion=-(X*1.5)`. El agente
+  ahora explica el mapeo cuando no hay parámetro exacto.
+- Resultado: C4 devuelve cifras + explicación del modelo de simulación.
+
+### Re-test resultados
+
+| Fix | S88 (antes) | S89 (después) | Estado |
+|-----|-------------|---------------|--------|
+| F1 | Margen 103.21% → 103.45% (bug) | -7.01% MoM ingresos, sin >100% | ✅ |
+| F2 | Respuesta vacía sin herramientas | FRV 97.54%, recomendación concreta | ✅ |
+| F3 | Solo captación general -10% | captación + mix + explicación mapeo | ✅ |
+
+**Score estimado post-S89:**
+- CDGAgent: ~4.6/5 (era 4.2)
+- GestorAgent: ~4.7/5 (era 4.3)
+- ForecastAgent: ~4.8/5 (era 4.7)
+
+ARCHIVOS TOCADOS: `gestor_queries.py`, `chat_agent.py`, `cdg_agent.py`, `forecast_agent.py`.
