@@ -244,9 +244,9 @@ const DrillDownView = ({
             const gastos = Math.round(Math.abs(metrics.gastos || 0));
             const beneficio = Math.round(metrics.beneficio || (ingresos - gastos));
             const margen_pct = Math.round((metrics.margen_pct || 0) * 100) / 100;
-            const alerta = Math.abs(margen_pct) >= 15 ? 'success' : 
-                          Math.abs(margen_pct) >= 10 ? 'warning' : 
-                          beneficio < 0 ? 'error' : 'warning';
+            const alerta = margen_pct >= 20 ? 'success' :
+                          margen_pct >= 10 ? 'warning' :
+                          margen_pct < 0 || beneficio < 0 ? 'error' : 'warning';
 
             return {
               ...item,
@@ -324,12 +324,12 @@ const DrillDownView = ({
         
         // ROE y score
         const roe = metrics.roe || 0;
-        const score = Math.min(Math.round((roe * 0.4) + (Math.abs(margen_pct) * 0.6)), 100);
-        
-        // ✅ ESTADO DE ALERTA MEJORADO
-        const alerta = Math.abs(margen_pct) >= 15 ? 'success' : 
-                      Math.abs(margen_pct) >= 10 ? 'warning' : 
-                      beneficio < 0 ? 'error' : 'warning';
+        const score = Math.min(Math.round((roe * 0.4) + (Math.max(margen_pct, 0) * 0.6)), 100);
+
+        // ✅ ESTADO DE ALERTA — usa margen_pct directo (sin Math.abs)
+        const alerta = margen_pct >= 20 ? 'success' :
+                      margen_pct >= 10 ? 'warning' :
+                      margen_pct < 0 || beneficio < 0 ? 'error' : 'warning';
         
         return {
           key: id,
@@ -599,7 +599,7 @@ const DrillDownView = ({
             }}
           />
           <div style={{ fontSize: 10, color: '#666' }}>
-            Margen: {`${Math.abs(record.margen_pct || 0).toFixed(1)}%`}
+            Margen: {`${(record.margen_pct || 0).toFixed(1)}%`}
           </div>
         </div>
       ),
@@ -773,7 +773,7 @@ const DrillDownView = ({
     // ✅ MÉTRICAS AGREGADAS mejoradas
     const totalIngresos = data.reduce((acc, item) => acc + (item.ingresos || 0), 0);
     const totalBeneficio = data.reduce((acc, item) => acc + (item.beneficio || 0), 0);
-    const avgMargen = data.length > 0 ? data.reduce((acc, item) => acc + Math.abs(item.margen_pct || 0), 0) / data.length : 0;
+    const avgMargen = data.length > 0 ? data.reduce((acc, item) => acc + (item.margen_pct || 0), 0) / data.length : 0;
     const totalBonus = data.reduce((acc, item) => acc + (item.bonus_total || 0), 0);
 
     return (
