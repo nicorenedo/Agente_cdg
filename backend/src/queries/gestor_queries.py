@@ -1807,40 +1807,25 @@ class GestorQueries:
         Comparativa de un gestor entre dos períodos cualesquiera.
         Generalización de compare_gestor_septiembre_octubre().
         """
+        # S89-F1: use real gastos from MOVIMIENTOS (not PRECIO_STD proxy)
         query = """
-            WITH seg AS (
-                SELECT SEGMENTO_ID FROM MAESTRO_GESTORES WHERE GESTOR_ID = ?
-            ),
-            datos_mensuales AS (
-                SELECT
-                    strftime('%Y-%m', mov.FECHA) as periodo,
-                    COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
-                    COUNT(DISTINCT mc.CONTRATO_ID) as contratos_activos
-                FROM MAESTRO_GESTORES g
-                JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
-                LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
-                WHERE g.GESTOR_ID = ?
-                  AND strftime('%Y-%m', mov.FECHA) IN (?, ?)
-                GROUP BY strftime('%Y-%m', mov.FECHA)
-            ),
-            gastos_fijos AS (
-                SELECT
-                    COALESCE(AVG(pp.PRECIO_MANTENIMIENTO), 0) as gastos
-                FROM MAESTRO_CONTRATOS mc
-                JOIN seg s
-                LEFT JOIN PRECIO_POR_PRODUCTO_STD pp
-                    ON pp.PRODUCTO_ID = mc.PRODUCTO_ID
-                    AND pp.SEGMENTO_ID = s.SEGMENTO_ID
-                WHERE mc.GESTOR_ID = ?
-            )
-            SELECT dm.*, gf.gastos
-            FROM datos_mensuales dm
-            CROSS JOIN gastos_fijos gf
-            ORDER BY dm.periodo
+            SELECT
+                strftime('%Y-%m', mov.FECHA) as periodo,
+                COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
+                COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
+                                  THEN mov.IMPORTE ELSE 0 END), 0) as gastos,
+                COUNT(DISTINCT mc.CONTRATO_ID) as contratos_activos
+            FROM MAESTRO_GESTORES g
+            JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
+            LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
+            WHERE g.GESTOR_ID = ?
+              AND strftime('%Y-%m', mov.FECHA) IN (?, ?)
+            GROUP BY strftime('%Y-%m', mov.FECHA)
+            ORDER BY periodo
         """
 
         start = datetime.now()
-        raw = execute_query(query, (gestor_id, gestor_id, periodo_anterior, periodo_actual, gestor_id))
+        raw = execute_query(query, (gestor_id, periodo_anterior, periodo_actual))
 
         if len(raw) < 2:
             return QueryResult(
@@ -1859,8 +1844,9 @@ class GestorQueries:
                 execution_time=0, row_count=0, query_sql=query
             )
 
-        margen_ant = self.kpi_calc.calculate_margen_neto(ant_data['ingresos'], ant_data['gastos'])
-        margen_act = self.kpi_calc.calculate_margen_neto(act_data['ingresos'], act_data['gastos'])
+        # gastos from MOVIMIENTOS are negative — pass abs() for correct margin
+        margen_ant = self.kpi_calc.calculate_margen_neto(ant_data['ingresos'], abs(ant_data['gastos']))
+        margen_act = self.kpi_calc.calculate_margen_neto(act_data['ingresos'], abs(act_data['gastos']))
 
         var_ingresos = ((act_data['ingresos'] - ant_data['ingresos']) / ant_data['ingresos'] * 100) if ant_data['ingresos'] > 0 else 0
         var_contratos = act_data['contratos_activos'] - ant_data['contratos_activos']
