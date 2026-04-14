@@ -1438,3 +1438,44 @@ pequeño. El factor genera €516/mes por +10pp vs €924 teórico (misma orden 
 **Veredicto:** Proyecciones defendibles en demo.
 
 ARCHIVOS TOCADOS: `prophet_engine.py`, `scenario_builder.py`, `whatif_simulator.py`.
+
+---
+
+## ✅ S87 — Fix escenario optimista plano + coherencia (2026-04-15)
+
+**Objetivo:** Corregir el escenario optimista que mostraba €733k plano en todos los meses.
+
+**B1 — Optimista plano → varía por mes** (commit `6914a56`):
+- Causa: `prophet_engine.py:102` clipeaba `yhat_upper` al cap (€726k) → todos los meses
+  = €726k → +1% macro = €733k idéntico en cada mes.
+- Fix: eliminado `upper=self._cap` del clip de `yhat_upper`. Prophet genera yhat_upper
+  por encima del cap con variación natural (€758k → €773k sin clip).
+- Antes: optimista = €733k × 6 meses (plano)
+- Después: optimista = €762k → €776k (creciente, varía por mes)
+
+**B2 — Frontend "98%"**: No hay referencia "98%" en frontend — el texto venía del backend
+(ScenarioBuilder/WhatIfSimulator), ya corregido en S86-F3.
+
+**B3 — Coherencia gráfico-tabla-cards**: Verificado que los 3 componentes consumen
+el mismo estado `escenarios`. Arquitectura es correcta (single source of truth).
+
+### Escenarios post-S87
+
+| Mes | Pesimista | Base | Optimista |
+|---|---|---|---|
+| may-2026 | €632k | €700k | **€762k** |
+| jun-2026 | €638k | €706k | **€767k** |
+| jul-2026 | €641k | €710k | **€776k** |
+| ago-2026 | €644k | €714k | **€776k** |
+| sep-2026 | €646k | €717k | **€776k** |
+| oct-2026 | €650k | €719k | **€776k** |
+
+### Tests: 5/5 OK
+
+- Entidad base ✅ (3 escenarios varían)
+- Gestor 1 ✅ (3 escenarios varían)
+- What-if tipos +50pb ✅
+- ForecastAgent chat base ✅
+- ForecastAgent chat what-if ✅
+
+ARCHIVOS TOCADOS: `prophet_engine.py` (1 línea).
