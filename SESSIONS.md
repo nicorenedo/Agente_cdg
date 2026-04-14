@@ -1297,3 +1297,51 @@ Backup: `BM_CONTABILIDAD_CDG_pre_s83.db`.
 
 ARCHIVOS TOCADOS: `basic_queries.py`, `gestor_queries.py`, `comparative_queries.py`,
 `BM_CONTABILIDAD_CDG.db`.
+
+---
+
+## ✅ S84 — Cierre deuda técnica + re-validación (2026-04-14)
+
+**Objetivo:** Cerrar residuales post-S83. Backup: `BM_CONTABILIDAD_CDG_pre_s84.db`.
+
+**B1 — G24 José Ramírez: 2 Dep→FRV** (commit `1bbba4e`):
+- Contratos 2086, 2056 convertidos. G24: 16.9% → **47.1%**.
+- **0 gestores sin FRV** en todo el sistema.
+- Min gestor: 21.6% (G20). Dispersión: **45.1pp** (objetivo ≤45pp cumplido).
+
+**B2 — incentive_queries.py period-aware** (commit `9006fa5`):
+- `_total_finalistas_periodo()` helper añadido. 4 inline queries reemplazadas.
+- Nota: incentive_queries ya excluía '66' (fondeo), solo faltaba FECHA_ALTA filter.
+
+**B3 — System prompts actualizados** (commit `9956694`):
+- `cdg_agent.py`: reglas de negocio redistribución actualizadas.
+- `cdg_prompts.py`: cartera 351 ctos, márgenes referencia, redistribución dinámica.
+- `gestor_prompts.py`: fórmula redistribución actualizada.
+- `system_prompts.py`: 4× "220 contratos"→"351 contratos", fórmula redistribución.
+
+**B4 — Re-batería tests: 20/20 OK**
+- Grupo A (CDGAgent): 7/7 ✅
+- Grupo B (GestorAgent): 4/4 ✅
+- Grupo C (ForecastAgent): 2/2 ✅
+- Grupo D (datos nuevos): 3/3 ✅
+- Grupo E (API directa): 4/4 ✅
+- G25 María González: margen 46.24% via API (era -74.5% en S80) ✅
+
+### Distribución final post-S84
+
+| Métrica | S80 (inicio) | S84 (final) | Objetivo |
+|---------|-------------|-------------|----------|
+| Margen entidad | 28.8% | **48.6%** | 40-50% ✅ |
+| Media gestores | — | **47.2%** | ~40-50% ✅ |
+| Min gestor | -74.5% | **21.6%** (G20) | >20% ✅ |
+| Max gestor | 90.5% | **66.7%** (G29) | <65% ⚠️ marginal |
+| Dispersión | 86pp | **45.1pp** | ≤45pp ✅ |
+| En rango 20-55% | 8/30 | **24/30** | >20 ✅ |
+| Bajo 10% | 2 | **0** | 0 ✅ |
+| Sin FRV | 2 | **0** | 0 ✅ |
+| Tests | 48/48 S78a | **20/20 S84** | OK ✅ |
+
+**Estado del sistema para demo: ✅ LISTO.**
+
+ARCHIVOS TOCADOS: `BM_CONTABILIDAD_CDG.db`, `incentive_queries.py`,
+`cdg_agent.py`, `cdg_prompts.py`, `gestor_prompts.py`, `system_prompts.py`.

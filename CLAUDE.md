@@ -167,4 +167,4 @@ cd frontend && npm start
 # frontend/.env: REACT_APP_API_BASE_URL=http://localhost:8000
 ```
 
-**Fase actual:** S81 completada. Depósito recalibrado (margen 35%), semáforo y redistribución corregidos. Margen entidad 47.6%. Ver SESSIONS.md.
+**Fase actual:** S84 completada. Calidad de datos cerrada (S80-S84). Margen entidad 48.6%, dispersión 45.1pp, 0 gestores negativos, 20/20 tests OK. Ver SESSIONS.md.
