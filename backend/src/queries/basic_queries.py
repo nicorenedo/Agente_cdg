@@ -625,6 +625,86 @@ class BasicQueries:
             result = self.query_executor.execute_query(query, fetch_type="one")
         return int(result["total"]) if result and result["total"] else 1
 
+    def _get_gastos_fondeo_periodo(self, periodo: Optional[str]) -> float:
+        """Gastos de fondeo (660001) del período. Retorna valor negativo."""
+        if periodo:
+            query = """
+            SELECT COALESCE(SUM(IMPORTE), 0) AS total
+            FROM MOVIMIENTOS_CONTRATOS
+            WHERE CUENTA_ID = '660001' AND CONTRATO_ID IS NULL
+              AND strftime('%Y-%m', FECHA) = ?
+            """
+            result = self.query_executor.execute_query(query, (periodo,), fetch_type="one")
+        else:
+            query = """
+            SELECT COALESCE(SUM(IMPORTE), 0) AS total
+            FROM MOVIMIENTOS_CONTRATOS
+            WHERE CUENTA_ID = '660001' AND CONTRATO_ID IS NULL
+            """
+            result = self.query_executor.execute_query(query, fetch_type="one")
+        return float(result["total"]) if result else 0.0
+
+    def _get_gastos_otros_centrales_periodo(self, periodo: Optional[str]) -> float:
+        """Gastos centrales EXCEPTO fondeo (660001). Retorna valor negativo."""
+        if periodo:
+            query = """
+            SELECT COALESCE(SUM(IMPORTE), 0) AS total
+            FROM MOVIMIENTOS_CONTRATOS
+            WHERE CUENTA_ID != '660001' AND CONTRATO_ID IS NULL
+              AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
+              AND strftime('%Y-%m', FECHA) = ?
+            """
+            result = self.query_executor.execute_query(query, (periodo,), fetch_type="one")
+        else:
+            query = """
+            SELECT COALESCE(SUM(IMPORTE), 0) AS total
+            FROM MOVIMIENTOS_CONTRATOS
+            WHERE CUENTA_ID != '660001' AND CONTRATO_ID IS NULL
+              AND SUBSTR(CUENTA_ID, 1, 2) IN ('62','64','66','68','69')
+            """
+            result = self.query_executor.execute_query(query, fetch_type="one")
+        return float(result["total"]) if result else 0.0
+
+    def _get_total_hipotecas_finalistas(self, periodo: str = None) -> int:
+        """Total contratos Hipotecarios activos en centros finalistas."""
+        if periodo:
+            import calendar
+            year, month = int(periodo[:4]), int(periodo[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_limite = f"{periodo}-{last_day:02d}"
+            query = """
+            SELECT COUNT(mc.CONTRATO_ID) AS total
+            FROM MAESTRO_CONTRATOS mc
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            JOIN MAESTRO_CENTROS  c ON g.CENTRO = c.CENTRO_ID
+            WHERE c.IND_CENTRO_FINALISTA = 1
+              AND mc.PRODUCTO_ID = '100100100100'
+              AND mc.FECHA_ALTA <= ?
+            """
+            result = self.query_executor.execute_query(query, (fecha_limite,), fetch_type="one")
+        else:
+            query = """
+            SELECT COUNT(mc.CONTRATO_ID) AS total
+            FROM MAESTRO_CONTRATOS mc
+            JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID = g.GESTOR_ID
+            JOIN MAESTRO_CENTROS  c ON g.CENTRO = c.CENTRO_ID
+            WHERE c.IND_CENTRO_FINALISTA = 1
+              AND mc.PRODUCTO_ID = '100100100100'
+            """
+            result = self.query_executor.execute_query(query, fetch_type="one")
+        return int(result["total"]) if result and result["total"] else 1
+
+    def _calcular_redistribucion(self, periodo, n_contratos, n_hipotecas=0):
+        """Calcula redistribución: fondeo solo a hipotecas, otros gastos a todos."""
+        gastos_fondeo = self._get_gastos_fondeo_periodo(periodo)
+        gastos_otros  = self._get_gastos_otros_centrales_periodo(periodo)
+        total_fin     = self._get_total_contratos_finalistas(periodo)
+        total_hip     = self._get_total_hipotecas_finalistas(periodo)
+
+        redist_fondeo = gastos_fondeo * n_hipotecas / total_hip if n_hipotecas > 0 else 0
+        redist_otros  = gastos_otros * n_contratos / total_fin
+        return round(redist_fondeo + redist_otros, 2)
+
     # =====================================
     # MÉTRICAS FINANCIERAS POR GESTOR
     # =====================================
@@ -644,6 +724,7 @@ class BasicQueries:
             g.GESTOR_ID, g.DESC_GESTOR, g.CENTRO, g.SEGMENTO_ID,
             c.DESC_CENTRO, s.DESC_SEGMENTO,
             COUNT(DISTINCT mc.CONTRATO_ID)    AS total_contratos,
+            COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) AS n_hipotecas,
             COUNT(DISTINCT mc.CLIENTE_ID)     AS total_clientes,
             COUNT(DISTINCT mc.PRODUCTO_ID)    AS productos_diferentes,
             COUNT(DISTINCT mov.MOVIMIENTO_ID) AS total_movimientos,
@@ -667,10 +748,9 @@ class BasicQueries:
         if not result:
             return {}
 
-        gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
         n_contratos      = result["total_contratos"]
-        redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
+        n_hipotecas      = result["n_hipotecas"] or 0
+        redistribuidos   = self._calcular_redistribucion(periodo, n_contratos, n_hipotecas)
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
         ingresos         = result["ingresos_total"]
         beneficio        = round(ingresos + gastos_totales, 2)
@@ -696,6 +776,7 @@ class BasicQueries:
         SELECT
             cl.CLIENTE_ID, cl.NOMBRE_CLIENTE,
             COUNT(DISTINCT mc.CONTRATO_ID) AS num_contratos,
+            COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) AS n_hipotecas,
             COUNT(DISTINCT mc.PRODUCTO_ID) AS productos_diferentes,
             MIN(mc.FECHA_ALTA) AS fecha_alta_primer_contrato,
             MAX(mc.FECHA_ALTA) AS fecha_alta_ultimo_contrato,
@@ -715,11 +796,8 @@ class BasicQueries:
         if not rows:
             return []
 
-        gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
-
         for row in rows:
-            redistribuidos = round(gastos_centrales * row["num_contratos"] / total_finalistas, 2)
+            redistribuidos = self._calcular_redistribucion(periodo, row["num_contratos"], row["n_hipotecas"] or 0)
             ingresos       = row["ingresos_cliente"]
             gastos_totales = round(row["gastos_directos"] + redistribuidos, 2)
             beneficio      = round(ingresos + gastos_totales, 2)
@@ -746,6 +824,7 @@ class BasicQueries:
             cl.CLIENTE_ID, cl.NOMBRE_CLIENTE, cl.GESTOR_ID,
             g.DESC_GESTOR,
             COUNT(DISTINCT mc.CONTRATO_ID) AS num_contratos,
+            COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) AS n_hipotecas,
             COUNT(DISTINCT mc.PRODUCTO_ID) AS productos_diferentes,
             MIN(mc.FECHA_ALTA) AS fecha_alta_primer_contrato,
             MAX(mc.FECHA_ALTA) AS fecha_alta_ultimo_contrato,
@@ -764,10 +843,9 @@ class BasicQueries:
         result = self.query_executor.execute_query(query, params, fetch_type="one")
 
         if result and result.get("num_contratos"):
-            gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-            total_finalistas = self._get_total_contratos_finalistas(periodo)
             n_contratos      = result["num_contratos"]
-            redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
+            n_hipotecas      = result["n_hipotecas"] or 0
+            redistribuidos   = self._calcular_redistribucion(periodo, n_contratos, n_hipotecas)
             ingresos         = result["ingresos_total"]
             gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
             beneficio        = round(ingresos + gastos_totales, 2)
@@ -822,11 +900,9 @@ class BasicQueries:
         if not rows:
             return []
 
-        gastos_centrales  = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas  = self._get_total_contratos_finalistas(periodo)
-        redistribuido_uno = round(gastos_centrales / total_finalistas, 2)
-
         for row in rows:
+            is_hip = 1 if row["PRODUCTO_ID"] == '100100100100' else 0
+            redistribuido_uno = self._calcular_redistribucion(periodo, 1, is_hip)
             ingresos       = row["ingresos_contrato"]
             gastos_totales = round(row["gastos_directos"] + redistribuido_uno, 2)
             beneficio      = round(ingresos + gastos_totales, 2)
@@ -875,9 +951,8 @@ class BasicQueries:
         if not result:
             return {}
 
-        gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
-        redistribuidos   = round(gastos_centrales / total_finalistas, 2)
+        is_hip = 1 if result["PRODUCTO_ID"] == '100100100100' else 0
+        redistribuidos   = self._calcular_redistribucion(periodo, 1, is_hip)
         ingresos         = result["ingresos_total"]
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
         beneficio        = round(ingresos + gastos_totales, 2)
@@ -913,6 +988,7 @@ class BasicQueries:
             COUNT(DISTINCT g.GESTOR_ID)    AS total_gestores,
             COUNT(DISTINCT mc.CLIENTE_ID)  AS total_clientes,
             {contratos_expr}               AS total_contratos,
+            COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) AS n_hipotecas,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
                               THEN mov.IMPORTE ELSE 0 END), 0) AS ingresos_total,
             COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID, 1, 2) IN ('62','64','68','69')
@@ -929,10 +1005,9 @@ class BasicQueries:
         if not result:
             return {}
 
-        gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
         n_contratos      = result["total_contratos"]
-        redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
+        n_hipotecas      = result["n_hipotecas"] or 0
+        redistribuidos   = self._calcular_redistribucion(periodo, n_contratos, n_hipotecas)
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
         ingresos         = result["ingresos_total"]
         beneficio        = round(ingresos + gastos_totales, 2)
@@ -956,6 +1031,7 @@ class BasicQueries:
         SELECT
             g.GESTOR_ID, g.DESC_GESTOR, g.SEGMENTO_ID, s.DESC_SEGMENTO,
             COUNT(DISTINCT mc.CONTRATO_ID) AS num_contratos,
+            COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) AS n_hipotecas,
             COUNT(DISTINCT mc.CLIENTE_ID)  AS num_clientes,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
                               THEN mov.IMPORTE ELSE 0 END), 0) AS ingresos_gestor,
@@ -974,11 +1050,8 @@ class BasicQueries:
         if not rows:
             return []
 
-        gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
-
         for row in rows:
-            redistribuidos = round(gastos_centrales * row["num_contratos"] / total_finalistas, 2)
+            redistribuidos = self._calcular_redistribucion(periodo, row["num_contratos"], row["n_hipotecas"] or 0)
             ingresos       = row["ingresos_gestor"]
             gastos_totales = round(row["gastos_directos"] + redistribuidos, 2)
             beneficio      = round(ingresos + gastos_totales, 2)
@@ -1007,6 +1080,7 @@ class BasicQueries:
             COUNT(DISTINCT g.GESTOR_ID)    AS total_gestores,
             COUNT(DISTINCT mc.CLIENTE_ID)  AS total_clientes,
             COUNT(DISTINCT mc.CONTRATO_ID) AS total_contratos,
+            COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) AS n_hipotecas,
             COUNT(DISTINCT mc.PRODUCTO_ID) AS productos_diferentes,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%'
                               THEN mov.IMPORTE ELSE 0 END), 0) AS ingresos_total,
@@ -1024,10 +1098,9 @@ class BasicQueries:
         if not result:
             return {}
 
-        gastos_centrales = self._get_gastos_centrales_periodo(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
         n_contratos      = result["total_contratos"]
-        redistribuidos   = round(gastos_centrales * n_contratos / total_finalistas, 2)
+        n_hipotecas      = result["n_hipotecas"] or 0
+        redistribuidos   = self._calcular_redistribucion(periodo, n_contratos, n_hipotecas)
         gastos_totales   = round(result["gastos_directos"] + redistribuidos, 2)
         ingresos         = result["ingresos_total"]
         beneficio        = round(ingresos + gastos_totales, 2)

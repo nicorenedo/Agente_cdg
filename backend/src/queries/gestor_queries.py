@@ -113,6 +113,75 @@ class GestorQueries:
             )
         return int(r["t"]) if r and r["t"] else 1
 
+    def _get_total_hipotecas_finalistas(self, periodo: str = None) -> int:
+        """Total contratos Hipotecarios activos en centros finalistas."""
+        if periodo:
+            import calendar
+            year, month = int(periodo[:4]), int(periodo[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_limite = f"{periodo}-{last_day:02d}"
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1 AND mc.PRODUCTO_ID='100100100100' AND mc.FECHA_ALTA<=?",
+                (fecha_limite,), fetch_type="one"
+            )
+        else:
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1 AND mc.PRODUCTO_ID='100100100100'",
+                fetch_type="one"
+            )
+        return int(r["t"]) if r and r["t"] else 1
+
+    def _get_gastos_fondeo(self, periodo: str = None) -> float:
+        """Gastos de fondeo (660001) del período. Negativos por convenio."""
+        if periodo:
+            r = execute_query(
+                "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+                " WHERE CUENTA_ID='660001' AND CONTRATO_ID IS NULL AND strftime('%Y-%m',FECHA)=?",
+                (periodo,), fetch_type="one"
+            )
+        else:
+            r = execute_query(
+                "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+                " WHERE CUENTA_ID='660001' AND CONTRATO_ID IS NULL",
+                fetch_type="one"
+            )
+        return float(r["t"]) if r else 0.0
+
+    def _get_gastos_otros_centrales(self, periodo: str = None) -> float:
+        """Gastos centrales excepto fondeo (660001). Negativos por convenio."""
+        if periodo:
+            r = execute_query(
+                "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+                " WHERE CUENTA_ID!='660001' AND CONTRATO_ID IS NULL"
+                " AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
+                " AND strftime('%Y-%m',FECHA)=?",
+                (periodo,), fetch_type="one"
+            )
+        else:
+            r = execute_query(
+                "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+                " WHERE CUENTA_ID!='660001' AND CONTRATO_ID IS NULL"
+                " AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')",
+                fetch_type="one"
+            )
+        return float(r["t"]) if r else 0.0
+
+    def _calcular_redistribucion(self, periodo, n_contratos, n_hipotecas=0):
+        """Redistribución: fondeo solo a hipotecas, otros gastos a todos."""
+        fondeo = self._get_gastos_fondeo(periodo)
+        otros  = self._get_gastos_otros_centrales(periodo)
+        total_fin = self._get_total_contratos_finalistas(periodo)
+        total_hip = self._get_total_hipotecas_finalistas(periodo)
+        r_fondeo = fondeo * n_hipotecas / total_hip if n_hipotecas > 0 else 0
+        r_otros  = otros * n_contratos / total_fin
+        return round(r_fondeo + r_otros, 2)
+
     def get_gestor_performance_enhanced(self, gestor_id: str, periodo: str = None) -> QueryResult:
         """
         Metricas financieras del gestor con KPIs bancarios.
@@ -127,6 +196,7 @@ class GestorQueries:
             c.DESC_CENTRO,
             s.DESC_SEGMENTO,
             COUNT(DISTINCT mc.CONTRATO_ID) as total_contratos,
+            COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) as n_hipotecas,
             COUNT(DISTINCT mc.CLIENTE_ID) as total_clientes,
             COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as total_ingresos,
             COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
@@ -144,8 +214,6 @@ class GestorQueries:
         """
 
         start_time = datetime.now()
-        gastos_centrales  = self._get_gastos_centrales(periodo)
-        total_finalistas  = self._get_total_contratos_finalistas(periodo)
         raw = execute_query(query, (gestor_id,))
 
         if not raw:
@@ -161,7 +229,8 @@ class GestorQueries:
         ingresos       = r['total_ingresos'] or 0
         gastos_directos = r['gastos_directos'] or 0
         n_contratos    = r['total_contratos'] or 0
-        redistribuidos = round(gastos_centrales * n_contratos / total_finalistas, 2)
+        n_hipotecas    = r['n_hipotecas'] or 0
+        redistribuidos = self._calcular_redistribucion(periodo, n_contratos, n_hipotecas)
         gastos         = round(gastos_directos + redistribuidos, 2)
         patrimonio     = r['patrimonio_total'] or 1
 
@@ -543,7 +612,8 @@ class GestorQueries:
                 COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
                 COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
                                   THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
-                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
+                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos,
+                COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) as n_hipotecas
             FROM MAESTRO_CONTRATOS mc
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 AND strftime('%Y-%m', mov.FECHA) = ?
@@ -551,15 +621,14 @@ class GestorQueries:
         """
 
         start = datetime.now()
-        gastos_centrales = self._get_gastos_centrales(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
         raw = execute_query(query, (periodo, gestor_id))
-        r = raw[0] if raw else {'ingresos': 0, 'gastos_directos': 0, 'n_contratos': 0}
+        r = raw[0] if raw else {'ingresos': 0, 'gastos_directos': 0, 'n_contratos': 0, 'n_hipotecas': 0}
 
         ingresos        = r['ingresos'] or 0
         gastos_directos = r['gastos_directos'] or 0
         n_contratos     = r['n_contratos'] or 0
-        redistribuidos  = round(gastos_centrales * n_contratos / total_finalistas, 2)
+        n_hipotecas     = r['n_hipotecas'] or 0
+        redistribuidos  = self._calcular_redistribucion(periodo, n_contratos, n_hipotecas)
         gastos          = round(gastos_directos + redistribuidos, 2)
 
         ef = self.kpi_calc.calculate_ratio_eficiencia(ingresos, gastos)
@@ -661,7 +730,8 @@ class GestorQueries:
                 COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
                                   THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
                 SUM(mov.IMPORTE) as patrimonio_total,
-                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
+                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos,
+                COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) as n_hipotecas
             FROM MAESTRO_CONTRATOS mc
             LEFT JOIN MOVIMIENTOS_CONTRATOS mov ON mc.CONTRATO_ID = mov.CONTRATO_ID
                 AND strftime('%Y-%m', mov.FECHA) = ?
@@ -669,15 +739,14 @@ class GestorQueries:
         """
 
         start = datetime.now()
-        gastos_centrales = self._get_gastos_centrales(periodo)
-        total_finalistas = self._get_total_contratos_finalistas(periodo)
         raw = execute_query(query, (periodo, gestor_id))
-        r = raw[0] if raw else {'ingresos': 0, 'gastos_directos': 0, 'patrimonio_total': 0, 'n_contratos': 0}
+        r = raw[0] if raw else {'ingresos': 0, 'gastos_directos': 0, 'patrimonio_total': 0, 'n_contratos': 0, 'n_hipotecas': 0}
 
         ingresos        = r['ingresos'] or 0
         gastos_directos = r['gastos_directos'] or 0
         n_contratos     = r['n_contratos'] or 0
-        redistribuidos  = round(gastos_centrales * n_contratos / total_finalistas, 2)
+        n_hipotecas     = r['n_hipotecas'] or 0
+        redistribuidos  = self._calcular_redistribucion(periodo, n_contratos, n_hipotecas)
         gastos          = round(gastos_directos + redistribuidos, 2)
         patrimonio      = r['patrimonio_total'] or 1
 

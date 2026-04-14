@@ -78,6 +78,57 @@ class ComparativeQueries:
             )
         return int(r["t"]) if r and r["t"] else 1
 
+    def _total_hipotecas_finalistas(self, periodo: str = None) -> int:
+        """Total contratos Hipotecarios activos en centros finalistas."""
+        if periodo:
+            import calendar
+            year, month = int(periodo[:4]), int(periodo[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_limite = f"{periodo}-{last_day:02d}"
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1 AND mc.PRODUCTO_ID='100100100100' AND mc.FECHA_ALTA<=?",
+                (fecha_limite,), fetch_type="one"
+            )
+        else:
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1 AND mc.PRODUCTO_ID='100100100100'",
+                fetch_type="one"
+            )
+        return int(r["t"]) if r and r["t"] else 1
+
+    def _gastos_fondeo(self, periodo: str) -> float:
+        r = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CUENTA_ID='660001' AND CONTRATO_ID IS NULL AND strftime('%Y-%m',FECHA)=?",
+            (periodo,), fetch_type="one"
+        )
+        return float(r["t"]) if r else 0.0
+
+    def _gastos_otros_centrales(self, periodo: str) -> float:
+        r = execute_query(
+            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
+            " WHERE CUENTA_ID!='660001' AND CONTRATO_ID IS NULL"
+            " AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
+            " AND strftime('%Y-%m',FECHA)=?",
+            (periodo,), fetch_type="one"
+        )
+        return float(r["t"]) if r else 0.0
+
+    def _calcular_redistribucion(self, periodo, n_contratos, n_hipotecas=0):
+        fondeo = self._gastos_fondeo(periodo)
+        otros  = self._gastos_otros_centrales(periodo)
+        total_fin = self._total_finalistas_periodo(periodo)
+        total_hip = self._total_hipotecas_finalistas(periodo)
+        r_fondeo = fondeo * n_hipotecas / total_hip if n_hipotecas > 0 else 0
+        r_otros  = otros * n_contratos / total_fin
+        return round(r_fondeo + r_otros, 2)
+
     # =================================================================
     # 1. COMPARATIVAS DE PRECIOS Y PRODUCTOS (CORREGIDAS PARA CDG)
     # =================================================================
@@ -281,7 +332,8 @@ class ComparativeQueries:
                 COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos_total,
                 COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
                                   THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
-                COUNT(DISTINCT cont.CONTRATO_ID) as n_contratos
+                COUNT(DISTINCT cont.CONTRATO_ID) as n_contratos,
+                COUNT(DISTINCT CASE WHEN cont.PRODUCTO_ID = '100100100100' THEN cont.CONTRATO_ID END) as n_hipotecas
             FROM MAESTRO_GESTORES g
             JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
             JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
@@ -294,22 +346,12 @@ class ComparativeQueries:
             ORDER BY ingresos_total DESC
         """
 
-        # Gastos centrales redistribuidos
-        r_c = execute_query(
-            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
-            (periodo,), fetch_type="one"
-        )
-        r_t = self._total_finalistas_periodo(periodo)
-        gastos_centrales = float(r_c["t"]) if r_c else 0.0
-        total_finalistas = r_t
-
         start_time = datetime.now()
         raw_results = execute_query(query, (periodo,))
         for row in (raw_results or []):
             n = row.get("n_contratos") or 0
-            row["gastos_redistribuidos"] = round(gastos_centrales * n / total_finalistas, 2)
+            n_hip = row.get("n_hipotecas") or 0
+            row["gastos_redistribuidos"] = self._calcular_redistribucion(periodo, n, n_hip)
             row["gastos_total"] = round((row["gastos_directos"] or 0) + row["gastos_redistribuidos"], 2)
 
         enhanced_results = []
@@ -482,7 +524,8 @@ class ComparativeQueries:
                 COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
                                   THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos,
                 SUM(mov.IMPORTE) as patrimonio_total,
-                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
+                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos,
+                COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) as n_hipotecas
             FROM MAESTRO_GESTORES g
             JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
             LEFT JOIN MAESTRO_CONTRATOS mc ON g.GESTOR_ID = mc.GESTOR_ID
@@ -493,20 +536,12 @@ class ComparativeQueries:
             HAVING patrimonio_total IS NOT NULL AND patrimonio_total != 0
         """
 
-        r_c = execute_query(
-            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
-            (periodo,), fetch_type="one"
-        )
-        gastos_centrales = float(r_c["t"]) if r_c else 0.0
-        total_finalistas = self._total_finalistas_periodo(periodo)
-
         start_time = datetime.now()
         raw_results = execute_query(query, (periodo,))
         for row in (raw_results or []):
             n = row.get("n_contratos") or 0
-            row["gastos_redistribuidos"] = round(gastos_centrales * n / total_finalistas, 2)
+            n_hip = row.get("n_hipotecas") or 0
+            row["gastos_redistribuidos"] = self._calcular_redistribucion(periodo, n, n_hip)
             row["gastos"] = round((row["gastos_directos"] or 0) + row["gastos_redistribuidos"], 2)
             row["beneficio_neto"] = round((row["ingresos"] or 0) + row["gastos"], 2)
 
@@ -673,6 +708,7 @@ class ComparativeQueries:
                 c.DESC_CENTRO,
                 COUNT(DISTINCT g.GESTOR_ID) as num_gestores,
                 COUNT(DISTINCT mc.CONTRATO_ID) as num_contratos,
+                COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) as n_hipotecas,
                 COALESCE(SUM(CASE WHEN mov.CUENTA_ID LIKE '76%' THEN mov.IMPORTE ELSE 0 END), 0) as ingresos,
                 COALESCE(SUM(CASE WHEN SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69')
                                   THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos
@@ -685,20 +721,12 @@ class ComparativeQueries:
             GROUP BY c.CENTRO_ID, c.DESC_CENTRO
         """
 
-        r_c = execute_query(
-            "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-            " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-            " AND strftime('%Y-%m',FECHA)=?",
-            (periodo,), fetch_type="one"
-        )
-        gastos_centrales = float(r_c["t"]) if r_c else 0.0
-        total_finalistas = self._total_finalistas_periodo(periodo)
-
         start_time = datetime.now()
         raw_results = execute_query(query, (periodo,))
         for row in (raw_results or []):
             n = row.get("num_contratos") or 0
-            row["gastos_redistribuidos"] = round(gastos_centrales * n / total_finalistas, 2)
+            n_hip = row.get("n_hipotecas") or 0
+            row["gastos_redistribuidos"] = self._calcular_redistribucion(periodo, n, n_hip)
             row["gastos"] = round((row["gastos_directos"] or 0) + row["gastos_redistribuidos"], 2)
 
         enhanced_results = []
@@ -1417,7 +1445,8 @@ class ComparativeQueries:
                              AND SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos_ant,
                 COALESCE(SUM(CASE WHEN strftime('%Y-%m', mov.FECHA) = ?
                              AND SUBSTR(mov.CUENTA_ID,1,2) IN ('62','64','68','69') THEN mov.IMPORTE ELSE 0 END), 0) as gastos_directos_act,
-                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos
+                COUNT(DISTINCT mc.CONTRATO_ID) as n_contratos,
+                COUNT(DISTINCT CASE WHEN mc.PRODUCTO_ID = '100100100100' THEN mc.CONTRATO_ID END) as n_hipotecas
             FROM MAESTRO_GESTORES g
             JOIN MAESTRO_CENTROS c ON g.CENTRO = c.CENTRO_ID
             JOIN MAESTRO_SEGMENTOS s ON g.SEGMENTO_ID = s.SEGMENTO_ID
@@ -1429,19 +1458,6 @@ class ComparativeQueries:
             ORDER BY g.GESTOR_ID
         """
 
-        def _gc(periodo):
-            r = execute_query(
-                "SELECT COALESCE(SUM(IMPORTE),0) AS t FROM MOVIMIENTOS_CONTRATOS"
-                " WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')"
-                " AND strftime('%Y-%m',FECHA)=?",
-                (periodo,), fetch_type="one"
-            )
-            return float(r["t"]) if r else 0.0
-
-        total_finalistas = self._total_finalistas_periodo(periodo_actual)
-        gc_ant = _gc(periodo_anterior)
-        gc_act = _gc(periodo_actual)
-
         start_time = datetime.now()
         raw = execute_query(query, (periodo_anterior, periodo_actual, periodo_anterior, periodo_actual)) or []
         execution_time = (datetime.now() - start_time).total_seconds()
@@ -1449,8 +1465,9 @@ class ComparativeQueries:
         results = []
         for row in raw:
             n = row.get("n_contratos") or 0
-            redist_ant = round(gc_ant * n / total_finalistas, 2)
-            redist_act = round(gc_act * n / total_finalistas, 2)
+            n_hip = row.get("n_hipotecas") or 0
+            redist_ant = self._calcular_redistribucion(periodo_anterior, n, n_hip)
+            redist_act = self._calcular_redistribucion(periodo_actual, n, n_hip)
 
             beneficio_ant = round((row["ingresos_ant"] or 0) + (row["gastos_directos_ant"] or 0) - abs(redist_ant), 2)
             beneficio_act = round((row["ingresos_act"] or 0) + (row["gastos_directos_act"] or 0) - abs(redist_act), 2)
