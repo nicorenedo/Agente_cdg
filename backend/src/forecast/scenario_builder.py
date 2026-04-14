@@ -236,7 +236,7 @@ class ScenarioBuilder:
         ]
 
     def _get_acciones_optimista(self, macro: Dict) -> List[str]:
-        acciones = ['Campana comercial FRV Q3 (mayor margen: 98%)']
+        acciones = ['Campana comercial FRV Q3 (mayor margen directo: 97%)']
         if macro.get('impacto_hipotecario', '') in ('POSITIVO', 'MODERADO_POSITIVO'):
             acciones.append('Aprovechar entorno favorable para captacion hipotecaria')
         acciones.append('Refuerzo de captacion en centros con menor penetracion (Malaga, Barcelona)')

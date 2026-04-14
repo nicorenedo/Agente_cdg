@@ -123,7 +123,7 @@ class WhatIfSimulator:
         recs = []
 
         if shocks.get('tipos_interes', 0) > 30:
-            recs.append('Priorizar captacion FRV (margen 98%) para compensar presion en hipotecario')
+            recs.append('Priorizar captacion FRV (margen directo 97%) para compensar presion en hipotecario')
         if shocks.get('tipos_interes', 0) < -30:
             recs.append('Aprovechar bajada de tipos para campana agresiva de hipotecas')
         if shocks.get('captacion_clientes', 0) < -5:
