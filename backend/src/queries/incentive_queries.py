@@ -60,6 +60,30 @@ class IncentiveQueries:
         self.top_performers_limit = 10     # Top N gestores por defecto
         self.kpi_calc = kpi_calculator     # ✅ INSTANCIA KPI_CALCULATOR
 
+    def _total_finalistas_periodo(self, periodo: str = None) -> int:
+        """Total contratos activos en centros finalistas, filtrado por periodo."""
+        if periodo:
+            import calendar
+            year, month = int(periodo[:4]), int(periodo[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_limite = f"{periodo}-{last_day:02d}"
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1 AND mc.FECHA_ALTA <= ?",
+                (fecha_limite,), fetch_type="one"
+            )
+        else:
+            r = execute_query(
+                "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
+                " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
+                " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID"
+                " WHERE c.IND_CENTRO_FINALISTA=1",
+                fetch_type="one"
+            )
+        return int(r["t"]) if r and r["t"] else 1
+
     # =================================================================
     # 1. DETECCIÓN DE HIGH PERFORMERS (MEJORADAS CON KPI) - ✅ CORREGIDAS
     # =================================================================
@@ -111,13 +135,7 @@ class IncentiveQueries:
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0
-        r_t = execute_query(
-            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
-            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
-            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
-            fetch_type="one"
-        )
-        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+        total_finalistas = self._total_finalistas_periodo(periodo_str)
 
         for row in raw_results:
             n = row.get('contratos_reales', 0) or 0
@@ -358,13 +376,7 @@ class IncentiveQueries:
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0
-        r_t = execute_query(
-            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
-            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
-            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
-            fetch_type="one"
-        )
-        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+        total_finalistas = self._total_finalistas_periodo(periodo_str)
 
         for row in raw_results:
             n = row.get('n_contratos', 0) or 0
@@ -553,13 +565,7 @@ class IncentiveQueries:
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0
-        r_t = execute_query(
-            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
-            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
-            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
-            fetch_type="one"
-        )
-        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+        total_finalistas = self._total_finalistas_periodo(periodo_str)
 
         for row in raw_results:
             n = row.get('total_contratos', 0) or 0
@@ -1022,13 +1028,7 @@ class IncentiveQueries:
             (periodo_str,), fetch_type="one"
         )
         gastos_centrales = float(r_c["t"]) if r_c else 0.0
-        r_t = execute_query(
-            "SELECT COUNT(mc.CONTRATO_ID) AS t FROM MAESTRO_CONTRATOS mc"
-            " JOIN MAESTRO_GESTORES g ON mc.GESTOR_ID=g.GESTOR_ID"
-            " JOIN MAESTRO_CENTROS c ON g.CENTRO=c.CENTRO_ID WHERE c.IND_CENTRO_FINALISTA=1",
-            fetch_type="one"
-        )
-        total_finalistas = int(r_t["t"]) if r_t and r_t["t"] else 1
+        total_finalistas = self._total_finalistas_periodo(periodo_str)
 
         results = []
         for row in raw_results:
