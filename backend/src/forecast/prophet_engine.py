@@ -47,10 +47,11 @@ class ProphetEngine:
             pd.util.hash_pandas_object(df).values.tobytes()
         ).hexdigest()
 
-    def fit(self, df: pd.DataFrame, cap_factor: float = 1.25) -> None:
+    def fit(self, df: pd.DataFrame, cap_factor: float = 1.10) -> None:
         """
         Entrena Prophet con growth='logistic'.
         cap = max(y) × cap_factor.
+        S86: cap_factor 1.25→1.10, yearly=False, cp=0.005 para proyecciones estables.
         """
         data_hash = self._hash_data(df)
         if data_hash == self._last_data_hash and self._model is not None:
@@ -67,9 +68,9 @@ class ProphetEngine:
 
         self._model = Prophet(
             growth='logistic',
-            changepoint_prior_scale=0.05,  # Conservative: avoid extrapolating 2024 ramp-up
-            seasonality_prior_scale=0.1,   # Dampen seasonality to prevent exceeding cap
-            yearly_seasonality=True,
+            changepoint_prior_scale=0.005,  # S86: very conservative (cap dominates anyway)
+            seasonality_prior_scale=0.1,
+            yearly_seasonality=False,       # S86: only 20 months — yearly creates spurious waves
             weekly_seasonality=False,
             daily_seasonality=False,
             interval_width=0.80,
