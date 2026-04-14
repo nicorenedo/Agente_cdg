@@ -96,10 +96,10 @@ class ProphetEngine:
         self._last_forecast = forecast
 
         result = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(horizonte_meses).copy()
-        # Clip: no negative, no exceeding cap
+        # Clip: no negative; base/lower capped, upper allowed to exceed cap for varied optimistic
         result['yhat_lower'] = result['yhat_lower'].clip(lower=0, upper=self._cap)
         result['yhat'] = result['yhat'].clip(lower=0, upper=self._cap)
-        result['yhat_upper'] = result['yhat_upper'].clip(lower=0, upper=self._cap)
+        result['yhat_upper'] = result['yhat_upper'].clip(lower=0)  # S87: no cap on upper → varied optimistic
         return result
 
     def get_scenarios(self, horizonte_meses: int = 6) -> Dict:
