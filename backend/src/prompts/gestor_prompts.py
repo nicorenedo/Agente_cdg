@@ -12,7 +12,7 @@ Schema SQL real (BM_CONTABILIDAD_CDG.db) — referencia corregida:
   Ingresos  : SUM(IMPORTE) WHERE CUENTA_ID LIKE '76%'
   Gastos dir: ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL
   Gastos cen: ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69') AND CONTRATO_ID IS NULL
-  Redistrib : gasto_central × (contratos_gestor / 220)
+  Redistrib : fondeo(660001) × (hip_gestor/total_hip) + otros_centrales × (ctos_gestor/total_fin)
   Período   : strftime('%Y-%m', FECHA) = '{periodo}'  -- formato YYYY-MM
   Tabla base: MOVIMIENTOS_CONTRATOS
   NO existe : LINEA_CDR como filtro de ingresos/gastos operativos

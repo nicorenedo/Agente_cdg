@@ -158,11 +158,13 @@ CONTEXTO DE CRECIMIENTO YoY:
   estaba en fase de lanzamiento en 2024 y que el crecimiento alto es esperado.
 
 REGLAS DE NEGOCIO:
-- Gastos redistribuidos = Gastos centrales x (contratos_gestor / total_contratos_finalistas)
+- Gastos redistribuidos: el coste de fondeo (660001) se imputa solo a Hipotecas;
+  otros gastos centrales se redistribuyen proporcionalmente a todos los contratos.
 - Semáforo desviaciones: verde <5% | amarillo 5-15% | rojo >15%
 - Modelo Fábrica (solo Fondos): Gestora retiene 85%, Banco 15%
-- El Depósito a Plazo Fijo tiene margen negativo (-254%) por diseño: es un producto de captación
-  donde el banco paga intereses al cliente. Su valor está en la liquidez que financia hipotecas.
+- Hipoteca: producto con margen neto ~29% tras imputación de fondeo. Es el principal generador de ingresos.
+- Depósito: margen directo estrecho (~36%). Producto de captación de liquidez.
+- Fondo RV: margen directo alto (~97%). Producto más rentable por contrato.
 
 REGLA ABSOLUTA — TOOL CALLING:
 Para CUALQUIER pregunta sobre datos financieros, resultados, métricas o rendimiento,

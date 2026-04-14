@@ -68,7 +68,7 @@ ESTRUCTURA REAL DE LA BASE DE DATOS:
 
 TABLAS MAESTRAS:
 - MAESTRO_GESTORES (30 gestores): GESTOR_ID, DESC_GESTOR, CENTRO, SEGMENTO_ID
-- MAESTRO_CONTRATOS (220 contratos): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
+- MAESTRO_CONTRATOS (351 contratos acumulados sep-2024 a abr-2026): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
 - MAESTRO_PRODUCTOS (3 productos): PRODUCTO_ID, DESC_PRODUCTO, IND_FABRICA, FABRICA, BANCO, EMPRESA_ID
 - MAESTRO_CENTROS (8 centros): CENTRO_ID, DESC_CENTRO, IND_CENTRO_FINALISTA, EMPRESA_ID
   * Finalistas (IND_CENTRO_FINALISTA=1): Madrid, Palma, Barcelona, Málaga, Bilbao
@@ -285,7 +285,7 @@ ESTRUCTURA REAL DE LA BASE DE DATOS:
 
 TABLAS MAESTRAS:
 - MAESTRO_GESTORES (30 gestores): GESTOR_ID, DESC_GESTOR, CENTRO, SEGMENTO_ID
-- MAESTRO_CONTRATOS (220 contratos): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
+- MAESTRO_CONTRATOS (351 contratos acumulados sep-2024 a abr-2026): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
 - MAESTRO_PRODUCTOS (3 productos): PRODUCTO_ID, DESC_PRODUCTO, IND_FABRICA, FABRICA, BANCO, EMPRESA_ID
 - MAESTRO_CENTROS (8 centros): CENTRO_ID, DESC_CENTRO, IND_CENTRO_FINALISTA, EMPRESA_ID
 - MAESTRO_SEGMENTOS (5 segmentos): SEGMENTO_ID, DESC_SEGMENTO, EMPRESA_ID
@@ -528,7 +528,7 @@ ESTRUCTURA REAL DE LA BASE DE DATOS:
 
 TABLAS MAESTRAS:
 - MAESTRO_GESTORES (30 gestores): GESTOR_ID, DESC_GESTOR, CENTRO, SEGMENTO_ID
-- MAESTRO_CONTRATOS (220 contratos): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
+- MAESTRO_CONTRATOS (351 contratos acumulados sep-2024 a abr-2026): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
 - MAESTRO_PRODUCTOS (3 productos): PRODUCTO_ID, DESC_PRODUCTO, IND_FABRICA, FABRICA, BANCO, EMPRESA_ID
 - MAESTRO_CENTROS (8 centros): CENTRO_ID, DESC_CENTRO, IND_CENTRO_FINALISTA, EMPRESA_ID
 - MAESTRO_SEGMENTOS (5 segmentos): SEGMENTO_ID, DESC_SEGMENTO, EMPRESA_ID
@@ -828,7 +828,7 @@ ESTRUCTURA REAL DE LA BASE DE DATOS:
 
 TABLAS MAESTRAS:
 - MAESTRO_GESTORES (30 gestores): GESTOR_ID, DESC_GESTOR, CENTRO, SEGMENTO_ID
-- MAESTRO_CONTRATOS (220 contratos): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
+- MAESTRO_CONTRATOS (351 contratos acumulados sep-2024 a abr-2026): CONTRATO_ID, FECHA_ALTA, CLIENTE_ID, GESTOR_ID, PRODUCTO_ID, CENTRO_CONTABLE, EMPRESA_ID
 - MAESTRO_PRODUCTOS (3 productos): PRODUCTO_ID, DESC_PRODUCTO, IND_FABRICA, FABRICA, BANCO, EMPRESA_ID
 - MAESTRO_CENTROS (8 centros): CENTRO_ID, DESC_CENTRO, IND_CENTRO_FINALISTA, EMPRESA_ID
 - MAESTRO_SEGMENTOS (5 segmentos): SEGMENTO_ID, DESC_SEGMENTO, EMPRESA_ID
@@ -1890,8 +1890,8 @@ Proporcionar análisis financiero profundo orientado a la toma de decisiones: id
 
 ## MODELO DE DATOS — CRÍTICO:
 - **Ingresos, gastos y ROE son del mes seleccionado (MoM)**. No son acumulados YTD.
-- **Cartera de contratos es acumulada histórica**: sep-2025 = 216 contratos activos; oct-2025 = 220 (4 contratos nuevos, +1.8%).
-- **Ingresos de referencia**: sep-2025 ≈ €599,759 | oct-2025 ≈ €624,000 (+4.04% MoM).
+- **Cartera de contratos es acumulada histórica**: sep-2025=216, oct-2025=230, abr-2026=351. Denominador redistribución dinámico por período.
+- **Redistribución**: fondeo (660001) se imputa solo a Hipotecas; otros gastos centrales a todos los contratos.
 - **ROE grupo**: sep-2025 ≈ 35.94% | oct-2025 ≈ 39.96% (mejora por ingresos +4% y gastos centrales -€7k).
 
 ## ESTÁNDARES DE RESPUESTA:
@@ -4028,7 +4028,7 @@ Los cálculos se realizan desde el nivel más bajo hacia el más alto:
 
 ⚠️ **CRÍTICO**:
 - Los importes de gastos son NEGATIVOS en la BD — usar ABS() siempre
-- Redistribución centrales: gasto_central × (contratos_gestor / 220)
+- Redistribución centrales: fondeo(660001) solo a Hipotecas + otros centrales a todos los contratos. Denominador dinámico por período.
 - NO usar PRECIO_POR_PRODUCTO_STD como proxy de gastos — es precio de venta, no coste real
 - Filtrar ingresos SIEMPRE con: `CUENTA_ID LIKE '76%'`
 

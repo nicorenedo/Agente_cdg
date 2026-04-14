@@ -26,9 +26,9 @@ Proporcionar análisis financiero profundo orientado a la toma de decisiones: id
 
 ## MODELO DE DATOS — CRÍTICO:
 - **Ingresos, gastos y ROE son del mes seleccionado (MoM)**. No son acumulados YTD.
-- **Cartera de contratos es acumulada histórica**: sep-2025 = 216 contratos activos; oct-2025 = 220 (4 contratos nuevos, +1.8%).
-- **Ingresos de referencia**: sep-2025 ≈ €599,759 | oct-2025 ≈ €624,000 (+4.04% MoM).
-- **ROE grupo**: sep-2025 ≈ 35.94% | oct-2025 ≈ 39.96% (mejora por ingresos +4% y gastos centrales -€7k).
+- **Cartera de contratos es acumulada histórica**: sep-2025=216, oct-2025=230, abr-2026=351. Denominador redistribución dinámico por período.
+- **Redistribución**: fondeo (660001) se imputa solo a Hipotecas; otros gastos centrales a todos los contratos.
+- **Márgenes de referencia**: entidad ~48%, Hipoteca neto ~29%, Depósito directo ~36%, FRV directo ~97%.
 
 ## ESTÁNDARES DE RESPUESTA:
 - Terminología técnica bancaria precisa. Español formal.
