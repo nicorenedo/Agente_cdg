@@ -1,0 +1,189 @@
+INFO:database.db_connection:\u2705 Base de datos validada: C:\Users\nicolas.renedo\Documents\GEN AI\BancaMarch_CdG\backend\src\database\BM_CONTABILIDAD_CDG.db
+INFO:queries.basic_queries:\u2705 BasicQueries inicializado
+INFO:src.database.db_connection:\u2705 Base de datos validada: C:\Users\nicolas.renedo\Documents\GEN AI\BancaMarch_CdG\backend\src\database\BM_CONTABILIDAD_CDG.db
+INFO:src.utils.initial_agent:\U0001f504 AzureOpenAI client inicializado. deployment_id=gpt-4
+INFO:queries.gestor_queries:\u2705 gestor_queries.py cargado correctamente
+INFO:queries.gestor_queries:\u2705 Todas las queries CORREGIDAS: Usan PRECIO_POR_PRODUCTO_STD + gastos operativos (640001, 691001, 691002)
+INFO:queries.gestor_queries:\u2705 Integraci�n con kpi_calculator.py activa
+INFO:queries.gestor_queries:\u2705 M�todos disponibles: 26
+INFO:agents.cdg_agent:\U0001f527 Cargando kpi_calculator...
+INFO:agents.cdg_agent:\u2705 KPI Calculator cargado exitosamente
+INFO:agents.cdg_agent:\U0001f527 Cargando chart_generator...
+INFO:utils.initial_agent:\U0001f504 AzureOpenAI client inicializado. deployment_id=gpt-4
+INFO:tools.chart_generator:\u2705 Azure OpenAI + Chart Prompts V2.0 con confidencialidad habilitado
+INFO:agents.cdg_agent:\u2705 Chart Generator V4.4 cargado exitosamente
+INFO:agents.cdg_agent:\U0001f527 Cargando sql_guard...
+INFO:agents.cdg_agent:\u2705 SQL Guard cargado exitosamente
+INFO:agents.cdg_agent:\U0001f527 Cargando report_generator...
+INFO:agents.cdg_agent:\u2139\ufe0f BusinessReportGenerator opcional - usando fallback funcional
+INFO:agents.cdg_agent:\u2705 CDG Agent v6.0: Integraci�n completa con chat_agent v10.0 (Charts: \u2705) - Modo: PRODUCTION
+INFO:agents.chat_agent:\U0001f680 Chat Agent v11.0 inicializado - Modo: PRODUCTION
+C:\Users\nicolas.renedo\AppData\Local\Programs\Python\Python314\Lib\site-packages\langchain_core\_api\deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+  from pydantic.v1.fields import FieldInfo as FieldInfoV1
+INFO:cdg-api-v11:\u2705 Chart generator V4.4 cargado correctamente
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:agents.cdg_agent:\U0001f680 CDG Agent v6.0 inicializado - Modo: PRODUCTION - Perfect Integration
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:agents.chat_agent:\U0001f680 Universal Chat Agent v11.0 CON CONFIDENCIALIDAD inicializado exitosamente
+INFO:agents.chat_agent:\U0001f50d Inspeccionando esquema de base de datos...
+INFO:agents.chat_agent:\u2705 Esquema cargado: 14 tablas, 2895 registros totales
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:agents.cdg_agent:\U0001f680 CDG Agent v6.0 inicializado - Modo: PRODUCTION - Perfect Integration
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:     Will watch for changes in these directories: ['C:\\Users\\nicolas.renedo\\Documents\\GEN AI\\BancaMarch_CdG\\backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [33660] using StatReload
+INFO:database.db_connection:\u2705 Base de datos validada: C:\Users\nicolas.renedo\Documents\GEN AI\BancaMarch_CdG\backend\src\database\BM_CONTABILIDAD_CDG.db
+INFO:queries.basic_queries:\u2705 BasicQueries inicializado
+INFO:src.database.db_connection:\u2705 Base de datos validada: C:\Users\nicolas.renedo\Documents\GEN AI\BancaMarch_CdG\backend\src\database\BM_CONTABILIDAD_CDG.db
+INFO:src.utils.initial_agent:\U0001f504 AzureOpenAI client inicializado. deployment_id=gpt-4
+INFO:queries.gestor_queries:\u2705 gestor_queries.py cargado correctamente
+INFO:queries.gestor_queries:\u2705 Todas las queries CORREGIDAS: Usan PRECIO_POR_PRODUCTO_STD + gastos operativos (640001, 691001, 691002)
+INFO:queries.gestor_queries:\u2705 Integraci�n con kpi_calculator.py activa
+INFO:queries.gestor_queries:\u2705 M�todos disponibles: 26
+INFO:agents.cdg_agent:\U0001f527 Cargando kpi_calculator...
+INFO:agents.cdg_agent:\u2705 KPI Calculator cargado exitosamente
+INFO:agents.cdg_agent:\U0001f527 Cargando chart_generator...
+INFO:utils.initial_agent:\U0001f504 AzureOpenAI client inicializado. deployment_id=gpt-4
+INFO:tools.chart_generator:\u2705 Azure OpenAI + Chart Prompts V2.0 con confidencialidad habilitado
+INFO:agents.cdg_agent:\u2705 Chart Generator V4.4 cargado exitosamente
+INFO:agents.cdg_agent:\U0001f527 Cargando sql_guard...
+INFO:agents.cdg_agent:\u2705 SQL Guard cargado exitosamente
+INFO:agents.cdg_agent:\U0001f527 Cargando report_generator...
+INFO:agents.cdg_agent:\u2139\ufe0f BusinessReportGenerator opcional - usando fallback funcional
+INFO:agents.cdg_agent:\u2705 CDG Agent v6.0: Integraci�n completa con chat_agent v10.0 (Charts: \u2705) - Modo: PRODUCTION
+INFO:agents.chat_agent:\U0001f680 Chat Agent v11.0 inicializado - Modo: PRODUCTION
+C:\Users\nicolas.renedo\AppData\Local\Programs\Python\Python314\Lib\site-packages\langchain_core\_api\deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+  from pydantic.v1.fields import FieldInfo as FieldInfoV1
+INFO:cdg-api-v11:\u2705 Chart generator V4.4 cargado correctamente
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:agents.cdg_agent:\U0001f680 CDG Agent v6.0 inicializado - Modo: PRODUCTION - Perfect Integration
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:agents.chat_agent:\U0001f680 Universal Chat Agent v11.0 CON CONFIDENCIALIDAD inicializado exitosamente
+INFO:agents.chat_agent:\U0001f50d Inspeccionando esquema de base de datos...
+INFO:agents.chat_agent:\u2705 Esquema cargado: 14 tablas, 2895 registros totales
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:agents.cdg_agent:\U0001f680 CDG Agent v6.0 inicializado - Modo: PRODUCTION - Perfect Integration
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+❌ Error cargando configuración: 'Settings' object has no attribute 'AZURE_OPENAI_API_KEY'
+🔄 Usando configuración fallback...
+
+============================================================
+🚀 CHAT AGENT v11.0 INICIALIZADO
+   Modo: PRODUCTION
+   Imports: ✅ Exitosos
+   Catálogos: ✅ 6 catálogos cargados
+   Query Engines: ✅ Disponibles
+   🔐 Sistema de confidencialidad: ✅ Activado
+============================================================
+
+
+================================================================================
+🚀 CDG API v11.0 - PERFECT INTEGRATION
+   Chat Agent: v10.0 (Clasificación inteligente + 6 catálogos)
+   CDG Agent: v6.0 (Perfect Integration)
+   Fecha: 2026-03-30 13:18:57
+   Modo: PRODUCTION
+================================================================================
+
+🔧 Inicializando Chat Agent v10.0...
+
+============================================================
+🚀 CDG AGENT v6.0 INICIALIZADO
+   Modo: PRODUCTION
+   Azure OpenAI: ✅ Conectado
+   Queries: ✅ Todas disponibles
+   Charts: ✅ Disponibles
+============================================================
+
+
+============================================================
+🚀 UNIVERSAL CHAT AGENT v11.0 COMPLETO CON CONFIDENCIALIDAD
+   Estado: ✅ LISTO
+   Modo: PRODUCTION
+   Componentes: ✅ Todos activos
+   CDG Integration: ✅ Conectado
+   🔐 Sistema confidencialidad: ✅ ACTIVADO
+   🎯 Roles soportados: CONTROL_GESTION + GESTOR
+============================================================
+
+✅ Chat Agent v10.0 inicializado:
+   - Modo: PRODUCTION
+   - Catálogos: 6
+   - Tablas BD: 14
+
+🔬 Inicializando CDG Agent v6.0...
+
+============================================================
+🚀 CDG AGENT v6.0 INICIALIZADO
+   Modo: PRODUCTION
+   Azure OpenAI: ✅ Conectado
+   Queries: ✅ Todas disponibles
+   Charts: ✅ Disponibles
+============================================================
+
+✅ CDG Agent v6.0 inicializado:
+   - Modo: PRODUCTION
+   - Especializaciones: 13
+   - Query Engines: 6
+
+🔗 Integración: ✅ PERFECTA
+
+================================================================================
+🎉 CDG API v11.0 LISTO
+   Chat Agent v10.0: ✅ Activo
+   CDG Agent v6.0: ✅ Activo
+   Integración: ✅ Perfecta
+   API: http://127.0.0.1:8000
+   Docs: http://127.0.0.1:8000/docs
+================================================================================
+
+INFO:cdg-api-v11:\u2705 Chart generator V4.4 cargado correctamente
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:agents.cdg_agent:\U0001f680 CDG Agent v6.0 inicializado - Modo: PRODUCTION - Perfect Integration
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:agents.chat_agent:\U0001f680 Universal Chat Agent v11.0 CON CONFIDENCIALIDAD inicializado exitosamente
+INFO:agents.chat_agent:\U0001f50d Inspeccionando esquema de base de datos...
+INFO:agents.chat_agent:\u2705 Esquema cargado: 14 tablas, 2895 registros totales
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:utils.initial_agent:\U0001f504 Retornando AzureOpenAI client para uso directo
+INFO:agents.cdg_agent:\U0001f680 CDG Agent v6.0 inicializado - Modo: PRODUCTION - Perfect Integration
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:tools.chart_generator:\u2705 CDGDashboardGenerator (alias) inicializado
+INFO:tools.chart_generator:\u2705 QueryIntegratedChartGenerator V4.4 inicializado (Azure OpenAI: True)
+INFO:     Started server process [21612]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

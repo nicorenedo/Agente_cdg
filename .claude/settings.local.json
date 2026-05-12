@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s \"http://localhost:8000/deviations/pricing?periodo=2025-10&umbral=0\" 2>&1)"
+      "Bash(curl -s \"http://localhost:8000/deviations/pricing?periodo=2025-10&umbral=0\" 2>&1)",
+      "Bash(python -c \":*)",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in \\(''''netstat -ano 2^>nul ^| findstr :8000 ^| findstr LISTENING''''\\) do @taskkill /PID %a /F 2^>nul\")",
+      "Bash(python -c \"import time; time.sleep\\(2\\)\")",
+      "Bash(netstat -ano)",
+      "Bash(python:*)"
     ]
   }
 }
