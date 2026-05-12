@@ -1,472 +1,78 @@
-🚀 Guía sencilla: Primeros pasos en un nuevo repositorio Git
-============================================================
+# CDG Intelligence v1
 
-## Índice
-1. [Descripción del repositorio](#descripción-del-repositorio)
+Copiloto de Control de Gestión bancario basado en IA agéntica.
+Sistema conversacional para Controllers y Gestores comerciales.
 
-2. [Clonar el repositorio base](#clonar-el-repositorio-base)
-   1. [Seleccionar la carpeta local](#seleccionar-la-carpeta-local)
-   2. [Copiar y clonar el repositorio base](#copiar-y-clonar-el-repositorio-base)
-   3. [Desvincular el repositorio original](#desvincular-el-repositorio-original)
-   4. [Conectar tu propio repositorio](#conectar-tu-propio-repositorio)
-   5. [Sincronizar con el repositorio remoto](#sincronizar-con-el-repositorio-remoto)
-   6. [Subir tu versión al repositorio](#subir-tu-versión-al-repositorio)
+## ¿Qué es esto?
 
-3. [Ejecución del proyecto](#ejecución-del-proyecto)
-   1. [Iniciar la app (versión final)](#iniciar-la-app-versión-final)
-   2. [Modo desarrollo (usando el notebook)](#modo-desarrollo-usando-el-notebook)
+- **Panel de Dirección:** visión global del banco (márgenes, gestores, centros, productos)
+- **Panel de Gestor:** visión personal del gestor comercial (su cartera, ROE, incentivos)
+- **Módulo de Proyecciones:** forecasting Prophet + simulación what-if
 
-4. [Uso de archivo `.env` para gestionar la API Key de Azure](#uso-de-archivo-env-para-gestionar-la-api-key-de-azure)
+## Documentación
 
-5. [Gestión de dependencias con Poetry](#gestión-de-dependencias-con-poetry)
+| Documento | Contenido |
+|-----------|-----------|
+| [`docs/RECONSTRUCTION_AUDIT.md`](docs/RECONSTRUCTION_AUDIT.md) | Audit de arquitectura v1 — problemas identificados |
+| [`docs/ARCHITECTURE_V2.md`](docs/ARCHITECTURE_V2.md) | Arquitectura objetivo v2 |
+| [`docs/RECONSTRUCTION_PLAN.md`](docs/RECONSTRUCTION_PLAN.md) | Plan de reconstrucción desde v1 |
+| [`SESSIONS.md`](SESSIONS.md) | Historial completo de sesiones S1-S89 |
 
-6. [¿Cómo obtener mi API KEY?](#cómo-obtener-mi-api-key)
----
-
-## 1. Descripción del repositorio
-
-Este repositorio contiene los componentes principales para la inicialización de una POC:
-
-- **Backend**: Implementa el agente `ReactAgent` que utiliza el planning pattern para procesar consultas de usuarios y archivos opcionales.
-- **Frontend**: Proporciona una interfaz de usuario basada en Streamlit para interactuar con el agente, permitiendo enviar consultas y visualizar las respuestas.
-
-
----
-
-
-## 2. Clonar el repositorio base
-
-### 2.1 Seleccionar la carpeta local
-
-🗂️ Paso 1: Selecciona la carpeta local donde quieres clonar el repositorio
----------------------------------------------------------------------------
-
-Antes de clonar nada, piensa:  
-👉 **¿En qué carpeta de tu equipo quieres guardar el proyecto?**
-
-Por ejemplo, puedes usar:
-
-`C:\Users\tu_usuario\Documents\Proyectos\`
-
-Abre tu terminal (PowerShell, CMD o Git Bash) y navega a esa carpeta:
-
-`cd "C:\Users\tu_usuario\Documents\Proyectos"`
-
----
-
-### 2.2 Copiar y clonar el repositorio base
-
-🧭 Paso 2: Copia y clona el repositorio base
---------------------------------------------
-
-Vamos a traernos una copia del repositorio _template_ a tu equipo.
-Copia la URL del repositorio (desde el botón **"Clone"** en Azure DevOps) y ejecuta:
-
-`git clone https://CFOERiskLabs@dev.azure.com/CFOERiskLabs/CFOEVRiskLabsIBERIA/_git/template_POC`
-
-👉 Esto crea una carpeta llamada `template_POC` con todo el contenido del template.
-
-  
-Ahora le vamos a cambiar el nombre para que el nombre del repo en local sea igual al nombre del repo en remoto y así es menos confuso.
-
-`mv template_POC template_POC_video` Cambiamos el nombre
-
-Entramos en la carpeta con el nombre modificado
-`cd RepoTest`
-
----
-
-### 2.3 Desvincular el repositorio original
-
-✂️ Paso 3: Desvincula el repositorio original
----------------------------------------------
-
-Ya no queremos seguir conectados al template original, así que lo desvinculamos:
-
-`git remote remove origin`
-
----
-
-### 2.4 Conectar tu propio repositorio
-
-🔗 Paso 4: Conecta tu propio repositorio
-----------------------------------------
-
-Ahora sí, vinculamos el proyecto a **tu propio repositorio** (el que vas a usar realmente).
-Reemplaza la URL con la de tu nuevo repositorio, por ejemplo:
-
-`git remote add origin   
-https://dev.azure.com/CFOERiskLabs/CFOEVRiskLabsIBERIA/_git/template_POC_video`
-
----
-
-### 2.5 Sincronizar con el repositorio remoto
-
-🔄 Paso 5: Sincroniza con el repositorio remoto
------------------------------------------------
-
-Por si hay algo en el repositorio remoto (aunque esté vacío, mejor prevenir):
-
-`git pull origin main --rebase`
-
----
-
-### 2.6 Subir tu versión al repositorio
-
-⬆️ Paso 6: Sube tu versión al repositorio
------------------------------------------
-
-¡Hora de subir tus archivos! 🚀
-
-`git push origin main`
-
----
-
-## 3. Ejecución del proyecto
-
-El funcionamiento de backend <> frontend funciona con simples llamadas desde `app.py` a las funciones del backend del agente. Por eso, para la **versión final**, solo hace falta ejecutar el frontend.
-
-### 3.1 Iniciar la app (versión final)
-1. Instala Poetry (si no lo tienes):
-   ```bash
-   curl -sSL https://install.python-poetry.org | python3 -
-   ```
-
-2. Comprueba la versión instalada:
-   ```bash
-   poetry --version
-   ```
-
-3. Activa la gestión de entornos virtuales de Poetry:
-   ```bash
-   poetry config virtualenvs.in-project true
-   ```
-
-4. Ve al directorio del proyecto (donde ya existe pyproject.toml)
-
-5. Inicia el entorno virtual (lo crea automáticamente):
-   ```bash
-   poetry shell
-   ```
-
-6. Instala las dependencias sin instalar el paquete raíz:
-   ```bash
-   poetry install --no-root
-   ```
-
-7. Navega a la carpeta del frontend:
-   ```bash
-   cd frontend/src
-   ```
-
-8. Inicia el frontend:
-   ```bash
-   streamlit run app.py
-   ```
-
-   Abre tu navegador en `http://localhost:8501` para interactuar con la aplicación.
-
----
-
-### 3.2 Modo desarrollo (usando el notebook)
-
-Si estás en modo "developer" y necesitas probar o depurar el comportamiento del agente paso a paso, utiliza el notebook `planning_pattern.ipynb` ubicado en `backend/src`.
-
-1. Instala Poetry (si no lo tienes):
-   ```bash
-   curl -sSL https://install.python-poetry.org | python3 -
-   ```
-
-2. Comprueba la versión instalada:
-   ```bash
-   poetry --version
-   ```
-
-3. Activa la gestión de entornos virtuales de Poetry (opcional):
-   ```bash
-   poetry config virtualenvs.in-project true
-   ```
-
-4. Ve al directorio del proyecto (donde ya existe pyproject.toml)
-
-5. Inicia el entorno virtual (lo crea automáticamente):
-   ```bash
-   poetry shell
-   ```
-
-6. Instala las dependencias sin instalar el paquete raíz:
-   ```bash
-   poetry install --no-root
-   ```
-
-7. Navega a la carpeta del backend:
-   ```bash
-   cd backend/src
-   ```
-
-8. Abre el notebook `planning_pattern.ipynb` y sigue las celdas para ejecutar y probar cada paso del agente:
-   - Inicialización de herramientas.
-   - Procesamiento de consultas.
-   - Ejecución de herramientas y generación de respuestas.
-
-Este enfoque te permitirá entender y modificar el comportamiento del agente de manera granular.
-
----
-
-## 4. Uso de archivo `.env` para gestionar la API Key de Azure
-
-### 4.1 Buena práctica en el manejo de credenciales
-
-Para mantener la seguridad y evitar exponer credenciales sensibles en el código fuente, es recomendable almacenar las API Keys en un archivo `.env`. Este archivo debe ubicarse en la misma carpeta donde se encuentra el código y debe contener la API Key de Azure de la siguiente manera:
-
-    AZURE_API_KEY='valor_de_la_api_key'
-
-Para facilitar este proceso, se proporciona un archivo de plantilla llamado `.env.copy` ubicado en la carpeta `backend/src`. Debes seguir estos pasos:
-
-1. Copia el archivo `.env.copy` y renómbralo a `.env`:
-   ```bash
-   cd backend/src
-   cp .env.copy .env
-   ```
-
-2. Edita el archivo `.env` recién creado y reemplaza "your-azure-api-key" con tu API key real:
-   ```
-   AZURE_OPENAI_APIKEY = "tu-clave-real-de-api"
-   ```
-
-Es importante **no incluir este archivo en el control de versiones**. Por esta razón, `.env` ya está incluido en el archivo `.gitignore` del proyecto:
-
-    # Archivo .gitignore
-    .env
-
-Esto garantiza que tus credenciales permanezcan seguras y no se suban accidentalmente al repositorio.
-
----
-
-### 4.2 Cargando la API Key en el código
-
-Para acceder a la API Key en el código, utilizaremos la biblioteca `dotenv`, que permite cargar las variables definidas en el archivo `.env`. A continuación, se muestra un ejemplo de cómo realizar la conexión con Azure:
-
-    from dotenv import load_dotenv
-    import os
-    from azure.openai import AzureOpenAI
-
-    # Cargar variables del archivo .env
-    load_dotenv()
-
-    # Obtener la API Key desde las variables de entorno
-    AZURE_API_KEY = os.getenv("AZURE_API_KEY")
-
-    def connect_azure():
-        client = AzureOpenAI(
-            azure_endpoint="https://llmcoeiberia-ada.openai.azure.com/",
-            api_key=AZURE_API_KEY,
-            api_version="2024-02-01"
-        )
-        return client
-
----
-
-### 4.3 Ventajas de este enfoque
-
-- **Seguridad**: Evita exponer credenciales en el código fuente o en repositorios de control de versiones.
-- **Portabilidad**: Permite cambiar las claves sin modificar el código.
-- **Escalabilidad**: Facilita la gestión de credenciales en distintos entornos (desarrollo, pruebas y producción).
-
-Con este método, la conexión con Azure será segura y flexible, evitando riesgos de seguridad innecesarios.
-
----
-
-## 5. Gestión de dependencias con Poetry
-
-### 5.1 ¿Qué es Poetry?
-
-Poetry es una herramienta para la gestión de dependencias y empaquetado en Python que facilita la declaración de librerías y sus versiones, resolviendo automáticamente las dependencias.
-
-### 5.2 Configuración inicial de Poetry
-
-#### ✅ 1. Instalar Poetry
-
-**Linux/macOS (Terminal)**
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-**Windows (PowerShell)**
-```powershell
-(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
-```
-
-#### ✅ 2. Comprobar versión instalada
-
-Después de la instalación, reinicia tu terminal y verifica que Poetry se instaló correctamente:
+## Setup
 
 ```bash
-poetry --version
+# 1. Configurar entorno
+cp .env.example .env
+# Editar .env con tus credenciales de Azure OpenAI
+
+# 2. Backend
+cd backend
+pip install -r requirements.txt
+python main.py
+
+# 3. Frontend (en otra terminal)
+cd frontend
+npm install
+npm start
 ```
 
-Si aparece un error de "comando no encontrado", es posible que necesites añadir Poetry a tu PATH. Consulta la [documentación oficial de Poetry](https://python-poetry.org/docs/#installation) para más detalles.
+El frontend levanta en `http://localhost:3000` y consume la API en `http://localhost:8000`.
 
-#### ✅ 3. Activar la gestión de entornos virtuales de Poetry (opcional)
+## Stack
 
-Esta configuración hace que Poetry cree el entorno virtual dentro de la carpeta del proyecto:
+| Capa | Tecnología |
+|------|-----------|
+| LLM | Azure OpenAI (gpt-4o) |
+| Backend | FastAPI + Python 3.11+ |
+| Agentes | LangChain + LangGraph |
+| Forecast | Prophet |
+| Frontend | React 18 + Ant Design 5 |
+| Base de datos | SQLite — 14 tablas, ~19.000 movimientos |
 
-```bash
-poetry config virtualenvs.in-project true
+## Estructura
+
+```
+backend/
+  main.py, config.py
+  src/
+    agents/     gestor_agent.py, cdg_agent.py, chat_agent.py
+    database/   BM_CONTABILIDAD_CDG.db, db_connection.py
+    queries/    basic_queries.py, comparative_queries.py, ...
+    tools/      kpi_calculator.py, chart_generator.py, ...
+    prompts/    system_prompts.py, user_prompts.py
+  data/seed/    CSVs semilla de la base de datos
+frontend/
+  src/
+    components/ KPICards, InteractiveCharts, ChatInterface, ...
+    pages/      LandingPage, GestorView, DireccionView
+docs/
+  RECONSTRUCTION_AUDIT.md
+  ARCHITECTURE_V2.md
+  RECONSTRUCTION_PLAN.md
+  data_generation/  scripts de generación de datos sintéticos
 ```
 
-#### ✅ 4. Ir al proyecto (donde ya existe pyproject.toml)
+## Estado
 
-Navega hasta la carpeta raíz del proyecto donde se encuentra el archivo `pyproject.toml`.
-
-#### ✅ 5. Iniciar el entorno virtual (lo crea automáticamente)
-
-```bash
-poetry shell
-```
-
-Este comando:
-- Crea automáticamente un entorno virtual para tu proyecto (si no existe)
-- Activa el entorno virtual del proyecto
-- Cambia tu prompt para indicar que estás en el entorno virtual
-
-**Verificar que el entorno está activo**:
-Tu prompt debería cambiar para mostrar el nombre del entorno virtual entre paréntesis:
-```bash
-(template-poc-py3.x) C:\tu\ruta\del\proyecto>
-```
-
-#### ✅ 6. Instalar dependencias sin instalar el paquete raíz
-
-```bash
-poetry install --no-root
-```
-
-Esta opción es ideal para testing o desarrollo, ya que instala todas las dependencias definidas en `pyproject.toml` sin instalar el paquete principal del proyecto.
-
-### 5.3 Comandos adicionales útiles
-
-**Para desactivar el entorno virtual:**
-```bash
-exit
-```
-
-**Para ejecutar comandos sin activar el shell permanentemente:**
-```bash
-# Ejecutar un comando específico en el entorno virtual
-poetry run python archivo.py
-poetry run streamlit run app.py
-```
-
-**Para ver información del entorno virtual:**
-```bash
-# Mostrar la ruta del entorno virtual
-poetry env info
-
-# Listar entornos virtuales disponibles
-poetry env list
-```
-
-### 5.4 Añadir nuevas librerías al proyecto
-
-Para añadir nuevas librerías al proyecto, utiliza el comando `poetry add` seguido del nombre de la librería:
-
-```bash
-# Añadir una librería básica
-poetry add pandas
-
-# Añadir una librería con una versión específica
-poetry add numpy==1.22.0
-
-# Añadir una librería como dependencia de desarrollo
-poetry add pytest --group dev
-```
-
-### 5.5 Actualizar dependencias
-
-Para actualizar todas las dependencias a sus últimas versiones compatibles:
-
-```bash
-poetry update
-```
-
-Para actualizar una dependencia específica:
-
-```bash
-poetry update nombre_libreria
-```
-
-### 5.6 Exportar dependencias a requirements.txt (si es necesario)
-
-Si necesitas generar un archivo `requirements.txt` tradicional:
-
-```bash
-poetry export -f requirements.txt --output requirements.txt
-```
-
----
-
-## 6. ¿Cómo obtener mi API KEY?
-
-### 6.1 Acceso al portal de Azure
-
-Para obtener tu API KEY de Azure OpenAI, sigue estos pasos:
-
-1. Accede al portal de Azure visitando: https://portal.azure.com/#home
-2. En el dashboard principal, busca y selecciona "Azure OpenAI"
-
-### 6.2 ¿Qué modelo de Azure OpenAI elegir?
-
-Antes de seleccionar el recurso, es importante entender las diferencias entre los modelos disponibles para elegir el más adecuado según tus necesidades:
-
-#### 🚀 **llmcoeiberia-ada**
-- **Modelo Ada**: Es uno de los modelos más ligeros y rápidos de OpenAI
-- **Casos de uso ideales**:
-  - Clasificación básica de texto
-  - Análisis de sentimientos
-  - Consultas rápidas y tareas que no requieren análisis profundo
-- **Recomendación**: Elige Ada si necesitas rapidez y eficiencia en tareas menos complejas
-
-#### 🔧 **llmcoeiberia-openai**
-- **Uso general**: Modelo base de OpenAI para tareas estándar de procesamiento de lenguaje natural (NLP)
-- **Casos de uso ideales**:
-  - Generación de texto general
-  - Clasificación de documentos
-  - Traducción básica
-- **Recomendación**: Úsalo si no necesitas capacidades muy avanzadas y buscas algo estándar para comenzar
-
-#### 🧠 **llmcoeiberia-gpt4**
-- **Modelo GPT-4**: El modelo más avanzado, conocido por su capacidad de comprensión profunda y generación de texto altamente coherente
-- **Casos de uso ideales**:
-  - Generación de contenido extenso y creativo
-  - Resolución de problemas complejos
-  - Asistencia en tareas técnicas o científicas
-  - Conversaciones más naturales y detalladas
-- **Recomendación**: Usa GPT-4 para tareas avanzadas que requieren comprensión compleja o alta calidad en las respuestas
-
-#### ⚖️ **Consideraciones adicionales**
-- **Costo**: Los modelos más avanzados, como GPT-4, suelen ser más costosos. Si tu tarea puede resolverse con Ada, podrías reducir costos
-- **Velocidad vs. Complejidad**: Ada es más rápido pero menos capaz que GPT-4. Elige según tu prioridad entre rapidez y calidad
-
-### 6.3 Selección del recurso correcto
-
-3. Entre los recursos disponibles, selecciona la red que mejor se adapte a tus necesidades (consulta la sección anterior):
-   ![Azure OpenAI](assets/images/image.png)
-
-### 6.4 Configuración de acceso por IP
-
-4. En el panel lateral izquierdo, selecciona "Networking"
-5. Verifica si tu dirección IP está en la lista de IPs permitidas
-   - Si no aparece, pulsa en "Add your client IP address"
-   - Confirma la configuración pulsando "Save" en la parte superior
-
-   ![Networking page](assets/images/image-1.png)
-
-### 6.5 Obtención de las claves de API
-
-6. Vuelve al panel lateral izquierdo y selecciona "Keys and Endpoint"
-7. En esta sección encontrarás dos claves disponibles:
-   - Key 1
-   - Key 2
-8. Puedes utilizar cualquiera de las dos claves copiando su valor con el botón correspondiente
-9. Guarda esta clave en tu archivo `.env` como se explicó en la sección 4
+Versión 1 — snapshot histórico S1-S89.
+Ver [`SESSIONS.md`](SESSIONS.md) para el historial completo de 89 sesiones de desarrollo.

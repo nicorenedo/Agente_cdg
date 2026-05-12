@@ -1,8 +1,65 @@
-.env
+# ─── Python ───────────────────────────────────────────
 __pycache__/
-*.pyc
-poetry.lock
-*.log
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── Entorno virtual ──────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ─── Variables de entorno (credenciales) ──────────────
+.env
+.env.local
+frontend/.env
+backend/.env
+!.env.example
+!frontend/.env.example
+
+# ─── Base de datos — solo backups ─────────────────────
 backend/src/database/*_pre_*.db
 backend/src/database/*_backup_*.db
+!backend/src/database/BM_CONTABILIDAD_CDG.db
+
+# ─── Logs ─────────────────────────────────────────────
+*.log
+*.log.*
+backend_*.log
+
+# ─── Frontend ─────────────────────────────────────────
 node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+.npm
+
+# ─── IDE ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Tests / Coverage ─────────────────────────────────
+.coverage
+.pytest_cache/
+htmlcov/
+
+# ─── Temporales ───────────────────────────────────────
+*.tmp
+*.bak
+*.orig
+
+# ─── Knowledge base (generado en runtime) ─────────────
+backend/knowledge/embeddings/
+*.chroma
