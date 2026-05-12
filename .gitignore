@@ -1,3 +1,8 @@
 .env
 __pycache__/
+*.pyc
 poetry.lock
+*.log
+backend/src/database/*_pre_*.db
+backend/src/database/*_backup_*.db
+node_modules/
