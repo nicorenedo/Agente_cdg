@@ -1,21 +1,34 @@
-# FastAPI & server
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.6
-python-multipart>=0.0.9
+# CDG Intelligence v1 — Backend dependencies
+# Python 3.11+ | Versiones ancladas desde entorno post-S89
 
-# Pydantic & settings
-pydantic>=2.9.2
-pydantic-settings>=2.5.2
+# ─── API y servidor ───────────────────────────────────
+fastapi==0.135.2
+uvicorn[standard]==0.42.0
+pydantic==2.12.5
+pydantic-settings==2.13.1
 
-# LangChain + Azure OpenAI (Python 3.13 compatible)
-langchain>=0.3.14
-langchain-openai>=0.2.14
-langchain-core>=0.3.29
-openai>=1.54.3
+# ─── LLM y agentes ────────────────────────────────────
+openai==2.30.0
+langchain-openai==1.1.12
+langchain-core==1.2.23
+langgraph==1.1.3
 
-# Data (numpy 2.x has Python 3.13 wheels)
-numpy>=2.0.0
-pandas>=2.2.3
+# ─── Datos y cálculo ──────────────────────────────────
+pandas==3.0.1
+numpy==2.4.4
 
-# Utils
-python-dotenv>=1.0.1
+# ─── Forecast ─────────────────────────────────────────
+prophet==1.3.0
+
+# ─── HTTP y utilidades ────────────────────────────────
+httpx==0.28.1
+python-dotenv==1.2.2
+
+# ─── Tests ────────────────────────────────────────────
+pytest==9.0.3
+pytest-asyncio==1.3.0
+
+# ─── Procesamiento de documentos ──────────────────────
+# Necesario para backend/src/utils/formulas/document_utils.py
+# No instalado en el entorno actual — instalar si se usa esa funcionalidad:
+# pdfplumber>=0.11.0
