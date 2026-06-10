@@ -1,0 +1,1106 @@
+[
+  {
+    "id": "S77_A01",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "Dame el resumen financiero de abril 2026. Ingresos, margen, contratos.",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "ingresos": 644589.23,
+        "tolerancia_pct": 5
+      },
+      "must_mention": [
+        "ingresos",
+        "margen",
+        "contratos"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo acceder"
+      ]
+    }
+  },
+  {
+    "id": "S77_A02",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Cuántos contratos activos tiene el banco en abril?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "contratos": 351,
+        "tolerancia_pct": 0
+      },
+      "must_mention": [
+        "contratos",
+        "351"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo acceder"
+      ]
+    }
+  },
+  {
+    "id": "S77_A03",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Cuál es el ROE del grupo este mes?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "margen": 48.6,
+        "tolerancia_pct": 10
+      },
+      "must_mention": [
+        "margen",
+        "%"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo acceder"
+      ]
+    }
+  },
+  {
+    "id": "S77_A04",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Qué producto genera más ingresos para el banco en abril?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "Fondo",
+        "FRV",
+        "hipotecario"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A05",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "Dame el ranking de gestores por ingresos en abril 2026",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "Antonio",
+        "Rodríguez"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A06",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Cuántos gestores mejoraron sus ingresos respecto al mes anterior?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "mejora",
+        "gestores"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A07",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Hay desviaciones de precio importantes en algún producto?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "desviación",
+        "precio"
+      ],
+      "must_not_contain": [
+        "sin alertas",
+        "no hay"
+      ]
+    }
+  },
+  {
+    "id": "S77_A08",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Cómo está la oficina de Bilbao en abril?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "ingresos_bilbao": 111045.57,
+        "tolerancia_pct": 5
+      },
+      "must_mention": [
+        "Bilbao"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A09",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "Compara los resultados de Madrid y Bilbao en abril. ¿Cuál está mejor?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "Madrid",
+        "Bilbao"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A10",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "Dame los datos de Antonio Rodríguez García en abril",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "ingresos_g1": 36847.37,
+        "tolerancia_pct": 5
+      },
+      "must_mention": [
+        "Antonio",
+        "Rodríguez",
+        "Madrid"
+      ],
+      "must_not_contain": [
+        "no tengo acceso",
+        "confidencial"
+      ]
+    },
+    "nota": "A10 fallaba en v1 (S77) — CDG consulta gestor por nombre → CONTEXTUAL_RESPONSE por bloqueo confidencialidad. Fix S78a."
+  },
+  {
+    "id": "S77_A11",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Cómo ha evolucionado la entidad de marzo a abril? ¿Subimos o bajamos?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "variacion_mom": -1.66,
+        "tolerancia_pct": 15
+      },
+      "must_mention": [
+        "marzo",
+        "abril"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A12",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Hay algo que me deba preocupar este mes? ¿Hay alertas?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "gestor",
+        "margen"
+      ],
+      "must_not_contain": [
+        "no puedo",
+        "sin alertas"
+      ]
+    }
+  },
+  {
+    "id": "S77_A13",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "Dame los ingresos de las 5 oficinas del banco en abril",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "Madrid",
+        "Palma",
+        "Barcelona",
+        "Málaga",
+        "Bilbao"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A14",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Cuáles son los gestores con mejor margen directo en abril?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "margen",
+        "gestor"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_A15",
+    "grupo": "CDG",
+    "tipo": "funcional",
+    "pregunta": "¿Cuántos clientes tiene el banco en total?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "n_clientes": 142,
+        "tolerancia_pct": 0
+      },
+      "must_mention": [
+        "142",
+        "clientes"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo acceder"
+      ]
+    },
+    "nota": "No-regresion: 142 clientes siempre deben responder correctamente"
+  },
+  {
+    "id": "S77_B01",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿Cómo estoy este mes? Dame mis KPIs de abril",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "ingresos": 36847.37,
+        "tolerancia_pct": 5
+      },
+      "must_mention": [
+        "ingresos",
+        "margen"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo acceder"
+      ]
+    }
+  },
+  {
+    "id": "S77_B02",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿Por qué tengo tantos gastos? Explícame el desglose",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "gastos",
+        "directos"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_B03",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿Cuáles son mis clientes? Dame el listado con sus ingresos",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "cliente"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "Cliente 91",
+        "Cliente 1"
+      ]
+    },
+    "nota": "B3 debe mostrar nombres reales de clientes (sin genéricos como 'Cliente 91')"
+  },
+  {
+    "id": "S77_B04",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿He mejorado o empeorado respecto a marzo?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "variacion": -7.01,
+        "tolerancia_pct": 15
+      },
+      "must_mention": [
+        "marzo",
+        "abril"
+      ],
+      "must_not_contain": [
+        "103%",
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_B05",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿Cómo estoy comparado con mi centro? ¿Soy de los mejores o de los peores?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "Madrid",
+        "centro"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_B06",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿Cuántos contratos gestiono y cómo se distribuyen por producto?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "contratos": 18,
+        "tolerancia_pct": 0
+      },
+      "must_mention": [
+        "contratos"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_B07",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿Cuál es mi margen directo este mes?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "margen": 91.8,
+        "tolerancia_pct": 10
+      },
+      "must_mention": [
+        "margen",
+        "%"
+      ],
+      "must_not_contain": [
+        "103%"
+      ]
+    },
+    "nota": "B7 debe mostrar margen correcto sin superar 100%"
+  },
+  {
+    "id": "S77_B08",
+    "grupo": "Gestor",
+    "tipo": "funcional",
+    "pregunta": "¿Qué debería hacer para mejorar mis resultados esta semana?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "acción",
+        "cliente",
+        "producto"
+      ],
+      "must_not_contain": [
+        "no puedo",
+        "no tengo datos"
+      ]
+    }
+  },
+  {
+    "id": "S77_C01",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿Cuál es la proyección de ingresos para los próximos 6 meses?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "base",
+        "pesimista",
+        "optimista"
+      ],
+      "must_not_contain": [
+        "811",
+        "+26%"
+      ]
+    }
+  },
+  {
+    "id": "S77_C02",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "Dame los tres escenarios para el cierre de año",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "pesimista",
+        "optimista",
+        "base"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C03",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿Qué impacto tendría una subida de tipos del BCE de +75pb?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "tipos",
+        "%"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C04",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "Si captamos 20% más de clientes nuevos, ¿cómo cambia la proyección?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "captación",
+        "%"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C05",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿Cuál es el contexto macroeconómico actual? ¿Tipos BCE e IPC?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "tipos",
+        "IPC",
+        "BCE"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C06",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿Cuál es la diferencia entre reducir gastos un 10% vs captar 10% más de clientes?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "gastos",
+        "captación"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C07",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿Qué recomendaciones hace el modelo para mejorar el escenario base?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "recomendación",
+        "acción"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C08",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿Cuál es el impacto combinado de una bajada de tipos -50pb Y una reducción de captación -20%?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "tipos",
+        "captación",
+        "%"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C09",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿En qué meses del año hay más actividad? ¿Hay estacionalidad?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "estacionalidad",
+        "meses"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C10",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "Proyección entidad a 12 meses, dimensión Madrid",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "Madrid",
+        "proyección"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_C11",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "¿Cuánto hemos crecido respecto al año pasado?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "crecimiento",
+        "2025"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    },
+    "nota": "C11 fallaba en v1 (S77) — YoY usaba forecast en lugar de datos históricos reales. Fix S78a: prompt con contexto banco joven."
+  },
+  {
+    "id": "S77_C12",
+    "grupo": "Forecast",
+    "tipo": "funcional",
+    "pregunta": "Dame un resumen ejecutivo del mes de abril",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "resumen"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    },
+    "nota": "No-regresion: la pregunta de resumen mensual debe redirigirse al CDGAgent, no responder como forecast"
+  },
+  {
+    "id": "S77_D01",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "¿Cómo veo el año que viene para mi cartera?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "proyección",
+        "escenario"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_D02",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "¿Ya supero los 40.000€ en algún escenario?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "40",
+        "escenario"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    },
+    "nota": "D2: test específico — respuesta debe confirmar 'ya superas 40k en todos los escenarios' (actual €36k, pero proyección base >40k)"
+  },
+  {
+    "id": "S77_D03",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "Dame mi proyección personal a 3 meses",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "base",
+        "pesimista",
+        "optimista"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_D04",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "¿Qué tengo que hacer para alcanzar el escenario optimista?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "acción",
+        "optimista"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_D05",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "¿En qué meses del año suelo tener más actividad?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "meses"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_D06",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "Si captara 2 clientes nuevos con hipoteca, ¿cómo mejoraría mi proyección?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "captación",
+        "hipotec"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_D07",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "Resumen del mes de abril para mi cartera",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "ingresos",
+        "contratos"
+      ],
+      "must_not_contain": [
+        "no puedo",
+        "no tengo datos"
+      ]
+    },
+    "nota": "No-regresion: pregunta de resumen mensual para gestor debe ir a GestorAgent, no ForecastAgent"
+  },
+  {
+    "id": "S77_D08",
+    "grupo": "ForecastGestor",
+    "tipo": "funcional",
+    "pregunta": "¿Cuál es mi media de ingresos en los últimos 6 meses?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "media",
+        "meses"
+      ],
+      "must_not_contain": [
+        "no puedo"
+      ]
+    }
+  },
+  {
+    "id": "S77_E01",
+    "grupo": "CalidadDato",
+    "tipo": "funcional",
+    "pregunta": "Dame el nombre de un cliente de Madrid",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "Madrid"
+      ],
+      "must_not_contain": [
+        "Cliente 91",
+        "Cliente 92",
+        "Cliente 100",
+        "Cliente 101",
+        "Cliente 142"
+      ]
+    }
+  },
+  {
+    "id": "S77_E02",
+    "grupo": "CalidadDato",
+    "tipo": "funcional",
+    "pregunta": "¿Hay gestores sin cartera de Fondos de Renta Variable?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "gestores_sin_frv": 0,
+        "tolerancia_pct": 0
+      },
+      "must_mention": [
+        "FRV",
+        "fondos"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    },
+    "nota": "Post-S84: 0 gestores sin FRV"
+  },
+  {
+    "id": "S77_E03",
+    "grupo": "CalidadDato",
+    "tipo": "funcional",
+    "pregunta": "¿Hay gestores con margen neto negativo en abril?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "margen"
+      ],
+      "must_not_contain": [
+        "sí",
+        "1 gestor",
+        "2 gestores",
+        "no tengo datos"
+      ]
+    },
+    "nota": "Post-S83+S84: 0 gestores con margen negativo"
+  },
+  {
+    "id": "S77_E04",
+    "grupo": "CalidadDato",
+    "tipo": "funcional",
+    "pregunta": "Dame los datos de María González Vargas en abril",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "María",
+        "González"
+      ],
+      "must_not_contain": [
+        "no tengo acceso",
+        "-74",
+        "no puedo"
+      ]
+    },
+    "nota": "No-regresion post-S83: María González debe tener margen >20% (antes -74.5%). Verificar que no aparecen valores pre-corrección."
+  },
+  {
+    "id": "S77_E05",
+    "grupo": "CalidadDato",
+    "tipo": "funcional",
+    "pregunta": "¿Cuántos gestores hay en el banco y en qué centros?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "n_gestores": 30,
+        "tolerancia_pct": 0
+      },
+      "must_mention": [
+        "Madrid",
+        "Palma",
+        "Bilbao"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo acceder"
+      ]
+    }
+  }
+]

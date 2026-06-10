@@ -1,0 +1,471 @@
+{
+  "entidad_abr_2026": {
+    "ingresos": 644589.23,
+    "gastos_directos": 62113.69,
+    "gastos_centrales": 269194.01,
+    "beneficio": 313281.53,
+    "margen_neto_pct": 48.6,
+    "contratos_activos": 351,
+    "n_gestores": 30,
+    "n_clientes": 142
+  },
+  "productos_abr_2026": {
+    "Fondo Renta Variable": {
+      "producto_id": "600100300300",
+      "ingresos": 313789.33,
+      "gastos_directos": 7721.74,
+      "margen_directo_pct": 97.5,
+      "contratos": 123
+    },
+    "Préstamo Hipotecario": {
+      "producto_id": "100100100100",
+      "ingresos": 297103.55,
+      "gastos_directos": 32816.26,
+      "margen_directo_pct": 89.0,
+      "contratos": 120
+    },
+    "Depósito a Plazo Fijo en Euros": {
+      "producto_id": "400200100100",
+      "ingresos": 33696.35,
+      "gastos_directos": 21575.69,
+      "margen_directo_pct": 36.0,
+      "contratos": 108
+    }
+  },
+  "centros_abr_2026": {
+    "MADRID-OFICINA PRINCIPAL": {
+      "centro_id": 1,
+      "ingresos": 197311.28,
+      "contratos": 107,
+      "gestores": 8
+    },
+    "PALMA-SANT MIQUEL": {
+      "centro_id": 2,
+      "ingresos": 174042.22,
+      "contratos": 98,
+      "gestores": 8
+    },
+    "BILBAO-MARQUÉS DEL PUERTO": {
+      "centro_id": 5,
+      "ingresos": 111045.57,
+      "contratos": 50,
+      "gestores": 4
+    },
+    "MALAGA-PARQUE LITORAL": {
+      "centro_id": 4,
+      "ingresos": 81434.07,
+      "contratos": 46,
+      "gestores": 5
+    },
+    "BARCELONA-BALMES": {
+      "centro_id": 3,
+      "ingresos": 80756.09,
+      "contratos": 50,
+      "gestores": 5
+    }
+  },
+  "gestores_abr_2026": [
+    {
+      "gestor_id": 1,
+      "nombre": "Antonio Rodríguez García",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 36847.37,
+      "gastos_directos": 3031.55,
+      "margen_directo_pct": 91.8,
+      "contratos": 18
+    },
+    {
+      "gestor_id": 5,
+      "nombre": "Carlos García López",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 34198.95,
+      "gastos_directos": 3118.84,
+      "margen_directo_pct": 90.9,
+      "contratos": 19
+    },
+    {
+      "gestor_id": 9,
+      "nombre": "Joana Coll Ribas",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 33405.32,
+      "gastos_directos": 3314.7,
+      "margen_directo_pct": 90.1,
+      "contratos": 19
+    },
+    {
+      "gestor_id": 27,
+      "nombre": "Aitor Azkarate Irureta",
+      "centro": "BILBAO-MARQUÉS DEL PUERTO",
+      "ingresos": 33301.54,
+      "gastos_directos": 2159.0,
+      "margen_directo_pct": 93.5,
+      "contratos": 16
+    },
+    {
+      "gestor_id": 3,
+      "nombre": "Manuel López Fernández",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 29215.77,
+      "gastos_directos": 2988.51,
+      "margen_directo_pct": 89.8,
+      "contratos": 14
+    },
+    {
+      "gestor_id": 28,
+      "nombre": "Nerea Ibarreche Etxebarria",
+      "centro": "BILBAO-MARQUÉS DEL PUERTO",
+      "ingresos": 28490.24,
+      "gastos_directos": 1824.63,
+      "margen_directo_pct": 93.6,
+      "contratos": 12
+    },
+    {
+      "gestor_id": 2,
+      "nombre": "Francisco Martínez Pérez",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 28049.21,
+      "gastos_directos": 2336.58,
+      "margen_directo_pct": 91.7,
+      "contratos": 15
+    },
+    {
+      "gestor_id": 6,
+      "nombre": "Luis Pérez Martínez",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 25553.36,
+      "gastos_directos": 2258.11,
+      "margen_directo_pct": 91.2,
+      "contratos": 12
+    },
+    {
+      "gestor_id": 29,
+      "nombre": "Mikel Aguirre González",
+      "centro": "BILBAO-MARQUÉS DEL PUERTO",
+      "ingresos": 25397.28,
+      "gastos_directos": 1160.11,
+      "margen_directo_pct": 95.4,
+      "contratos": 11
+    },
+    {
+      "gestor_id": 10,
+      "nombre": "Pere Sureda Garau",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 25265.12,
+      "gastos_directos": 2644.99,
+      "margen_directo_pct": 89.5,
+      "contratos": 13
+    },
+    {
+      "gestor_id": 30,
+      "nombre": "Iker Urrutia Sarasola",
+      "centro": "BILBAO-MARQUÉS DEL PUERTO",
+      "ingresos": 23856.51,
+      "gastos_directos": 1310.39,
+      "margen_directo_pct": 94.5,
+      "contratos": 11
+    },
+    {
+      "gestor_id": 14,
+      "nombre": "Maria Garau Mesquida",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 23393.94,
+      "gastos_directos": 2373.68,
+      "margen_directo_pct": 89.9,
+      "contratos": 11
+    },
+    {
+      "gestor_id": 22,
+      "nombre": "Rafael Jiménez Moreno",
+      "centro": "MALAGA-PARQUE LITORAL",
+      "ingresos": 21337.37,
+      "gastos_directos": 2243.07,
+      "margen_directo_pct": 89.5,
+      "contratos": 13
+    },
+    {
+      "gestor_id": 21,
+      "nombre": "Jordi Torra Vila",
+      "centro": "BARCELONA-BALMES",
+      "ingresos": 20445.83,
+      "gastos_directos": 2118.43,
+      "margen_directo_pct": 89.6,
+      "contratos": 12
+    },
+    {
+      "gestor_id": 4,
+      "nombre": "Miguel Sánchez Rodríguez",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 19983.41,
+      "gastos_directos": 2206.29,
+      "margen_directo_pct": 89.0,
+      "contratos": 12
+    },
+    {
+      "gestor_id": 11,
+      "nombre": "Miquel Mesquida Fuster",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 19456.78,
+      "gastos_directos": 2018.02,
+      "margen_directo_pct": 89.6,
+      "contratos": 12
+    },
+    {
+      "gestor_id": 12,
+      "nombre": "Caterina Ribas Crespí",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 18959.44,
+      "gastos_directos": 1784.87,
+      "margen_directo_pct": 90.6,
+      "contratos": 9
+    },
+    {
+      "gestor_id": 19,
+      "nombre": "Marc Mas Ribas",
+      "centro": "BARCELONA-BALMES",
+      "ingresos": 18952.17,
+      "gastos_directos": 2103.04,
+      "margen_directo_pct": 88.9,
+      "contratos": 10
+    },
+    {
+      "gestor_id": 13,
+      "nombre": "Antoni Fuster Sureda",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 18946.19,
+      "gastos_directos": 2103.91,
+      "margen_directo_pct": 88.9,
+      "contratos": 13
+    },
+    {
+      "gestor_id": 15,
+      "nombre": "Josep Oliver Coll",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 18504.78,
+      "gastos_directos": 2222.06,
+      "margen_directo_pct": 88.0,
+      "contratos": 12
+    },
+    {
+      "gestor_id": 17,
+      "nombre": "Oriol Pujol Serra",
+      "centro": "BARCELONA-BALMES",
+      "ingresos": 18268.99,
+      "gastos_directos": 2806.05,
+      "margen_directo_pct": 84.6,
+      "contratos": 12
+    },
+    {
+      "gestor_id": 16,
+      "nombre": "Francesca Costa Ribas",
+      "centro": "PALMA-SANT MIQUEL",
+      "ingresos": 16110.65,
+      "gastos_directos": 1835.73,
+      "margen_directo_pct": 88.6,
+      "contratos": 9
+    },
+    {
+      "gestor_id": 26,
+      "nombre": "Antonio Torres López",
+      "centro": "MALAGA-PARQUE LITORAL",
+      "ingresos": 15796.96,
+      "gastos_directos": 1850.65,
+      "margen_directo_pct": 88.3,
+      "contratos": 9
+    },
+    {
+      "gestor_id": 25,
+      "nombre": "María González Vargas",
+      "centro": "MALAGA-PARQUE LITORAL",
+      "ingresos": 15468.94,
+      "gastos_directos": 1527.8,
+      "margen_directo_pct": 90.1,
+      "contratos": 9
+    },
+    {
+      "gestor_id": 23,
+      "nombre": "Carmen López González",
+      "centro": "MALAGA-PARQUE LITORAL",
+      "ingresos": 15461.53,
+      "gastos_directos": 1894.86,
+      "margen_directo_pct": 87.7,
+      "contratos": 9
+    },
+    {
+      "gestor_id": 7,
+      "nombre": "Javier Fernández Sánchez",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 13744.41,
+      "gastos_directos": 1338.41,
+      "margen_directo_pct": 90.3,
+      "contratos": 8
+    },
+    {
+      "gestor_id": 24,
+      "nombre": "José Ramírez Torres",
+      "centro": "MALAGA-PARQUE LITORAL",
+      "ingresos": 13369.27,
+      "gastos_directos": 1060.47,
+      "margen_directo_pct": 92.1,
+      "contratos": 6
+    },
+    {
+      "gestor_id": 20,
+      "nombre": "Clara Calvet Oliveras",
+      "centro": "BARCELONA-BALMES",
+      "ingresos": 12738.49,
+      "gastos_directos": 1716.54,
+      "margen_directo_pct": 86.5,
+      "contratos": 9
+    },
+    {
+      "gestor_id": 18,
+      "nombre": "Laia Vila Costa",
+      "centro": "BARCELONA-BALMES",
+      "ingresos": 10350.61,
+      "gastos_directos": 1322.34,
+      "margen_directo_pct": 87.2,
+      "contratos": 7
+    },
+    {
+      "gestor_id": 8,
+      "nombre": "Pablo Moreno García",
+      "centro": "MADRID-OFICINA PRINCIPAL",
+      "ingresos": 9718.8,
+      "gastos_directos": 1440.06,
+      "margen_directo_pct": 85.2,
+      "contratos": 9
+    }
+  ],
+  "gestor_1_clientes": [
+    {
+      "nombre": "Beatriz García López",
+      "cliente_id": 61,
+      "ingresos": 10712.09,
+      "contratos": 5
+    },
+    {
+      "nombre": "Elena García Fernández",
+      "cliente_id": 1,
+      "ingresos": 10661.26,
+      "contratos": 5
+    },
+    {
+      "nombre": "Gloria Ruiz Hernández",
+      "cliente_id": 71,
+      "ingresos": 7843.56,
+      "contratos": 3
+    },
+    {
+      "nombre": "David López Martínez",
+      "cliente_id": 2,
+      "ingresos": 5030.84,
+      "contratos": 3
+    },
+    {
+      "nombre": "Pedro Rodriguez Sanchez",
+      "cliente_id": 103,
+      "ingresos": 2599.62,
+      "contratos": 2
+    }
+  ],
+  "gestor_1_kpis": {
+    "nombre": "Antonio Rodríguez García",
+    "centro": "MADRID-OFICINA PRINCIPAL",
+    "ingresos": 36847.37,
+    "gastos_directos": 3031.55,
+    "contratos": 18,
+    "margen_directo_pct": 91.8
+  },
+  "mom_entidad": {
+    "marzo": 655501.06,
+    "abril": 644589.23,
+    "variacion_pct": -1.66
+  },
+  "mom_gestor_1": {
+    "marzo": 39625.89,
+    "abril": 36847.37,
+    "variacion_pct": -7.01
+  },
+  "serie_historica": [
+    {
+      "periodo": "2024-09",
+      "ingresos": 40214.82
+    },
+    {
+      "periodo": "2024-10",
+      "ingresos": 87484.86
+    },
+    {
+      "periodo": "2024-11",
+      "ingresos": 127144.61
+    },
+    {
+      "periodo": "2024-12",
+      "ingresos": 138567.91
+    },
+    {
+      "periodo": "2025-01",
+      "ingresos": 203714.39
+    },
+    {
+      "periodo": "2025-02",
+      "ingresos": 268310.82
+    },
+    {
+      "periodo": "2025-03",
+      "ingresos": 341853.21
+    },
+    {
+      "periodo": "2025-04",
+      "ingresos": 396494.42
+    },
+    {
+      "periodo": "2025-05",
+      "ingresos": 433968.89
+    },
+    {
+      "periodo": "2025-06",
+      "ingresos": 469998.36
+    },
+    {
+      "periodo": "2025-07",
+      "ingresos": 455455.88
+    },
+    {
+      "periodo": "2025-08",
+      "ingresos": 458530.56
+    },
+    {
+      "periodo": "2025-09",
+      "ingresos": 623851.08
+    },
+    {
+      "periodo": "2025-10",
+      "ingresos": 660184.94
+    },
+    {
+      "periodo": "2025-11",
+      "ingresos": 617063.25
+    },
+    {
+      "periodo": "2025-12",
+      "ingresos": 578378.69
+    },
+    {
+      "periodo": "2026-01",
+      "ingresos": 598263.66
+    },
+    {
+      "periodo": "2026-02",
+      "ingresos": 632849.98
+    },
+    {
+      "periodo": "2026-03",
+      "ingresos": 655501.06
+    },
+    {
+      "periodo": "2026-04",
+      "ingresos": 644589.23
+    }
+  ]
+}

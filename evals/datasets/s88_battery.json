@@ -1,0 +1,892 @@
+[
+  {
+    "id": "A1_resumen",
+    "grupo": "CDG",
+    "pregunta": "Dame un resumen ejecutivo del mes de abril. ¿Cómo estamos?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "ingresos_entidad": 644589.23,
+        "tolerancia_pct": 5
+      },
+      "must_mention": [
+        "margen",
+        "contratos",
+        "ingresos"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo",
+        "no dispongo"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Cita ingresos (~€645k), contratos (351), margen (~48.6%)"
+      },
+      "contextualizacion": {
+        "peso": 0.2,
+        "criterio": "Compara con mes anterior o da tendencia"
+      },
+      "accionabilidad": {
+        "peso": 0.25,
+        "criterio": "Al menos 1 punto de atención o recomendación"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Ejecutivo, técnico bancario, español"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Lectura fluida, bien estructurada"
+      }
+    }
+  },
+  {
+    "id": "A2_gestores_preocupantes",
+    "grupo": "CDG",
+    "pregunta": "¿Qué gestores deberían preocuparnos este mes y por qué?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {},
+      "must_mention": [
+        "margen",
+        "gestor"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Cita al menos 2 gestores con nombre real y cifras"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Explica POR QUÉ son preocupantes (MoM negativo, margen bajo)"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Sugiere acción para cada gestor problemático"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Ejecutivo, analítico"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Bien estructurado, fácil de seguir"
+      }
+    }
+  },
+  {
+    "id": "A3_productos",
+    "grupo": "CDG",
+    "pregunta": "¿Cuál es la contribución de cada producto a nuestros ingresos y dónde están las oportunidades?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "hipotecario",
+        "depósito",
+        "fondo",
+        "FRV"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Cita ingresos por producto con cifras cercanas a BD"
+      },
+      "contextualizacion": {
+        "peso": 0.2,
+        "criterio": "Compara márgenes entre productos"
+      },
+      "accionabilidad": {
+        "peso": 0.25,
+        "criterio": "Identifica oportunidades concretas por producto"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Ejecutivo"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Bien estructurado"
+      }
+    }
+  },
+  {
+    "id": "A4_centros",
+    "grupo": "CDG",
+    "pregunta": "¿Qué diferencias hay entre nuestras oficinas? ¿Cuál está rindiendo mejor y cuál peor?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "Madrid",
+        "Palma",
+        "Barcelona",
+        "Málaga",
+        "Bilbao"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Cita cifras por centro, identifica mejor y peor correctamente"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Explica causas de diferencias (nº gestores, mix producto)"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Sugiere acción para el centro peor"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Ejecutivo"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Tabla comparativa o estructura clara"
+      }
+    }
+  },
+  {
+    "id": "A5_alerta_deterioro",
+    "grupo": "CDG",
+    "pregunta": "¿Hay algún gestor o centro que esté mostrando señales de deterioro en los últimos meses?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "gestor"
+      ],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Identifica gestores con MoM negativo con cifras"
+      },
+      "contextualizacion": {
+        "peso": 0.3,
+        "criterio": "Muestra tendencia de varios meses, no solo último"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Sugiere seguimiento o acción"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Tono de alerta profesional"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Bien estructurado"
+      }
+    }
+  },
+  {
+    "id": "A6_estrategia",
+    "grupo": "CDG",
+    "pregunta": "Si tuvieras que priorizar una acción comercial este mes para mejorar el margen, ¿cuál sería?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [],
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo",
+        "no dispongo de información"
+      ]
+    },
+    "s88_resultado_v1": {
+      "score": null,
+      "nota": "FAIL en S88 v1 — respuesta vacía sin herramientas. Fix en S89-F2."
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.2,
+        "criterio": "Basa recomendación en datos reales (rankings, márgenes)"
+      },
+      "contextualizacion": {
+        "peso": 0.2,
+        "criterio": "Explica por qué esa acción y no otra"
+      },
+      "accionabilidad": {
+        "peso": 0.35,
+        "criterio": "Acción CONCRETA y ejecutable, no genérica"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Estratégico, no descriptivo"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Directo al punto"
+      }
+    }
+  },
+  {
+    "id": "A7_comparativa_mom",
+    "grupo": "CDG",
+    "pregunta": "¿Cómo ha evolucionado el banco entre marzo y abril? ¿Estamos mejorando o empeorando?",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "variacion_mom": -1.66,
+        "tolerancia_pct": 10
+      },
+      "must_mention": [
+        "marzo",
+        "abril"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Cita variación MoM correcta (~-1.7%) en ingresos"
+      },
+      "contextualizacion": {
+        "peso": 0.3,
+        "criterio": "Explica causas del cambio"
+      },
+      "accionabilidad": {
+        "peso": 0.15,
+        "criterio": "Indica si la tendencia es preocupante"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Ejecutivo"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Fluido"
+      }
+    }
+  },
+  {
+    "id": "A8_gestor_nombre",
+    "grupo": "CDG",
+    "pregunta": "Dame los datos completos de Antonio Rodríguez García en abril",
+    "endpoint": "/chat/message",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "ingresos_gestor1": 36847.37,
+        "tolerancia_pct": 5
+      },
+      "must_mention": [
+        "Antonio",
+        "Rodríguez",
+        "Madrid"
+      ],
+      "must_not_contain": [
+        "no tengo acceso",
+        "confidencial"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.35,
+        "criterio": "Cita ingresos ~€36.8k, contratos 18, centro MADRID"
+      },
+      "contextualizacion": {
+        "peso": 0.2,
+        "criterio": "Compara con media o con mes anterior"
+      },
+      "accionabilidad": {
+        "peso": 0.15,
+        "criterio": "Identifica puntos fuertes o débiles del gestor"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Ejecutivo, completo"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Bien estructurado"
+      }
+    }
+  },
+  {
+    "id": "B1_estado",
+    "grupo": "Gestor",
+    "pregunta": "¿Cómo estoy este mes? Dame un resumen de mis resultados",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "ingresos",
+        "margen"
+      ],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Cita ingresos ~€36.8k, contratos 18, margen ~92%"
+      },
+      "contextualizacion": {
+        "peso": 0.2,
+        "criterio": "Compara con mes anterior o con media"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Indica qué va bien y qué necesita atención"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Personal, empático, segunda persona"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Natural, no robótico"
+      }
+    }
+  },
+  {
+    "id": "B2_clientes",
+    "grupo": "Gestor",
+    "pregunta": "¿Cuáles son mis clientes más rentables y cuáles me preocupan?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [],
+      "must_not_contain": [
+        "no tengo datos",
+        "otros gestores"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Cita nombres reales de clientes con cifras"
+      },
+      "contextualizacion": {
+        "peso": 0.2,
+        "criterio": "Explica por qué son rentables o preocupantes"
+      },
+      "accionabilidad": {
+        "peso": 0.25,
+        "criterio": "Sugiere acción concreta por cliente"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Personal, directo"
+      },
+      "fluidez": {
+        "peso": 0.1,
+        "criterio": "Fluido"
+      }
+    }
+  },
+  {
+    "id": "B3_evolucion",
+    "grupo": "Gestor",
+    "pregunta": "¿He mejorado o empeorado respecto al mes pasado? ¿Por qué?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_contain_values": {
+        "variacion_gestor1": -7.01,
+        "tolerancia_pct": 10
+      },
+      "must_mention": [
+        "marzo",
+        "abril"
+      ],
+      "must_not_contain": [
+        "103%",
+        "no tengo datos"
+      ]
+    },
+    "s88_resultado_v1": {
+      "score": null,
+      "nota": "FAIL en S88 v1 — margen 103.45% (bug query MoM). Fix en S89-F1."
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Variación MoM ~-7.0%, margen SIEMPRE ≤100%"
+      },
+      "contextualizacion": {
+        "peso": 0.3,
+        "criterio": "Explica causa del cambio (producto, cliente, estacionalidad)"
+      },
+      "accionabilidad": {
+        "peso": 0.15,
+        "criterio": "Indica qué hacer si empeoró"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Empático pero directo"
+      },
+      "fluidez": {
+        "peso": 0.1,
+        "criterio": "Fluido"
+      }
+    }
+  },
+  {
+    "id": "B4_accion",
+    "grupo": "Gestor",
+    "pregunta": "¿Qué debería hacer esta semana para mejorar mis resultados?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_not_contain": [
+        "no tengo datos",
+        "no puedo"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.2,
+        "criterio": "Basa en datos reales del gestor"
+      },
+      "contextualizacion": {
+        "peso": 0.15,
+        "criterio": "Conecta con su cartera actual"
+      },
+      "accionabilidad": {
+        "peso": 0.4,
+        "criterio": "Acción CONCRETA ejecutable esta semana"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Motivador, como un coach"
+      },
+      "fluidez": {
+        "peso": 0.1,
+        "criterio": "Directo"
+      }
+    }
+  },
+  {
+    "id": "B5_producto",
+    "grupo": "Gestor",
+    "pregunta": "¿En qué producto debería enfocarme para crecer más?",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [],
+      "must_not_contain": [
+        "no tengo datos"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Compara ingresos/margen por producto del gestor"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Explica ventajas del producto recomendado"
+      },
+      "accionabilidad": {
+        "peso": 0.25,
+        "criterio": "Recomendación concreta con justificación"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Personal"
+      },
+      "fluidez": {
+        "peso": 0.1,
+        "criterio": "Fluido"
+      }
+    }
+  },
+  {
+    "id": "B6_frustrado",
+    "grupo": "Gestor",
+    "pregunta": "Llevo dos meses bajando en ingresos y no entiendo por qué. Estoy preocupado.",
+    "endpoint": "/chat/gestor",
+    "params": {
+      "gestor_id": "1",
+      "user_role": "gestor",
+      "periodo": "2026-04"
+    },
+    "ground_truth": {
+      "must_not_contain": [
+        "no tengo datos",
+        "no me es posible"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.2,
+        "criterio": "Cita datos reales de la caída (MoM -7.0%)"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Identifica causa probable de la caída"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Plan de acción concreto"
+      },
+      "tono": {
+        "peso": 0.25,
+        "criterio": "EMPÁTICO primero, datos después. Reconoce preocupación."
+      },
+      "fluidez": {
+        "peso": 0.1,
+        "criterio": "Natural, humano"
+      }
+    }
+  },
+  {
+    "id": "C1_cierre_ejercicio",
+    "grupo": "Forecast",
+    "pregunta": "¿Cómo vamos a cerrar el ejercicio? Dame una proyección realista",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "escenario",
+        "base",
+        "proyección"
+      ],
+      "must_not_contain": [
+        "811",
+        "+26%"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Proyecta con cifras concretas en €"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Contextualiza con últimos 6 meses de histórico"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Indica qué hacer para mejorar la proyección"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Estratégico, ejecutivo"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Bien estructurado con escenarios"
+      }
+    }
+  },
+  {
+    "id": "C2_bce_tipos",
+    "grupo": "Forecast",
+    "pregunta": "El BCE está considerando bajar tipos 25pb en junio. ¿Cómo nos afectaría?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "tipos",
+        "hipotec"
+      ],
+      "must_not_contain": []
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Cuantifica impacto en € o % sobre ingresos"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Explica mecanismo (tipos → hipotecas → captación)"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Sugiere acción ante bajada de tipos"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Estratégico"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Fluido"
+      }
+    }
+  },
+  {
+    "id": "C3_captacion",
+    "grupo": "Forecast",
+    "pregunta": "Si lanzamos una campaña hipotecaria y conseguimos captar un 15% más de clientes nuevos, ¿qué impacto tendría en los próximos 6 meses?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "captación",
+        "hipotec"
+      ],
+      "must_not_contain": []
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.3,
+        "criterio": "Cifras concretas de impacto en €"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Muestra impacto gradual mes a mes"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Indica si la campaña merece la pena"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Analítico"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Bien estructurado"
+      }
+    }
+  },
+  {
+    "id": "C4_crisis_frv",
+    "grupo": "Forecast",
+    "pregunta": "¿Qué pasaría si hay una desaceleración económica y perdemos un 10% de los ingresos por FRV?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "FRV",
+        "fondo"
+      ],
+      "must_not_contain": []
+    },
+    "s88_resultado_v1": {
+      "score": null,
+      "nota": "PARTIAL en S88 v1 — FRV mapeado a captación general. Fix en S89-F3."
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Cuantifica impacto en €"
+      },
+      "contextualizacion": {
+        "peso": 0.3,
+        "criterio": "Explica cómo mapea el shock al simulador"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Sugiere mitigación"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Analítico"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Claro"
+      }
+    }
+  },
+  {
+    "id": "C5_escenarios",
+    "grupo": "Forecast",
+    "pregunta": "Explícame las diferencias entre el escenario pesimista y el optimista. ¿Qué las determina?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "pesimista",
+        "optimista",
+        "base"
+      ],
+      "must_not_contain": [
+        "811",
+        "733"
+      ]
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Cita cifras de los 3 escenarios"
+      },
+      "contextualizacion": {
+        "peso": 0.35,
+        "criterio": "Explica QUÉ determina cada escenario (supuestos)"
+      },
+      "accionabilidad": {
+        "peso": 0.15,
+        "criterio": "Indica qué acciones acercan al optimista"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Didáctico"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Bien organizado"
+      }
+    }
+  },
+  {
+    "id": "C6_macro",
+    "grupo": "Forecast",
+    "pregunta": "¿Cómo está el entorno macroeconómico y qué riesgos ve el modelo para nuestro negocio?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "control_gestion",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "tipos",
+        "IPC"
+      ],
+      "must_not_contain": []
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Cita tipos BCE e IPC reales"
+      },
+      "contextualizacion": {
+        "peso": 0.3,
+        "criterio": "Conecta macro con impacto en productos del banco"
+      },
+      "accionabilidad": {
+        "peso": 0.2,
+        "criterio": "Identifica riesgos concretos"
+      },
+      "tono": {
+        "peso": 0.1,
+        "criterio": "Estratégico, informado"
+      },
+      "fluidez": {
+        "peso": 0.15,
+        "criterio": "Fluido"
+      }
+    }
+  },
+  {
+    "id": "C7_gestor_forecast",
+    "grupo": "Forecast",
+    "pregunta": "¿Voy a llegar a mis objetivos este trimestre?",
+    "endpoint": "/forecast/chat",
+    "params": {
+      "user_role": "gestor",
+      "gestor_id": "1",
+      "periodo_base": "2026-04"
+    },
+    "ground_truth": {
+      "must_mention": [
+        "proyección"
+      ],
+      "must_not_contain": []
+    },
+    "evaluacion": {
+      "precision_datos": {
+        "peso": 0.25,
+        "criterio": "Proyecta cifras del gestor concreto"
+      },
+      "contextualizacion": {
+        "peso": 0.25,
+        "criterio": "Compara proyección con objetivo si lo conoce"
+      },
+      "accionabilidad": {
+        "peso": 0.25,
+        "criterio": "Indica qué hacer para llegar"
+      },
+      "tono": {
+        "peso": 0.15,
+        "criterio": "Personal, motivador"
+      },
+      "fluidez": {
+        "peso": 0.1,
+        "criterio": "Directo"
+      }
+    }
+  }
+]

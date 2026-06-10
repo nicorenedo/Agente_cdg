@@ -5,6 +5,41 @@
 
 ---
 
+## ✅ F0.5 — Datasets de evaluación: ground truth + baterías S77/S88 (2026-06-10)
+
+**Sesión preparatoria v2.** NO se modificó código de agentes, queries ni frontend.
+Solo creación de archivos en `evals/datasets/` y `evals/README.md`.
+
+**Archivos creados:**
+- `evals/datasets/ground_truth.json` — valores factuales SQL directo de BD (9 categorías)
+- `evals/datasets/s88_battery.json` — 21 preguntas cualitativas con criterios LLM judge
+- `evals/datasets/s77_battery.json` — 48 preguntas funcionales reconstruidas de SESSIONS_V1.md
+- `evals/README.md` — documentación de datasets y cómo evaluar
+- `evals/extract_ground_truth.py` — script SQL de extracción (reutilizable)
+- `evals/build_batteries.py` — script de construcción de baterías (reutilizable)
+
+**Ground truth extraído (post-S84, BD BM_CONTABILIDAD_CDG.db):**
+- Ingresos entidad abr-2026: **€644.589** | Margen: **48.6%** | Contratos: **351** | Clientes: **142**
+- MoM entidad (mar→abr): **-1.66%**
+- Gestor 1 (Antonio Rodríguez García, Madrid): **€36.847**, margen 91.8%, 18 contratos
+- MoM gestor 1: **-7.01%**
+- Top producto: FRV €313.789 (97.5%) > Hip €297.104 (89.0%) > Dep €33.696 (36.0%)
+- Top centro: Madrid €197.311 > Palma €174.042 > Bilbao €111.046 > Málaga €81.434 > Barcelona €80.756
+
+**S88 battery:** 21 preguntas (CDG:8, Gestor:6, Forecast:7). 3 tests con historial de fallo v1:
+A6 (estrategia vacía S89-F2), B3 (margen 103% S89-F1), C4 (FRV shock S89-F3).
+Objetivo v2: score ≥4.5/5.
+
+**S77 battery:** 48 preguntas (CDG:15, Gestor:8, Forecast:12, ForecastGestor:8, CalidadDato:5).
+11 tests con notas (historial de fallo o no-regresión), resto reconstruidos por área funcional.
+Objetivo v2: 48/48 (100%).
+
+Script de extracción con schema real BD: `DESC_GESTOR`, `DESC_CENTRO`, `DESC_PRODUCTO`, `CENTRO` (FK → CENTROS.CENTRO_ID), `IND_CENTRO_FINALISTA`.
+
+**Próxima sesión:** F1 — Infraestructura LangGraph (CDGState, graph/orchestrator.py, DecisionLogger, LangSmith tracing).
+
+---
+
 ## ✅ Completado (sesiones 1-17)
 
 **S1 — Limpieza repo:** Eliminados archivos basura (DB duplicada, 23 scripts, tests frontend). `chore: limpieza pre-refactor`
