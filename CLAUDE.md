@@ -1,170 +1,248 @@
-# CLAUDE.md — Agente Control de Gestión (CDG)
-> Contexto maestro operativo. Léelo completo antes de escribir código. Historial en SESSIONS.md.
+# CDG Intelligence v2 — Kutxa-CdG
+
+> Contexto maestro operativo. Léelo completo antes de escribir código.
+> Historial de sesiones en SESSIONS.md.
+> Documentos de planificación en docs/.
 
 ---
 
 ## ⚠️ ADVERTENCIAS CRÍTICAS
 
-### 1. LLM: Azure OpenAI — NO Anthropic API
-Usa **Azure OpenAI** con credenciales del `.env`. No uses `anthropic` SDK ni `claude` como modelo.
-
-### 2. El código existente puede contener errores
-**No reutilices ningún archivo sin validarlo.** Ante cualquier duda: reescribe desde cero.
-
----
-
-## 1. VISIÓN GENERAL
-
-**Agente CDG** — copiloto LLM para análisis financiero, desviaciones, incentivos y Business Reviews.
-
-| Perfil | Acceso |
-|---|---|
-| **Gestor Comercial** | Solo su cartera — `WHERE GESTOR_ID = {id}` |
-| **Control de Gestión / Dirección** | Sin restricciones |
+1. **LLM: Azure OpenAI — NO Anthropic API.** Usa `langchain-openai` con credenciales del `.env`. No uses `anthropic` SDK.
+2. **El código v1 existente puede contener errores.** Validar antes de reutilizar. Ante la duda: reescribir.
+3. **Reconstrucción de dentro hacia fuera.** Infraestructura → agentes → knowledge base → frontend → QA.
+4. **El frontend visual no se toca.** La calidad visual del frontend v1 está consolidada. Solo se añaden componentes nuevos AI Act y se limpia `analyticsService.js`.
+5. **Tres patas en paralelo en cada fase**, no en serie:
+   - Pata agéntica (LangGraph + agentes)
+   - Pata de observabilidad (LangSmith + DecisionLogger)
+   - Pata AI Act (linaje, descomposición, confidence, HITL, doc Art. 11)
+6. **Cada sesión actualiza `AI_ACT_MAPPING.md` §6** con el grado de cumplimiento alcanzado.
 
 ---
 
-## 2. STACK
+## 1. Contexto del proyecto
 
-**Backend:** Python 3.11+, FastAPI, SQLite, LangChain/LangGraph, Azure OpenAI, Pandas.
-**Frontend:** React, Ant Design, Recharts, D3.js.
+**CDG Intelligence** es un copiloto de Control de Gestión bancario basado en IA agéntica.
 
----
+La **v1 es una POC** que demuestra el caso. La **v2 se reconstruye desde cero** con tres objetivos:
 
-## 3. ESTRUCTURA
+1. **Arquitectura modular y observable** — LangGraph + agentes especializados + LangSmith trazado end-to-end.
+2. **Mejora de calidad y funcionalidad** — Query Rewriter, mejor calidad de output, descomposición de efectos, exportación HTML/email.
+3. **AI Act ready by design** — linaje del dato, registro auditable de decisiones, confidence scoring, HITL, documentación Art. 11. No como parche al final: integrado en cada fase desde el origen.
+
+El frontend mantiene el diseño Accenture (paleta #A100FF), es temable para futuros clientes y se respeta su calidad visual actual.
+
+- **Tres perfiles:** `control_gestion`, `gestor`, `validator` (nuevo, para HITL)
+- **Datos:** BD SQLite con 20 meses de histórico bancario sintético (sep-2024 a abr-2026)
+- **LLM:** Azure OpenAI — configurar credenciales en `.env` según `.env.example`
+
+## 2. Estado actual
+
+**Fase 0 completada.** Repo limpio y listo para la reconstrucción v2.
+
+Leer en este orden antes de empezar cualquier sesión:
+
+1. `docs/RECONSTRUCTION_AUDIT.md` — qué hay en v1, qué conservar, qué reconstruir
+2. `docs/ARCHITECTURE_V2.md` — arquitectura objetivo con LangGraph + capa AI Act
+3. `docs/RECONSTRUCTION_PLAN.md` — 6 fases, criterios de paso, riesgos
+4. `docs/AGENT_CONTRACTS.md` — contratos de cada agente
+5. `docs/AI_ACT_MAPPING.md` — **mapeo AI Act → componentes técnicos**. Imprescindible para entender qué satisface cada componente AI Act y qué evidencias debe producir.
+
+## 3. Stack técnico v2
+
+| Capa | Tecnología |
+|------|-----------|
+| Orquestación agéntica | LangGraph + LangChain |
+| LLM | Azure OpenAI (gpt-4o) |
+| Observabilidad técnica | LangSmith (tracing + evals) |
+| **Observabilidad regulatoria** | **`DecisionLogger` + BD** |
+| Backend | FastAPI + Python 3.11+ |
+| Templating prompts | Jinja2 (NO hardcoding en código) |
+| Datos | SQLite + Pandas |
+| Forecast | Prophet (heredado v1, no tocar) |
+| Knowledge base | ChromaDB + sentence-transformers |
+| Validación | Pydantic v2 |
+| Frontend | React 18 + Ant Design 5 + Recharts (heredado v1, no se reformatea) |
+
+## 4. Estructura de directorios v2
 
 ```
-backend/src/
-  database/  BM_CONTABILIDAD_CDG.db, db_connection.py
-  agents/    gestor_agent.py, cdg_agent.py, chat_agent.py
-  tools/     kpi_calculator.py, chart_generator.py, report_generator.py
-  queries/   basic_queries.py, gestor_queries.py, comparative_queries.py, deviation_queries.py
-  prompts/   system_prompts.py, user_prompts.py, chart_prompts.py
-  utils/     auth.py
-backend/  main.py, config.py
-frontend/src/
-  components/Dashboard/  KPICards.jsx, InteractiveCharts.jsx, FabricaModelSection.jsx,
-                         DrillDownView.jsx, ChatInterface.jsx
-  pages/    LandingPage.jsx, GestorView.jsx, DireccionView.jsx
-  services/ api.js, chatService.js, analyticsService.js
+backend/
+├── core/
+│   ├── graph/
+│   │   ├── orchestrator.py
+│   │   ├── nodes/                  # un archivo por agente, incluye:
+│   │   │   ├── query_rewriter.py   # 🆕 pre-procesador del Orchestrator
+│   │   │   ├── hitl_validator.py   # 🆕 decide activación de HITL
+│   │   │   └── ...
+│   │   └── edges.py
+│   ├── agents/                     # base_agent.py, react_agent.py
+│   ├── tools/                      # tools atómicas, incluye:
+│   │   ├── effect_decomposer.py    # 🆕 descomposición fija de efectos
+│   │   └── ...
+│   ├── prompts/                    # plantillas *.j2 (Jinja2)
+│   └── state.py                    # CDGState TypedDict extendido AI Act
+├── compliance/                     # 🆕 capa de gobernanza AI Act
+│   ├── decision_logger.py          # persistencia decision_logs
+│   ├── lineage_tracker.py          # middleware anotación source
+│   ├── confidence_scorer.py        # scoring 0.0-1.0
+│   ├── policy_enforcer.py          # políticas configurables banco
+│   ├── art11_doc_generator.py      # generador doc técnica
+│   └── schemas.py                  # Pydantic schemas compliance
+├── data/
+│   ├── queries/                    # SQL puro
+│   ├── calculator.py               # cálculos centralizados
+│   ├── database.py
+│   └── seed/
+├── forecast/                       # heredado v1, MANTENER intacto
+├── knowledge/                      # ChromaDB + loaders + citator unificado lineage
+├── observability/                  # LangSmith + tags compliance
+├── evals/                          # batería tests
+│   ├── s77_functional.py
+│   ├── s88_qualitative.py
+│   ├── compliance_eval.py          # 🆕
+│   ├── robustness_eval.py          # 🆕
+│   ├── risk_register.json          # 🆕
+│   └── datasets/
+├── api/
+│   ├── routes/                     # endpoints, incluye:
+│   │   ├── feedback.py             # 🆕
+│   │   ├── hitl.py                 # 🆕
+│   │   ├── decision_log.py         # 🆕
+│   │   └── compliance.py           # 🆕
+│   └── schemas.py
+├── config/
+│   ├── data_config.py
+│   ├── business_rules.py
+│   ├── brand_config.py
+│   ├── compliance_config.py        # 🆕 umbrales HITL, retención, políticas
+│   └── settings.py
+└── main.py
+
+frontend/
+└── src/
+    ├── theme/                      # heredado intacto
+    ├── components/
+    │   ├── Chat/                   # heredado intacto
+    │   ├── Dashboard/              # heredado intacto (calidad visual)
+    │   ├── compliance/             # 🆕 componentes AI Act
+    │   │   ├── FeedbackWidget.jsx
+    │   │   ├── DataLineagePopover.jsx
+    │   │   ├── ConfidenceBadge.jsx
+    │   │   ├── EffectBreakdown.jsx
+    │   │   └── HITLConsole.jsx
+    │   └── export/
+    ├── pages/                      # heredado intacto
+    └── services/
+        ├── analyticsService.js     # único reescrito: cliente HTTP fino
+        ├── feedbackService.js      # 🆕
+        ├── hitlService.js          # 🆕
+        └── lineageService.js       # 🆕
+
+docs/
+├── RECONSTRUCTION_AUDIT.md
+├── ARCHITECTURE_V2.md
+├── RECONSTRUCTION_PLAN.md
+├── AGENT_CONTRACTS.md
+├── AI_ACT_MAPPING.md               # 🆕 documento fundacional AI Act
+├── ART11_TECHNICAL_DOC.md          # 🆕 generado en F5
+├── USER_MANUAL.md                  # 🆕 manual del desplegador
+├── QMS.md                          # 🆕 sistema de gestión de calidad
+├── RISK_REGISTER.md                # 🆕 registro de riesgos vivo
+└── data_generation/
 ```
 
----
+## 5. Los 11 agentes / componentes (LangGraph + capa AI Act)
 
-## 4. BASE DE DATOS — `BM_CONTABILIDAD_CDG.db`
+| Agente / componente | Tipo | LLM calls | Activación |
+|--------|-----------|-----------|-----------|
+| `QueryRewriter` 🆕 | Agente | 1 (small) | Siempre primero |
+| `Orchestrator` | Agente | 1 (clasifica) | Siempre tras Rewriter |
+| `PermissionAgent` (+ `PolicyEnforcer`) | Agente + servicio | 0 | Siempre — transversal |
+| `ContextEnricher` | Agente | 0 (determinista) | Compleja / forecast |
+| `DataAgent` (+ `LineageTracker`) | Agente + middleware | 1 (selecciona query) | Consultas con datos |
+| `CalculationAgent` (+ `EffectDecomposer`) | Agente + tool | 0 (determinista) | Consultas con datos |
+| `ForecastAgent` | Agente | 1 (selecciona tool) | Consultas forecast |
+| `InsightAgent` | Agente | 1 | Consultas con interpretación |
+| `KnowledgeAgent` | Agente | 1 (síntesis RAG) | Consultas knowledge |
+| `HITLValidator` 🆕 | Agente | 0 (reglas) | Siempre tras Confidence, antes Narrator |
+| `NarratorAgent` (+ `ConfidenceScorer`) | Agente + hook | 1 | Siempre penúltimo |
+| `DecisionLogger` 🆕 | Servicio | 0 | Siempre al cierre del grafo |
 
-SQLite, 14 tablas, UTF-8. Períodos financieros: **sep-2024 a abr-2026** (20 meses). ~19,000 movimientos.
+**Principio clave:** el Orchestrator activa solo los agentes necesarios. Consulta simple = 4 LLM calls. Compleja = 5. Forecast = 4. Knowledge = 4.
 
-**Tablas maestras:**
-- `MAESTRO_CENTROS`: Finalistas (1-5): MADRID, PALMA, BARCELONA, MALAGA, BILBAO. Soporte (6-8).
-- `MAESTRO_GESTORES`: 30 gestores. C1 (1-8), C2 (9-16), C3 (17-21), C4 (22-26), C5 (27-30).
-- `MAESTRO_CONTRATOS`: **351 contratos** (acumulados sep-2024 a abr-2026).
-- `MAESTRO_PRODUCTOS`: `100100100100` Hip (100% banco) | `400200100100` Dep (100% banco) | `600100300300` Fondo (85% gestora/15% banco).
-- `MAESTRO_SEGMENTOS`: N10101=Minorista | N10102=Privada | N10103=Empresas | N10104=Personal | N20301=Fondos
+## 6. Reglas de desarrollo (anti-patrones prohibidos)
 
-**Tablas transaccionales:**
-- `MOVIMIENTOS_CONTRATOS`: ~12,000 registros. CONTRATO_ID NULL = gastos centrales. Ingresos: `76xxxx`. Gastos: `62/64/68/69xxxx`. Fábrica: `760024` banco / `760025` gestora.
-- `GASTOS_CENTRO`: Sep €455k | Oct €222k. ⚠️ Gastos oct reales en MOVIMIENTOS (CONTRATO_ID IS NULL).
-- `PRECIO_POR_PRODUCTO_REAL`: Solo CDG. `PRECIO_POR_PRODUCTO_STD`: Todos.
+- ❌ **Sin hardcoding** de valores de negocio en agentes o queries. Todo en `config/`.
+- ❌ **Sin god-strings en prompts.** Solo plantillas Jinja2 con `{{ variables }}`.
+- ❌ **Sin S46-retry manual.** Tool-calling obligatorio en system prompt.
+- ❌ **Sin lógica de negocio en queries SQL.** SQL puro en `data/queries/`.
+- ❌ **Sin lógica de negocio en frontend.** `analyticsService.js` es cliente HTTP fino.
+- ❌ **Sin tocar la calidad visual del frontend.** Solo añadir componentes nuevos AI Act y limpiar lógica de negocio.
+- ❌ **Sin saltarse `LineageTracker` en DataAgent / KnowledgeAgent / ForecastAgent** — toda cifra del output debe traer source.
+- ❌ **Sin saltarse `DecisionLogger`** — cada request del agente debe producir un decision_log persistido.
+- ✅ **LangSmith tracing activo** desde Fase 1 — cada request trazado end-to-end con tags compliance.
+- ✅ **Prompt caching Azure OpenAI** activo desde Fase 2 (system prompt ≥1024 tokens).
+- ✅ **Cada agente con contrato** definido en `docs/AGENT_CONTRACTS.md` y mapeo en `docs/AI_ACT_MAPPING.md` §3.
+- ✅ **Toda tool es atómica** y testeable de forma independiente.
+- ✅ **Documentar cada sesión** en SESSIONS.md y actualizar este CLAUDE.md si cambia la estructura.
+- ✅ **Actualizar AI_ACT_MAPPING.md §6** al cierre de cada fase con grado de cumplimiento real.
 
-**P&L:** CR0001→CR0007 MARGEN FINANCIERO → CR0012 MARGEN BRUTO → CR0018 MARGEN EXPLOTACIÓN → CR0030 MARGEN APORTADO.
+## 7. Datos de referencia (BD post-S84)
 
----
+- **Rango temporal:** sep-2024 a abr-2026 (20 meses)
+- **Período por defecto:** 2026-04
+- **Contratos activos:** 351 acumulados · **Gestores:** 30 · **Clientes:** 142
+- **Centros:** 5 finalistas (Madrid, Palma, Barcelona, Málaga, Bilbao)
+- **Productos:** Hipotecario (margen ~29%), Depósito (~36%), Fondo RV (~97%)
+- **Margen entidad:** 48.6% · **Dispersión gestores:** 45.1pp
 
-## 5. MODELO TEMPORAL — MoM + Cartera Acumulada
+## 8. Tablas AI Act en BD (Alembic)
 
-Ingresos/gastos/ROE = **mes seleccionado (MoM)**. Contratos = **acumulados históricos**.
+Creadas en F0:
 
-| Período | Ingresos | Contratos acumulados |
-|---|---|---|
-| sep-2025 | ~€621,729 | **216** |
-| oct-2025 | ~€660,185 | **230** |
-| nov-2025 | ~€615,039 | **247** |
-| dic-2025 | ~€576,024 | **258** |
-| ene-2026 | ~€593,914 | **279** |
-| feb-2026 | ~€628,648 | **303** |
-| mar-2026 | ~€646,443 | **329** |
-| abr-2026 | ~€633,458 | **351** (último período) |
+- `decision_logs` — registro de cada request del agente (Art. 12)
+- `user_feedback` — feedback de usuario por respuesta
+- `hitl_overrides` — eventos de validación/rechazo/override por humano (Art. 14)
+- `data_sources` — registro vivo de fuentes de datos (Art. 10)
 
-**Historia contratos:** sep-2024 a ago-2025 (sin datos financieros, solo FECHA_ALTA).
+Schema detallado en `ARCHITECTURE_V2.md` §3.bis.
 
-**Fórmula contratos activos:** `COUNT(DISTINCT CASE WHEN co.FECHA_ALTA <= date(? || '-01', '+1 month', '-1 day') THEN co.CONTRATO_ID END)`
+## 9. Arranque
 
----
-
-## 6. REGLAS DE NEGOCIO
-
-**Redistribución gastos centrales:** `Gasto_i = Gasto_Central × (Contratos_i / Total_Finalistas_Periodo)` — denominador dinámico por período (S81-B2).
-**Semáforo:** 🟢 ≥20% margen | 🟡 10-20% | 🔴 <0% o beneficio<0 (S81-B1).
-**Modelo Fábrica:** Gestora 85% (`760025`) / Banco 15% (`760024`).
-
-**Filtros de gastos:**
-- **Directos** (CONTRATO_ID IS NOT NULL): `SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69')`
-- **Centrales** (CONTRATO_ID IS NULL): `SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')` — incluye '66' para fondeo (660001, -€180k/oct)
-
----
-
-## 7. CONTROL DE ACCESO
-
-**Gestor:** ✅ Su cartera, KPIs propios, precios STD. ❌ Otros gestores, precios REAL.
-**CDG/Dirección:** ✅ Acceso completo.
-
----
-
-## 8. ENDPOINTS FASTAPI
-
-```
-POST /chat/gestor                          POST /chat/message (CDG)
-GET  /kpis/gestor/{id}/roe                 GET  /kpis/consolidado
-GET  /analytics/gestor/{id}/metricas-completas
-GET  /charts/gestores-ranking?metric=CONTRATOS|CLIENTES|INGRESOS|MARGEN_NETO|ROE
-GET  /charts/centros-distribution          GET  /charts/productos-popularity
-POST /charts/pivot
-GET  /deviations/pricing                   GET  /incentives/gestor/{id}/detalle
-GET  /basic/productos/by-gestor/{id}       GET  /analytics/fabrica
-```
-
----
-
-## 9. SYSTEM PROMPTS
-
-**Gestor:** `Eres copiloto de {nombre_gestor}, centro {centro}. Solo accedes a gestor ID: {gestor_id}. Español bancario profesional.`
-**CDG:** `Eres agente CDG Intelligence con acceso completo. Análisis profundos, insights estratégicos. Español técnico.`
-
----
-
-## 10. CONSULTAS SQL
-
-- **Ingresos:** `SUM(IMPORTE) WHERE CUENTA_ID LIKE '76%'`
-- **Gastos directos:** `ABS(SUM(IMPORTE)) WHERE SUBSTR(CUENTA_ID,1,2) IN ('62','64','68','69') AND CONTRATO_ID IS NOT NULL`
-- **Gastos redistribuidos:** `gastos_centrales × (n_contratos_gestor / total_finalistas_periodo)`
-- **Gastos centrales:** `ABS(SUM(IMPORTE)) WHERE CONTRATO_ID IS NULL AND SUBSTR(CUENTA_ID,1,2) IN ('62','64','66','68','69')`
-
----
-
-## 11. VARIABLES DE ENTORNO
-
-```env
-AZURE_OPENAI_API_KEY=AZURE_OPENAI_API_KEY_REDACTED
-AZURE_OPENAI_ENDPOINT=https://TU_RECURSO.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT_ID=gpt-4o
-AZURE_OPENAI_API_VERSION=2025-01-01-preview
-DATABASE_PATH=./backend/src/database/BM_CONTABILIDAD_CDG.db
-```
-
----
-
-## 12. ESTADO + INICIO
-
-Ver historial completo en **SESSIONS.md**.
-
-**Para iniciar:**
 ```bash
+# Backend
 cd backend && python main.py
-# o alternativamente:
-cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000
+# o: python -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+# Frontend
 cd frontend && npm start
 # frontend/.env: REACT_APP_API_BASE_URL=http://localhost:8000
 ```
 
-**Fase actual:** S84 completada. Calidad de datos cerrada (S80-S84). Margen entidad 48.6%, dispersión 45.1pp, 0 gestores negativos, 20/20 tests OK. Ver SESSIONS.md.
+## 10. Criterios de calidad por fase
+
+- **Fase 1:** 48/48 tests funcionales (batería S77) + trazas LangSmith visibles + `compliance_eval.py` v0 (decision_logs persistidos con lineage)
+- **Fase 2:** score cualitativo ≥4.5/5 (batería S88, 21 preguntas) + `compliance_eval.py` v1 (confidence + effect_decomposition + policy_violations + hitl_status correctos)
+- **Fase 3:** KnowledgeAgent cita fuentes en cada respuesta + lineage unificado data/knowledge
+- **Fase 4:** UI completa con `<FeedbackWidget>`, `<DataLineagePopover>`, `<ConfidenceBadge>`, `<EffectBreakdown>`, `<HITLConsole>` · cero regresión visual vs v1
+- **Fase 5:** latencia consulta simple <2.5s, compleja <5.5s · `Art11DocGenerator` funcional · `robustness_eval.py` passing · documentos del proveedor redactados
+
+## 11. Modelo de trabajo con Claude Code
+
+**Sesión típica:**
+
+1. Claude Code abre `CLAUDE.md` (este documento) + `RECONSTRUCTION_PLAN.md` (fase actual) + `AI_ACT_MAPPING.md` + `AGENT_CONTRACTS.md`.
+2. Ejecuta los pasos planificados de la fase.
+3. Al cerrar, actualiza:
+   - `SESSIONS.md` con bitácora de la sesión.
+   - `AGENT_CONTRACTS.md` si se implementó algún agente.
+   - `AI_ACT_MAPPING.md` §6 con grado de cumplimiento alcanzado.
+   - Este `CLAUDE.md` si cambió la estructura.
+4. Commit + tag si corresponde.
+
+**Validación humana (chat de contexto paralelo):** antes de aceptar el commit de una sesión, el chat de contexto verifica que los criterios de paso se cumplen y que la actualización del mapeo AI Act es coherente.
+
+---
+
+**Documento maestro. Actualizado en cada sesión que altere la estructura.**

@@ -1,7 +1,8 @@
 # RECONSTRUCTION_AUDIT.md — Audit crítico CDG Intelligence v1
 
-> Fecha: 2026-05-08 · Sesión de planificación previa al rebuild Kutxabank
-> Documento 1 de 3. Acompaña a `ARCHITECTURE_V2.md` y `RECONSTRUCTION_PLAN.md`.
+> Fecha: 2026-06-08 · Revisión 2 (incorpora deuda regulatoria detectada)
+> Sesión de planificación previa al rebuild Kutxabank.
+> Acompaña a `ARCHITECTURE_V2.md`, `RECONSTRUCTION_PLAN.md`, `AGENT_CONTRACTS.md` y `AI_ACT_MAPPING.md`.
 
 ---
 
@@ -28,7 +29,14 @@
 - El frontend lleva 3.426 líneas de lógica de negocio en `analyticsService.js` que pertenecen al backend.
 - Hay **anti-patrones de retry manual** (`S46-retry`) que parchean fallos de diseño ReAct en lugar de corregirlos.
 
-**Decisión:** rebuild con LangGraph, agentes especializados, configuración centralizada y prompts plantillados. Plan completo en `RECONSTRUCTION_PLAN.md`.
+**v1 no está preparado para AI Act ni para el escrutinio regulatorio del supervisor.** Cuatro deudas regulatorias detectadas en este audit (ampliadas en §6):
+
+- **Sin trazabilidad de decisiones** — no hay registro auditable de qué respondió el agente, con qué datos, a quién (Art. 12 AI Act).
+- **Sin linaje del dato** — los outputs no llevan source: el usuario no puede consultar de qué tabla o documento viene una cifra (Art. 10).
+- **Sin supervisión humana formal** — no hay flujo HITL, ni override registrado, ni motivación obligatoria para validador (Art. 14).
+- **Sin explicabilidad estructurada** — los outputs no llevan confidence score ni descomposición de efectos; el agente "dice cosas" sin marco de explicabilidad (Art. 13).
+
+**Decisión:** rebuild con LangGraph, agentes especializados, configuración centralizada, prompts plantillados **y capa de gobernanza AI Act nativa desde Fase 0**. Plan completo en `RECONSTRUCTION_PLAN.md`. Mapeo regulatorio en `AI_ACT_MAPPING.md`.
 
 ---
 
@@ -40,7 +48,7 @@
 | `cdg_agent.py` | 477 | 4 (ReAct setup, tools, prompt, request handling) | System prompt 91 líneas con valores hardcoded (centros, márgenes 29/36/97%, narrativa de lanzamiento sep-oct 2024) · retry manual líneas 440-456 (S46) | **REFACTORIZAR** |
 | `gestor_agent.py` | 684 | 5 (prompt builder 183 líneas, tool factory 240 líneas, agente, caching, wrappers) | Período "sep-2025 a abr-2026" **contradice** cdg_agent ("sep-2024 a abr-2026") · S46-retry líneas 586-615 · prompt builder embebido | **REFACTORIZAR** |
 | `forecast_agent.py` | 321 | 4 (ReAct, tools, prompt, processing) | Cifras hardcoded en prompt ("660k oct-2025", "40k → 660k") · default `'2026-04'` · sin retry (limpio) | **REFACTORIZAR** (extraer cifras) |
-| `query_router.py` | 268 | 2 (keyword routing, parameter binding) | Diseño determinista (S40), 0 LLM calls. Mantenible. Default `'2025-10'` línea 254 a actualizar. | **MANTENER** |
+| `query_router.py` | 268 | 2 (keyword routing, parameter binding) | Diseño determinista (S40), 0 LLM calls. Mantenible. Default `'2025-10'` línea 254 a actualizar. **Routing por keywords no permite normalización de input ni saneo anti prompt-injection** — necesario en v2 para Art. 15. | **REEMPLAZAR** (absorbido por `QueryRewriter` + `Orchestrator` en v2) |
 | `cdg_agent_v6_backup.py` | ~1.500 | dead code | Dispatcher antiguo a base de keywords, ya superado | **ELIMINAR** |
 
 ### Problemas detectados (cita literal)
@@ -175,7 +183,9 @@ Patch sobre fallo de diseño ReAct: si el LLM no llama tools, se le fuerza una s
 
 ---
 
-## 6. Deuda técnica transversal — Top 8
+## 6. Deuda técnica transversal — Top 12
+
+### Deuda arquitectónica (8)
 
 1. **Monolito `chat_agent.py`** — 2.342 líneas, 10 concerns, 4-5 LLM calls secuenciales por request.
 2. **Inconsistencia de períodos** — 4 archivos discrepan sobre el rango soportado (sep-2024 vs sep-2025; default 2025-10 vs 2026-04).
@@ -185,6 +195,13 @@ Patch sobre fallo de diseño ReAct: si el LLM no llama tools, se le fuerza una s
 6. **Sin prompt caching** — Azure OpenAI permite cachear system prompt + tools (≥1024 tokens) y ahorrar 75-90% de tokens. No se está usando.
 7. **7 `.db` de backup en git** — `pre_s76` a `pre_s84` viven en `database/`. Debería ser Alembic.
 8. **`analyticsService.js` god-object** — 3.426 líneas con definiciones de métrica, defaults de threshold y fallbacks de semáforo que deberían vivir en backend.
+
+### Deuda regulatoria (4) — bloquean entrega a entidades supervisadas
+
+9. **Cero trazabilidad de decisiones (Art. 12 AI Act)** — no existe persistencia auditable de qué respondió el agente, a qué usuario, con qué datos, con qué modelo. Si el supervisor pide "muéstrame qué dijo el sistema entre el 1 y el 30 de marzo a los gestores de Madrid", v1 no puede responder. LangSmith traza técnicamente pero no es registro de negocio.
+10. **Cero linaje del dato (Art. 10 AI Act)** — los outputs presentan cifras sin source: el usuario no puede consultar de qué tabla, qué query, qué validador y qué período viene un número. El `analyticsService.js` aplica fallbacks de semáforo en frontend sin que el output diga "este semáforo vino de fallback porque la tabla X no tenía datos".
+11. **Cero supervisión humana formal (Art. 14 AI Act)** — no hay flujo HITL definido: outputs con baja confianza, what-if con impacto material o respuestas que tocan datos sensibles pasan al usuario directamente sin gate de validador. No hay registro de overrides ni motivaciones obligatorias.
+12. **Cero explicabilidad estructurada (Art. 13 AI Act)** — outputs sin confidence score, sin descomposición de efectos (precio · volumen · mix · riesgo), sin breakdown de qué pesa qué. El `NarratorAgent` "dice cosas" en lenguaje natural sin marco regulatorio de explicabilidad. Una desviación de margen del -2% se narra como "ha bajado el margen" sin atribuir cuánto viene de precio vs volumen vs mix.
 
 ---
 
@@ -201,13 +218,21 @@ Patch sobre fallo de diseño ReAct: si el LLM no llama tools, se le fuerza una s
 
 ### Veredicto
 
-v1 alcanzó el listón funcional para una demo en Kutxabank (4.4/5 cualitativo, 48/48 funcional). Pero su **estructura interna no soporta el siguiente cliente** sin duplicar deuda técnica:
+v1 alcanzó el listón funcional para una demo (4.4/5 cualitativo, 48/48 funcional). Pero el rebuild se justifica por **dos motivos convergentes**, no uno:
+
+**Motivo 1 — la estructura interna no soporta el siguiente cliente sin duplicar deuda técnica:**
 
 - Cada fix requiere tocar el monolito `chat_agent.py` y arriesgar regresiones cruzadas.
 - Cualquier cambio de regla de negocio (margen, threshold) implica editar strings de prompts en 5 archivos.
 - Rebranding parcial (Kutxabank) está bloqueado por lógica de banco mezclada con presentación.
 
-**Rebuild justificado.** La capa de cálculo bancario (forecast, period_queries, forecast_queries) y la capa de presentación (theme, chatService, api) se heredan como están. El núcleo agéntico se rehace con LangGraph y agentes especializados según `ARCHITECTURE_V2.md`.
+**Motivo 2 — v1 no está preparado para entrega a entidades financieras supervisadas:**
+
+- La cuenta cliente (banco) opera bajo AI Act, DORA y guías del supervisor nacional. No puede operar un sistema agéntico sin trazabilidad de decisiones, sin linaje del dato, sin supervisión humana formal y sin explicabilidad estructurada.
+- Parchear estas cuatro deudas regulatorias sobre v1 cuesta más que reconstruir nativamente con la capa de gobernanza en su sitio.
+- Construirlas en v2 desde Fase 0 convierte el sistema en argumento comercial diferenciador: pocos competidores entregan agentes AI Act-ready de origen.
+
+**Rebuild justificado por ambos motivos.** La capa de cálculo bancario (forecast, period_queries, forecast_queries) y la capa de presentación (theme, chatService, api) se heredan como están. El núcleo agéntico se rehace con LangGraph + agentes especializados + capa de gobernanza AI Act según `ARCHITECTURE_V2.md`. El mapeo regulatorio detallado vive en `AI_ACT_MAPPING.md`.
 
 ---
 

@@ -6,7 +6,9 @@
       "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in \\(''''netstat -ano 2^>nul ^| findstr :8000 ^| findstr LISTENING''''\\) do @taskkill /PID %a /F 2^>nul\")",
       "Bash(python -c \"import time; time.sleep\\(2\\)\")",
       "Bash(netstat -ano)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(python3 evals/extract_ground_truth.py)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
